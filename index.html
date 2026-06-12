@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DREAD FACILITY - Doom-like 3D Horror Survival</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts for retro industrial tech feeling -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Special+Elite&display=swap" rel="stylesheet">
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <!-- CRT screen filter and Scanline effect for retro feel -->
+    <div id="crt-overlay"></div>
+    <div id="damage-flash"></div>
+
+    <!-- Level Indicator (Top left) -->
+    <div id="level-display">SECTOR C-14 &nbsp;|&nbsp; NIVEL 1</div>
+
+    <!-- Main Game Container -->
+    <div id="game-container"></div>
+
+    <!-- Start/Menu Overlay -->
+    <div id="menu-overlay" class="overlay active">
+        <div class="menu-content">
+            <h1 class="glitch-title" data-text="DREAD FACILITY">DREAD FACILITY</h1>
+            <p class="subtitle">SECTOR C-14 - INSTALACIÓN DE INVESTIGACIÓN BIOLÓGICA</p>
+            <hr class="menu-divider">
+            <div class="mission-brief">
+                <p><strong>ALERTA DE BIOPELIGRO:</strong> La instalación ha sido comprometida. El personal científico se ha transformado en entidades hostiles. Tu objetivo es recuperar 3 FUSIBLES DE ENERGÍA para reactivar el generador y escapar.</p>
+            </div>
+            <div class="controls-guide">
+                <h3>MANUAL DE COMBATE Y SUPERVIVENCIA</h3>
+                <ul>
+                    <li><span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> &nbsp; Moverse</li>
+                    <li><span class="key">Ratón</span> &nbsp; Apuntar / Mirar (Clic para bloquear cursor)</li>
+                    <li><span class="key">Clic Izq</span> &nbsp; Disparar</li>
+                    <li><span class="key">R</span> &nbsp; Recargar arma</li>
+                    <li><span class="key">E</span> &nbsp; Interactuar / Compuertas / Generador</li>
+                    <li><span class="key">1</span> <span class="key">2</span> <span class="key">3</span> &nbsp; Cambiar Arma (Escopeta / Glock / M4)</li>
+                </ul>
+            </div>
+            <button id="start-btn" class="retro-btn">INICIAR OPERACIÓN</button>
+        </div>
+    </div>
+
+    <!-- Refugio / Upgrade Shop Overlay -->
+    <div id="upgrade-overlay" class="overlay">
+        <div class="menu-content victory shop-content">
+            <h1 class="victory-title">OPERACIÓN COMPLETADA</h1>
+            <p class="subtitle">REFUGIO SECTORIZADO - INVENTARIO DE MEJORAS</p>
+            <div class="points-indicator">
+                PUNTOS DE SUMINISTRO: <span id="supply-points">0</span>
+            </div>
+            <hr class="menu-divider">
+            
+            <div class="shop-container">
+                <!-- Slot 1: Glock 17 -->
+                <div class="upgrade-card" id="card-glock">
+                    <div class="card-tag">SLOT 01</div>
+                    <h3>GLOCK 17</h3>
+                    <p class="card-desc">Pistola táctica ligera. Fuego semi-automático de alta precisión. Cargador de 17 balas.</p>
+                    <div class="upgrade-cost">COSTE: 1 PUNTO</div>
+                    <button id="buy-glock-btn" class="retro-btn shop-btn">DESBLOQUEAR</button>
+                </div>
+                
+                <!-- Slot 2: M4 Carbine -->
+                <div class="upgrade-card" id="card-m4">
+                    <div class="card-tag">SLOT 02</div>
+                    <h3>FUSIL M4</h3>
+                    <p class="card-desc">Carabina militar automática. Fuego rápido y constante (mantener presionado clic). Cargador de 30 balas.</p>
+                    <div class="upgrade-cost">COSTE: 2 PUNTOS</div>
+                    <button id="buy-m4-btn" class="retro-btn shop-btn">DESBLOQUEAR</button>
+                </div>
+                
+                <!-- Slot 3: Medical Supplies -->
+                <div class="upgrade-card" id="card-rations">
+                    <div class="card-tag">SLOT 03</div>
+                    <h3>SUMINISTROS</h3>
+                    <p class="card-desc">Cajas de raciones militares y blindaje reforzado. Restaura +50% de Salud y +50% de Armadura.</p>
+                    <div class="upgrade-cost">COSTE: 1 PUNTO</div>
+                    <button id="buy-rations-btn" class="retro-btn shop-btn">COMPRAR</button>
+                </div>
+            </div>
+            
+            <button id="next-level-btn" class="retro-btn next-level-btn">INICIAR SIGUIENTE NIVEL</button>
+        </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="death-overlay" class="overlay">
+        <div class="menu-content death">
+            <h1 class="death-title">SUJETO ELIMINADO</h1>
+            <p class="subtitle">ESTADO VITAL: FALLECIDO (SECTOR C-14)</p>
+            <hr class="menu-divider">
+            <p class="death-message">Tu señal biológica se ha extinguido en la oscuridad...</p>
+            <button id="restart-btn" class="retro-btn death-btn">REINTENTAR SIMULACIÓN</button>
+        </div>
+    </div>
+
+    <!-- Victory Screen (Final / Endless milestone) -->
+    <div id="victory-overlay" class="overlay">
+        <div class="menu-content victory">
+            <h1 class="victory-title">MISIÓN COMPLETADA</h1>
+            <p class="subtitle">SECTOR PURGADO COMPLETAMENTE</p>
+            <hr class="menu-divider">
+            <p class="victory-message">Has restaurado la energía y escapado con vida de la instalación. Excelente trabajo, soldado.</p>
+            <button id="win-btn" class="retro-btn victory-btn">REINICIAR OPERACIÓN</button>
+        </div>
+    </div>
+
+    <!-- Retro HUD (Heads-Up Display) -->
+    <div id="hud">
+        <div class="hud-panel left-panel">
+            <div class="hud-stat">
+                <span class="hud-label">SALUD</span>
+                <span id="health-value" class="hud-value">100%</span>
+                <div class="hud-bar-container"><div id="health-bar" class="hud-bar health"></div></div>
+            </div>
+            <div class="hud-stat">
+                <span class="hud-label">ARMADURA</span>
+                <span id="armor-value" class="hud-value">100%</span>
+                <div class="hud-bar-container"><div id="armor-bar" class="hud-bar armor"></div></div>
+            </div>
+        </div>
+
+        <div class="hud-panel center-panel">
+            <div class="hud-status-face">
+                <!-- Retro animated scanner / AI indicator -->
+                <div class="biomonitor">
+                    <canvas id="biomonitor-canvas" width="60" height="60"></canvas>
+                </div>
+            </div>
+            <div class="hud-tracker">
+                <span class="hud-label-small">ZOMBIS</span>
+                <span id="zombie-count" class="hud-counter">--</span>
+            </div>
+            <div class="hud-tracker">
+                <span class="hud-label-small">FUSIBLES</span>
+                <span id="fuse-count" class="hud-counter fuse">0/3</span>
+            </div>
+        </div>
+
+        <div class="hud-panel right-panel">
+            <div class="hud-stat align-right">
+                <span class="hud-label">MUNICIÓN</span>
+                <div class="ammo-display">
+                    <span id="ammo-clip" class="hud-value">8</span>
+                    <span class="hud-divider">/</span>
+                    <span id="ammo-reserve" class="hud-value-small">24</span>
+                </div>
+                <div id="weapon-name" class="weapon-name">ESCOPETA REMINGTON</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reticle (Crosshair) -->
+    <div id="crosshair"></div>
+
+    <!-- On-screen feedback (e.g. reload warnings, pickup messages) -->
+    <div id="feedback-message"></div>
+
+    <!-- Main Game Script -->
+    <script src="game.js"></script>
+</body>
+</html>
