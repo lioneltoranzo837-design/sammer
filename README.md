@@ -1,6 +1,6 @@
 # Sammer
 
-Juego web estático tipo Doom-like 3D horror survival, implementado con HTML, CSS, JavaScript y Three.js.
+Juego web estático tipo Doom-like 3D horror survival, implementado con HTML, CSS, JavaScript modular y Three.js.
 
 ## Probar online
 
@@ -22,8 +22,16 @@ Luego abrí:
 http://localhost:8000
 ```
 
-## Archivos principales
+## Arquitectura rápida
 
-- `index.html`: estructura de UI, menús, HUD y carga de Three.js.
-- `styles.css`: estilos visuales, overlays, efectos CRT y presentación responsive.
-- `game.js`: lógica del juego, controles, audio, enemigos, render y estado.
+- `index.html`: documento raíz, overlays, HUD y carga de Three.js + `src/main.js`.
+- `styles/styles.css`: estilos visuales, CRT, menús, HUD y tienda.
+- `src/config/gameConfig.js`: constantes, armas, mapa y mensajes de sangre.
+- `src/audio/SoundSynth.js`: audio procedural.
+- `src/rendering/textures.js`: texturas canvas, fuente SHLOP y mensajes en paredes.
+- `src/core/state.js`: estado inicial base.
+- `src/ui/dom.js`: referencias DOM compartidas.
+- `src/main.js`: composición del juego, escena, entidades, gameplay y loop.
+- `assets/`: fuentes y futuros assets estáticos.
+
+Ver `docs/architecture.md` para reglas de edición orientadas a agentes.
