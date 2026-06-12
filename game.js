@@ -65,6 +65,20 @@ const MAP = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
 
+
+const BLOOD_MESSAGE_FONT_FAMILY = 'SHLOP';
+const BLOOD_MESSAGE_FONT_URL = 'assets/fonts/SHLOP.ttf';
+
+const BLOOD_WALL_MESSAGES = [
+    'Bitcoin o Muerte!',
+    'CORRÉ!',
+    'ACÁ NADIE RESPAWNEA BIEN',
+    'NO ABRAS LA PUERTA ROJA',
+    'Sin television y sin cerveza...',
+    'ARCA sabe de tus Bitcoins',
+    'Halving is coming'
+];
+
 // --- SINTETIZADOR DE AUDIO PROCEDIMENTAL ---
 class SoundSynth {
     constructor() {
@@ -1019,6 +1033,158 @@ function generateCeilingTexture() {
     return texture;
 }
 
+
+async function loadBloodMessageFont() {
+    if (bloodMessageFontLoaded) return;
+
+    try {
+        const fontFace = new FontFace(BLOOD_MESSAGE_FONT_FAMILY, `url(${BLOOD_MESSAGE_FONT_URL})`);
+        await fontFace.load();
+        document.fonts.add(fontFace);
+        bloodMessageFontLoaded = true;
+    } catch (error) {
+        console.warn('No se pudo cargar la fuente de mensajes sangrientos:', error);
+    }
+}
+
+function generateBloodMessageTexture(message) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 384;
+    const ctx = canvas.getContext('2d');
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+
+    const longMessage = message.length > 22;
+    const fontSize = longMessage ? 80 : 104;
+    ctx.font = `400 ${fontSize}px ${BLOOD_MESSAGE_FONT_FAMILY}, "Arial Black", Impact, sans-serif`;
+
+    // Sombra húmeda y borde oscuro para que parezca sangre sobre metal.
+    ctx.shadowColor = 'rgba(15, 0, 0, 0.85)';
+    ctx.shadowBlur = 8;
+    ctx.lineWidth = longMessage ? 14 : 18;
+    ctx.strokeStyle = 'rgba(45, 0, 0, 0.92)';
+    ctx.strokeText(message, canvas.width / 2, canvas.height * 0.45);
+
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = 'rgba(125, 0, 0, 0.92)';
+    ctx.fillText(message, canvas.width / 2, canvas.height * 0.45);
+
+    // Trazos irregulares y goteos debajo de letras simulando escritura a mano.
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(92, 0, 0, 0.78)';
+    ctx.lineCap = 'round';
+    const dripCount = Math.max(6, Math.floor(message.length / 3));
+    for (let i = 0; i < dripCount; i++) {
+        const x = 120 + ((i * 97) % 780) + Math.sin(i * 1.7) * 18;
+        const y = canvas.height * (0.54 + (i % 3) * 0.025);
+        const length = 38 + ((i * 29) % 110);
+        ctx.lineWidth = 4 + (i % 4);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.bezierCurveTo(x + 10, y + length * 0.35, x - 12, y + length * 0.75, x + 4, y + length);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(105, 0, 0, 0.82)';
+        ctx.beginPath();
+        ctx.arc(x + 4, y + length + 4, 5 + (i % 3), 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Salpicaduras pequeñas alrededor del texto.
+    ctx.fillStyle = 'rgba(110, 0, 0, 0.55)';
+    for (let i = 0; i < 36; i++) {
+        const x = 70 + ((i * 151) % 890);
+        const y = 70 + ((i * 83) % 250);
+        const radius = 2 + (i % 5);
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    return texture;
+}
+
+function addBloodMessageToWall(message, placement) {
+    const texture = generateBloodMessageTexture(message);
+    const material = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 0.96,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE * 0.9, WALL_HEIGHT * 0.42), material);
+    const posX = placement.x * GRID_SIZE;
+    const posZ = placement.z * GRID_SIZE;
+    const offset = GRID_SIZE / 2 + 0.012;
+
+    plane.position.set(posX, WALL_HEIGHT * (0.54 + placement.heightOffset), posZ);
+    if (placement.side === 'NORTH') {
+        plane.position.z -= offset;
+        plane.rotation.y = Math.PI;
+    } else if (placement.side === 'SOUTH') {
+        plane.position.z += offset;
+    } else if (placement.side === 'WEST') {
+        plane.position.x -= offset;
+        plane.rotation.y = -Math.PI / 2;
+    } else if (placement.side === 'EAST') {
+        plane.position.x += offset;
+        plane.rotation.y = Math.PI / 2;
+    }
+
+    scene.add(plane);
+}
+
+function isWalkableMessageCell(x, z) {
+    return z >= 0 && z < MAP.length && x >= 0 && x < MAP[z].length && MAP[z][x] !== 1;
+}
+
+function getBloodMessagePlacements() {
+    const sides = [
+        { side: 'NORTH', dx: 0, dz: -1 },
+        { side: 'EAST', dx: 1, dz: 0 },
+        { side: 'SOUTH', dx: 0, dz: 1 },
+        { side: 'WEST', dx: -1, dz: 0 }
+    ];
+    const candidates = [];
+
+    for (let z = 1; z < MAP.length - 1; z++) {
+        for (let x = 1; x < MAP[z].length - 1; x++) {
+            if (MAP[z][x] !== 1) continue;
+            sides.forEach((dir) => {
+                if (isWalkableMessageCell(x + dir.dx, z + dir.dz)) {
+                    candidates.push({ x, z, side: dir.side });
+                }
+            });
+        }
+    }
+
+    if (candidates.length === 0) return [];
+
+    // Elegir posiciones espaciadas para que haya una sola copia de cada frase y queden distribuidas por el mapa.
+    return BLOOD_WALL_MESSAGES.map((message, index) => {
+        const candidateIndex = Math.floor(((index + 0.5) * candidates.length) / BLOOD_WALL_MESSAGES.length);
+        return {
+            ...candidates[candidateIndex % candidates.length],
+            message,
+            heightOffset: (index % 3 - 1) * 0.06
+        };
+    });
+}
+
+async function addBloodWallMessages() {
+    await loadBloodMessageFont();
+    getBloodMessagePlacements().forEach((placement) => {
+        addBloodMessageToWall(placement.message, placement);
+    });
+}
+
 function generateZombieFaceTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
@@ -1099,6 +1265,7 @@ let unlockedWeapons = { shotgun: true, glock: false, m4: false };
 let isMouseDown = false;
 let autoFireTimer = 0;
 let acidProjectiles = [];
+let bloodMessageFontLoaded = false;
 
 // Grupos 3D de Mallas para Armas
 let shotgunMeshGroup, glockMeshGroup, m4MeshGroup;
@@ -1139,7 +1306,7 @@ const crosshair = document.getElementById('crosshair');
 const damageFlash = document.getElementById('damage-flash');
 
 // --- INICIALIZACIÓN DE LA ESCENA ---
-function initEngine() {
+async function initEngine() {
     // Escena oscura con niebla densa de terror
     scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x050508, 0.08); // niebla grisácea/azulada oscura
@@ -1192,6 +1359,7 @@ function initEngine() {
     
     // Construir el mapa
     buildMap3D();
+    await addBloodWallMessages();
     
     // Ensamblar arma
     buildWeapon3D();
