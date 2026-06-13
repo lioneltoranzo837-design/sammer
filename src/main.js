@@ -45,6 +45,7 @@ const { THREE } = window;
 let scene, camera, renderer;
 let clock;
 let player = createInitialPlayer();
+window.player = player;
 let keyboard = createKeyboardState();
 let colliders = [];
 let zombies = [];

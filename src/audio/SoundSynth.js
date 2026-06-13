@@ -95,6 +95,7 @@ export class SoundSynth {
             
             // ¡Dinamismo Desesperante!: El ritmo del latido y los ruidos se acelera si la vida del jugador es baja
             let interval = 700; // Tempo normal
+            const player = window.player;
             if (player && player.health < 40) {
                 interval = 350; // Latido frenético de muerte inminente
             } else if (player && player.health < 70) {
