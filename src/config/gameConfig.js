@@ -10,6 +10,17 @@ export const ZOMBIE_SPAWN_COUNT = 8;
 export const MAX_HEALTH = 100;
 export const MAX_ARMOR = 100;
 
+export const BOSS_HEALTH = 3000;
+export const BOSS_MELEE_DAMAGE = 35;
+export const BOSS_ACID_DAMAGE = 25;
+export const BOSS_MELEE_RANGE = 3.0;
+export const BOSS_ACID_RANGE_MIN = 5.0;
+export const BOSS_ACID_RANGE_MAX = 20.0;
+export const BOSS_SPEED_MULTIPLIER = 1.8;
+export const BOSS_RUSH_SPEED_MULTIPLIER = 3.6;
+export const BOSS_RUSH_DURATION = 3.0;
+export const BOSS_RUSH_INTERVAL = 15.0;
+
 // Configuración de Armamento
 export const WEAPONS = {
     shotgun: {
@@ -104,11 +115,35 @@ export const MAP3 = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
 
+export const MAP4_BOSS = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+];
+
 export const MAP = MAP1; // Retrocompatibilidad
 
 export function getMapForLevel(level) {
     if (level === 2) return MAP2;
     if (level === 3) return MAP3;
+    if (level === 4) return MAP4_BOSS;
     return MAP1;
 }
 

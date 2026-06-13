@@ -15,3 +15,5 @@ export const ammoReserveEl = document.getElementById('ammo-reserve');
 export const feedbackMsg = document.getElementById('feedback-message');
 export const crosshair = document.getElementById('crosshair');
 export const damageFlash = document.getElementById('damage-flash');
+export const bossHud = document.getElementById('boss-hud');
+export const bossHealthFill = document.getElementById('boss-health-fill');

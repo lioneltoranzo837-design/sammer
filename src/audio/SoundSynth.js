@@ -658,6 +658,209 @@ export class SoundSynth {
             }, index * 150);
         });
     }
+
+    startBossMusic() {
+        if (!this.ctx) return;
+
+        // Detener cualquier música anterior
+        this.stopHorrorMusic();
+
+        this.musicActive = true;
+        this.musicStep = 0;
+
+        // Drone ambiental profundo y ominoso (40Hz + 40.6Hz para batido lento)
+        this.ambientOsc1 = this.ctx.createOscillator();
+        this.ambientOsc1.type = 'sawtooth';
+        this.ambientOsc1.frequency.setValueAtTime(40, this.ctx.currentTime);
+
+        this.ambientOsc2 = this.ctx.createOscillator();
+        this.ambientOsc2.type = 'sawtooth';
+        this.ambientOsc2.frequency.setValueAtTime(40.6, this.ctx.currentTime);
+
+        const lowpass = this.ctx.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.setValueAtTime(75, this.ctx.currentTime);
+
+        this.ambientGain = this.ctx.createGain();
+        this.ambientGain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+
+        this.ambientOsc1.connect(lowpass);
+        this.ambientOsc2.connect(lowpass);
+        lowpass.connect(this.ambientGain);
+        this.ambientGain.connect(this.ctx.destination);
+
+        this.ambientOsc1.start();
+        this.ambientOsc2.start();
+
+        const playBossStep = () => {
+            if (!this.musicActive || !this.ctx) return;
+
+            // Latido frenético cada paso (alternando graves)
+            if (this.musicStep % 2 === 0) {
+                this.playHeartbeat(40, 0.5);
+            } else {
+                this.playHeartbeat(45, 0.5);
+            }
+
+            // Alarma chirriante cada 4 pasos
+            if (this.musicStep % 4 === 0) {
+                this.playHorrorScreech(3000, 3200, 0.1, 0.8);
+            }
+
+            // Deslizamiento de pánico cada 6 pasos
+            if (this.musicStep % 6 === 0) {
+                this.playSlidingPanic(2000, 400, 0.6, 0.09);
+            }
+
+            // Acorde disonante cada 8 pasos
+            if (this.musicStep % 8 === 0) {
+                const oscA = this.ctx.createOscillator();
+                const oscB = this.ctx.createOscillator();
+                const chordGain = this.ctx.createGain();
+
+                oscA.type = 'sine';
+                oscA.frequency.setValueAtTime(73.42, this.ctx.currentTime);
+
+                oscB.type = 'sawtooth';
+                oscB.frequency.setValueAtTime(77.78, this.ctx.currentTime);
+
+                chordGain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                chordGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+
+                oscA.connect(chordGain);
+                oscB.connect(chordGain);
+                chordGain.connect(this.ctx.destination);
+
+                oscA.start();
+                oscB.start();
+                oscA.stop(this.ctx.currentTime + 0.55);
+                oscB.stop(this.ctx.currentTime + 0.55);
+            }
+
+            this.musicStep++;
+
+            // Tempo base 250ms, se acelera según vida del jugador
+            let interval = 250;
+            const player = window.player;
+            if (player && player.health < 40) {
+                interval = 150; // Pánico total
+            } else if (player && player.health < 70) {
+                interval = 200; // Alerta alta
+            }
+
+            this.musicTimer = setTimeout(playBossStep, interval);
+        };
+
+        playBossStep();
+    }
+
+    stopBossMusic() {
+        this.stopHorrorMusic();
+    }
+
+    playBossRoar() {
+        if (!this.ctx) return;
+
+        // Oscilador principal: rugido grave descendente
+        const osc1 = this.ctx.createOscillator();
+        const osc2 = this.ctx.createOscillator();
+        const filter = this.ctx.createBiquadFilter();
+        const gainNode = this.ctx.createGain();
+
+        osc1.type = 'sawtooth';
+        osc1.frequency.setValueAtTime(60, this.ctx.currentTime);
+        osc1.frequency.exponentialRampToValueAtTime(30, this.ctx.currentTime + 1.5);
+
+        osc2.type = 'square';
+        osc2.frequency.setValueAtTime(80, this.ctx.currentTime);
+        osc2.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 1.5);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(150, this.ctx.currentTime);
+
+        gainNode.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.5);
+
+        osc1.connect(filter);
+        osc2.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+
+        osc1.start();
+        osc2.start();
+        osc1.stop(this.ctx.currentTime + 1.55);
+        osc2.stop(this.ctx.currentTime + 1.55);
+
+        // Textura ruidosa con distorsión pesada
+        const noiseOsc = this.ctx.createOscillator();
+        const distortion = this.ctx.createWaveShaper();
+        const noiseGain = this.ctx.createGain();
+
+        noiseOsc.type = 'sawtooth';
+        noiseOsc.frequency.setValueAtTime(200, this.ctx.currentTime);
+
+        // Curva de distorsión agresiva
+        const curve = new Float32Array(256);
+        for (let i = 0; i < 256; i++) {
+            const x = (i * 2) / 256 - 1;
+            curve[i] = (Math.PI + 200) * x / (Math.PI + 200 * Math.abs(x));
+        }
+        distortion.curve = curve;
+        distortion.oversample = '4x';
+
+        noiseGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.8);
+
+        noiseOsc.connect(distortion);
+        distortion.connect(noiseGain);
+        noiseGain.connect(this.ctx.destination);
+
+        noiseOsc.start();
+        noiseOsc.stop(this.ctx.currentTime + 0.85);
+    }
+
+    playBossImpact() {
+        if (!this.ctx) return;
+
+        // Impacto grave pesado
+        const osc1 = this.ctx.createOscillator();
+        const gainNode = this.ctx.createGain();
+        const filter = this.ctx.createBiquadFilter();
+
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(80, this.ctx.currentTime);
+        osc1.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.3);
+
+        gainNode.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(300, this.ctx.currentTime);
+
+        osc1.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(this.ctx.destination);
+
+        osc1.start();
+        osc1.stop(this.ctx.currentTime + 0.4);
+
+        // Anillo metálico agudo
+        const osc2 = this.ctx.createOscillator();
+        const ringGain = this.ctx.createGain();
+
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(2000, this.ctx.currentTime);
+        osc2.frequency.exponentialRampToValueAtTime(500, this.ctx.currentTime + 0.2);
+
+        ringGain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        ringGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+
+        osc2.connect(ringGain);
+        ringGain.connect(this.ctx.destination);
+
+        osc2.start();
+        osc2.stop(this.ctx.currentTime + 0.25);
+    }
 }
 
 export const AudioSynth = new SoundSynth();

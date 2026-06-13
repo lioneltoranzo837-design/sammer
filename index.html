@@ -66,6 +66,70 @@
     <!-- Three.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="src/GLTFLoader.js"></script>
+    <script>
+        // Redirect console.log and console.error to a custom HUD div for on-screen debugging
+        (function() {
+            const logs = [];
+            let container = null;
+            function addLog(msg, color) {
+                logs.push({ msg, color });
+                if (logs.length > 50) logs.shift();
+                
+                // Create container once document.body is available
+                if (!container && document.body) {
+                    container = document.createElement('div');
+                    container.id = 'debug-log-overlay';
+                    container.style.position = 'fixed';
+                    container.style.bottom = '120px';
+                    container.style.left = '10px';
+                    container.style.width = '500px';
+                    container.style.maxHeight = '200px';
+                    container.style.overflowY = 'auto';
+                    container.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+                    container.style.color = '#00ff00';
+                    container.style.fontFamily = 'monospace';
+                    container.style.fontSize = '11px';
+                    container.style.zIndex = '999999';
+                    container.style.pointerEvents = 'none';
+                    container.style.padding = '8px';
+                    container.style.border = '1px solid #33ff33';
+                    container.style.borderRadius = '4px';
+                    document.body.appendChild(container);
+                }
+                
+                if (container) {
+                    container.innerHTML = '';
+                    logs.forEach(log => {
+                        const div = document.createElement('div');
+                        div.style.color = log.color;
+                        div.style.borderBottom = '1px dotted #444';
+                        div.style.paddingBottom = '2px';
+                        div.style.marginBottom = '2px';
+                        div.textContent = log.msg;
+                        container.appendChild(div);
+                    });
+                    container.scrollTop = container.scrollHeight;
+                }
+            }
+            
+            const oldLog = console.log;
+            console.log = function(...args) {
+                oldLog.apply(console, args);
+                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), '#00ff00');
+            };
+            
+            const oldError = console.error;
+            console.error = function(...args) {
+                oldError.apply(console, args);
+                addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), '#ff3333');
+            };
+            
+            // Check body availability on DOMContentLoaded to ensure overlay is created even if no logs fired yet
+            window.addEventListener('DOMContentLoaded', () => {
+                addLog('Sistema de depuración en pantalla iniciado.', '#ffff00');
+            });
+        })();
+    </script>
 </head>
 <body>
     <!-- CRT screen filter and Scanline effect for retro feel -->
@@ -229,6 +293,14 @@
 
     <!-- On-screen feedback (e.g. reload warnings, pickup messages) -->
     <div id="feedback-message"></div>
+
+    <!-- Boss Health Bar (Level 4) -->
+    <div id="boss-hud" class="boss-hud hidden">
+        <div class="boss-name">INFERNAL IRONCLAD</div>
+        <div class="boss-health-bar-container">
+            <div class="boss-health-fill" id="boss-health-fill"></div>
+        </div>
+    </div>
 
     <!-- Main Game Script -->
     <script type="module" src="src/main.js"></script>

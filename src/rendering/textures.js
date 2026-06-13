@@ -1843,3 +1843,258 @@ export function generateMountainCeilingTexture() {
     texture.wrapT = THREE.RepeatWrapping;
     return texture;
 }
+
+export function generateInfernalWallTexture() {
+    const canvas = document.createElement('canvas');
+    const S = 512;
+    canvas.width = S;
+    canvas.height = S;
+    const ctx = canvas.getContext('2d');
+
+    // Base gradient: dark gray to very dark red
+    const baseGrad = ctx.createLinearGradient(0, 0, 0, S);
+    baseGrad.addColorStop(0, '#1a1010');
+    baseGrad.addColorStop(1, '#0d0505');
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, S, S);
+
+    // Noise texture: dark red/black speckles
+    for (let i = 0; i < 8000; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        const sz = 1 + Math.random() * 3;
+        const v = Math.floor(Math.random() * 20);
+        ctx.fillStyle = `rgba(${40 + v},${10 + v},${5 + v},0.5)`;
+        ctx.fillRect(x, y, sz, sz);
+    }
+
+    // Lava cracks: 12 cracks going mostly downward
+    for (let c = 0; c < 12; c++) {
+        let cx = Math.random() * S;
+        let cy = Math.random() * S * 0.3;
+        const segments = 8 + Math.floor(Math.random() * 6);
+
+        // Shadow crack (darker, offset)
+        ctx.strokeStyle = 'rgba(80, 10, 0, 0.6)';
+        ctx.lineWidth = 3 + Math.random() * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + 2, cy + 2);
+        let scx = cx + 2, scy = cy + 2;
+        for (let s = 0; s < segments; s++) {
+            scx += (Math.random() - 0.5) * 40;
+            scy += 20 + Math.random() * 30;
+            ctx.lineTo(scx, scy);
+        }
+        ctx.stroke();
+
+        // Main lava crack
+        ctx.strokeStyle = 'rgba(255, 80, 0, 0.8)';
+        ctx.lineWidth = 1.5 + Math.random() * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        for (let s = 0; s < segments; s++) {
+            cx += (Math.random() - 0.5) * 40;
+            cy += 20 + Math.random() * 30;
+            ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+    }
+
+    // Glowing lava patches: 8 radial gradients
+    for (let p = 0; p < 8; p++) {
+        const px = Math.random() * S;
+        const py = Math.random() * S;
+        const pr = 20 + Math.random() * 40;
+
+        const pGrad = ctx.createRadialGradient(px, py, 0, px, py, pr);
+        pGrad.addColorStop(0, 'rgba(255, 100, 0, 0.7)');
+        pGrad.addColorStop(0.5, 'rgba(200, 50, 0, 0.3)');
+        pGrad.addColorStop(1, 'rgba(100, 20, 0, 0)');
+
+        ctx.fillStyle = pGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Rock formations: dark irregular shapes for depth
+    for (let r = 0; r < 10; r++) {
+        const rx = Math.random() * S;
+        const ry = Math.random() * S;
+        const rw = 30 + Math.random() * 60;
+        const rh = 20 + Math.random() * 40;
+
+        ctx.fillStyle = `rgba(${5 + Math.floor(Math.random() * 10)},${2 + Math.floor(Math.random() * 5)},${Math.floor(Math.random() * 3)},0.6)`;
+        ctx.beginPath();
+        ctx.moveTo(rx, ry);
+        ctx.lineTo(rx + rw * 0.3, ry - rh * 0.5);
+        ctx.lineTo(rx + rw * 0.6, ry - rh * 0.3);
+        ctx.lineTo(rx + rw, ry + rh * 0.2);
+        ctx.lineTo(rx + rw * 0.8, ry + rh);
+        ctx.lineTo(rx + rw * 0.2, ry + rh * 0.8);
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+}
+
+export function generateInfernalFloorTexture() {
+    const canvas = document.createElement('canvas');
+    const S = 512;
+    canvas.width = S;
+    canvas.height = S;
+    const ctx = canvas.getContext('2d');
+
+    // Base: very dark charcoal
+    ctx.fillStyle = '#0a0606';
+    ctx.fillRect(0, 0, S, S);
+
+    // Noise: dark gray/red speckles
+    for (let i = 0; i < 8000; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        const sz = 1 + Math.random() * 3;
+        const v = Math.floor(Math.random() * 15);
+        ctx.fillStyle = `rgba(${20 + v},${8 + v},${5 + v},0.5)`;
+        ctx.fillRect(x, y, sz, sz);
+    }
+
+    // Cracks: network of glowing orange/red lava veins (18 cracks)
+    for (let c = 0; c < 18; c++) {
+        let cx = Math.random() * S;
+        let cy = Math.random() * S;
+        const segments = 6 + Math.floor(Math.random() * 8);
+        const angle = Math.random() * Math.PI * 2;
+        const dx = Math.cos(angle);
+        const dy = Math.sin(angle);
+
+        // Glow under crack
+        ctx.strokeStyle = 'rgba(200, 60, 0, 0.25)';
+        ctx.lineWidth = 6 + Math.random() * 4;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        let gcx = cx, gcy = cy;
+        for (let s = 0; s < segments; s++) {
+            gcx += dx * (15 + Math.random() * 25) + (Math.random() - 0.5) * 20;
+            gcy += dy * (15 + Math.random() * 25) + (Math.random() - 0.5) * 20;
+            ctx.lineTo(gcx, gcy);
+        }
+        ctx.stroke();
+
+        // Main crack line
+        ctx.strokeStyle = `rgba(255, ${60 + Math.floor(Math.random() * 40)}, 0, 0.8)`;
+        ctx.lineWidth = 1 + Math.random() * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        let mcx = cx, mcy = cy;
+        for (let s = 0; s < segments; s++) {
+            mcx += dx * (15 + Math.random() * 25) + (Math.random() - 0.5) * 20;
+            mcy += dy * (15 + Math.random() * 25) + (Math.random() - 0.5) * 20;
+            ctx.lineTo(mcx, mcy);
+        }
+        ctx.stroke();
+    }
+
+    // Ember spots: small bright orange/yellow dots
+    for (let e = 0; e < 60; e++) {
+        const ex = Math.random() * S;
+        const ey = Math.random() * S;
+        const er = 1 + Math.random() * 3;
+
+        const eGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, er * 3);
+        eGrad.addColorStop(0, `rgba(255, ${200 + Math.floor(Math.random() * 55)}, 0, 0.9)`);
+        eGrad.addColorStop(0.4, 'rgba(255, 120, 0, 0.4)');
+        eGrad.addColorStop(1, 'rgba(150, 30, 0, 0)');
+
+        ctx.fillStyle = eGrad;
+        ctx.beginPath();
+        ctx.arc(ex, ey, er * 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Bright core
+        ctx.fillStyle = 'rgba(255, 255, 150, 0.9)';
+        ctx.beginPath();
+        ctx.arc(ex, ey, er * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+}
+
+export function generateInfernalCeilingTexture() {
+    const canvas = document.createElement('canvas');
+    const S = 512;
+    canvas.width = S;
+    canvas.height = S;
+    const ctx = canvas.getContext('2d');
+
+    // Base gradient: dark red to black
+    const baseGrad = ctx.createLinearGradient(0, 0, 0, S);
+    baseGrad.addColorStop(0, '#1a0505');
+    baseGrad.addColorStop(1, '#050000');
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, S, S);
+
+    // Smoke clouds: large semi-transparent dark patches
+    for (let c = 0; c < 12; c++) {
+        const cx = Math.random() * S;
+        const cy = Math.random() * S;
+        const cr = 60 + Math.random() * 100;
+
+        const cGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr);
+        cGrad.addColorStop(0, `rgba(${15 + Math.floor(Math.random() * 10)}, 0, 0, 0.5)`);
+        cGrad.addColorStop(0.5, `rgba(${5 + Math.floor(Math.random() * 8)}, 0, 0, 0.25)`);
+        cGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.fillStyle = cGrad;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, cr, cr * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Red glow patches: subtle red glowing areas like distant flames
+    for (let g = 0; g < 8; g++) {
+        const gx = Math.random() * S;
+        const gy = Math.random() * S;
+        const gr = 40 + Math.random() * 80;
+
+        const gGrad = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+        gGrad.addColorStop(0, 'rgba(120, 20, 0, 0.35)');
+        gGrad.addColorStop(0.5, 'rgba(80, 10, 0, 0.15)');
+        gGrad.addColorStop(1, 'rgba(40, 0, 0, 0)');
+
+        ctx.fillStyle = gGrad;
+        ctx.beginPath();
+        ctx.arc(gx, gy, gr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Ember particles: tiny bright orange dots floating upward
+    for (let e = 0; e < 100; e++) {
+        const ex = Math.random() * S;
+        const ey = Math.random() * S;
+        const er = 0.5 + Math.random() * 2;
+
+        const eGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, er * 2.5);
+        eGrad.addColorStop(0, `rgba(255, ${150 + Math.floor(Math.random() * 105)}, 0, 0.9)`);
+        eGrad.addColorStop(0.5, 'rgba(255, 80, 0, 0.3)');
+        eGrad.addColorStop(1, 'rgba(200, 30, 0, 0)');
+
+        ctx.fillStyle = eGrad;
+        ctx.beginPath();
+        ctx.arc(ex, ey, er * 2.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+}

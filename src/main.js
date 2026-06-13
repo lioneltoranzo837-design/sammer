@@ -11,6 +11,16 @@ import {
     ZOMBIE_ATTACK_COOLDOWN,
     ZOMBIE_ATTACK_DIST,
     ZOMBIE_SPEED,
+    BOSS_HEALTH,
+    BOSS_MELEE_DAMAGE,
+    BOSS_ACID_DAMAGE,
+    BOSS_MELEE_RANGE,
+    BOSS_ACID_RANGE_MIN,
+    BOSS_ACID_RANGE_MAX,
+    BOSS_SPEED_MULTIPLIER,
+    BOSS_RUSH_SPEED_MULTIPLIER,
+    BOSS_RUSH_DURATION,
+    BOSS_RUSH_INTERVAL,
     getMapForLevel
 } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
@@ -25,7 +35,10 @@ import {
     generateJungleCeilingTexture,
     generateMountainWallTexture,
     generateMountainFloorTexture,
-    generateMountainCeilingTexture
+    generateMountainCeilingTexture,
+    generateInfernalWallTexture,
+    generateInfernalFloorTexture,
+    generateInfernalCeilingTexture
 } from './rendering/textures.js';
 import {
     ammoClipEl,
@@ -43,7 +56,9 @@ import {
     startBtn,
     victoryOverlay,
     winBtn,
-    zombieCountEl
+    zombieCountEl,
+    bossHud,
+    bossHealthFill
 } from './ui/dom.js';
 
 const { THREE } = window;
@@ -91,10 +106,14 @@ let wallMaterialStandard, wallMaterialHazard, wallMaterialBlood, doorMaterial;
 let floorMaterial, ceilingMaterial;
 let zombieFaceTexture;
 let cachedZombieModel = null;
-let cachedMummyWalkClip = null;
-let cachedMummyRunClip = null;
 let zombieGLBScaleFactor = 1.0;
 let zombieGLBBaseYOffset = 0.0;
+
+// Boss Model (Level 4)
+let cachedBossModel = null;
+let bossGLBScaleFactor = 1.0;
+let bossGLBBaseYOffset = 0.0;
+let bossEnemy = null;
 
 // Arma y disparo
 let gunGroup;
@@ -167,26 +186,29 @@ async function initEngine() {
     
     zombieFaceTexture = generateZombieFaceTexture();
     
-    // Carga del modelo de zombie GLB (Caballero Momia) en segundo plano con sus animaciones
+    // Carga del modelo de zombie GLB original en segundo plano
     try {
-        console.log("Iniciando carga de Caballero Momia GLB con animaciones en segundo plano...");
+        console.log("Iniciando carga de modelo de zombie GLB original en segundo plano...");
         const gltfLoader = new THREE.GLTFLoader();
-        
-        // 1. Cargar modelo base con animación de caminata
         gltfLoader.load(
-            'assets/animation_temp/Meshy_AI_Sandsworn_Mummy_Knigh_biped/Meshy_AI_Sandsworn_Mummy_Knigh_biped_Animation_Walking_withSkin.glb',
-            (gltfWalk) => {
-                cachedZombieModel = gltfWalk.scene;
-                if (gltfWalk.animations && gltfWalk.animations.length > 0) {
-                    cachedMummyWalkClip = gltfWalk.animations[0];
-                }
+            'assets/Meshy_AI_1_0613035518_texture.glb',
+            (gltf) => {
+                cachedZombieModel = gltf.scene;
                 
                 // Pre-calcular la escala y el offset de Y para optimizar instanciación
                 cachedZombieModel.updateMatrixWorld(true);
                 const box = new THREE.Box3().setFromObject(cachedZombieModel);
                 const size = box.getSize(new THREE.Vector3());
-                const height = size.y || 1.8;
+                
+                // Proteger contra altura 0 o NaN
+                let height = size.y;
+                if (isNaN(height) || height < 0.01) {
+                    height = 1.8;
+                }
                 zombieGLBScaleFactor = 1.8 / height;
+                if (isNaN(zombieGLBScaleFactor) || !isFinite(zombieGLBScaleFactor)) {
+                    zombieGLBScaleFactor = 1.0;
+                }
                 
                 // Aplicar escala al modelo base
                 cachedZombieModel.scale.set(zombieGLBScaleFactor, zombieGLBScaleFactor, zombieGLBScaleFactor);
@@ -195,30 +217,59 @@ async function initEngine() {
                 // Calcular el offset
                 const boxScaled = new THREE.Box3().setFromObject(cachedZombieModel);
                 zombieGLBBaseYOffset = -boxScaled.min.y;
-                console.log(`Modelo de Caballero Momia cargado y pre-escalado. Altura original: ${height}, Factor de escala: ${zombieGLBScaleFactor}, Offset Y: ${zombieGLBBaseYOffset}`);
-                
-                // 2. Cargar animación de correr para extraer el clip de carrera
-                gltfLoader.load(
-                    'assets/animation_temp/Meshy_AI_Sandsworn_Mummy_Knigh_biped/Meshy_AI_Sandsworn_Mummy_Knigh_biped_Animation_Running_withSkin.glb',
-                    (gltfRun) => {
-                        if (gltfRun.animations && gltfRun.animations.length > 0) {
-                            cachedMummyRunClip = gltfRun.animations[0];
-                            console.log("Animación de carrera cargada con éxito.");
-                        }
-                    },
-                    undefined,
-                    (err) => {
-                        console.error("Error al cargar la animación de carrera de la momia:", err);
-                    }
-                );
+                if (isNaN(zombieGLBBaseYOffset) || !isFinite(zombieGLBBaseYOffset)) {
+                    zombieGLBBaseYOffset = 0.0;
+                }
+                console.log(`Modelo de zombie GLB original cargado y pre-escalado. Altura original: ${height}, Factor de escala: ${zombieGLBScaleFactor}, Offset Y: ${zombieGLBBaseYOffset}`);
             },
             undefined,
             (err) => {
-                console.error("Error al cargar la momia GLB (caminata), se usará el modelo procedimental de respaldo:", err);
+                console.error("Error al cargar el zombie GLB original, se usará el modelo procedimental de respaldo:", err);
             }
         );
     } catch (err) {
         console.error("Error al inicializar el cargador GLTF:", err);
+    }
+    
+    // Carga del modelo del Jefe Final (Level 4) en segundo plano
+    try {
+        console.log("Iniciando carga de modelo de jefe GLB en segundo plano...");
+        const bossLoader = new THREE.GLTFLoader();
+        bossLoader.load(
+            'assets/Meshy_AI_Infernal_Ironclad_0613141919_texture.glb',
+            (gltf) => {
+                cachedBossModel = gltf.scene;
+                
+                cachedBossModel.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(cachedBossModel);
+                const size = box.getSize(new THREE.Vector3());
+                
+                let height = size.y;
+                if (isNaN(height) || height < 0.01) {
+                    height = 4.0;
+                }
+                bossGLBScaleFactor = 4.0 / height; // Jefe grande: 4 unidades de alto
+                if (isNaN(bossGLBScaleFactor) || !isFinite(bossGLBScaleFactor)) {
+                    bossGLBScaleFactor = 1.0;
+                }
+                
+                cachedBossModel.scale.set(bossGLBScaleFactor, bossGLBScaleFactor, bossGLBScaleFactor);
+                cachedBossModel.updateMatrixWorld(true);
+                
+                const boxScaled = new THREE.Box3().setFromObject(cachedBossModel);
+                bossGLBBaseYOffset = -boxScaled.min.y;
+                if (isNaN(bossGLBBaseYOffset) || !isFinite(bossGLBBaseYOffset)) {
+                    bossGLBBaseYOffset = 0.0;
+                }
+                console.log(`Modelo de jefe GLB cargado. Altura original: ${height}, Factor: ${bossGLBScaleFactor}, Offset Y: ${bossGLBBaseYOffset}`);
+            },
+            undefined,
+            (err) => {
+                console.error("Error al cargar el modelo del jefe GLB:", err);
+            }
+        );
+    } catch (err) {
+        console.error("Error al inicializar cargador GLTF del jefe:", err);
     }
     
     // Construir el mapa
@@ -361,7 +412,7 @@ function buildMap3D() {
                 const lightColor = isRed ? 0xff0000 : 0xffaa44;
                 const ceilingLight = new THREE.PointLight(lightColor, 1.2, 8, 1.5);
                 ceilingLight.position.set(posX, WALL_HEIGHT - 0.2, posZ);
-                ceilingLight.castShadow = true;
+                ceilingLight.castShadow = false; // Desactivar sombras de luces puntuales para evitar exceder MAX_TEXTURE_IMAGE_UNITS y mejorar FPS
                 ceilingLight.shadow.bias = -0.002;
                 scene.add(ceilingLight);
                 
@@ -472,6 +523,19 @@ function updateLevelEnvironment() {
         hemiGroundColor = 0x8899aa;
         hemiIntensity = 1.0;
         toneExposure = 1.2;
+    } else if (currentLevel === 4) {
+        // Infernal volcanic boss arena
+        fogColor = 0x1a0505;
+        fogDensity = 0.02; // Baja densidad: arena amplia y abierta
+        wallTex = generateInfernalWallTexture();
+        wallHazardTex = generateInfernalWallTexture();
+        wallBloodTex = generateInfernalWallTexture();
+        floorTex = generateInfernalFloorTexture();
+        ceilingTex = generateInfernalCeilingTexture();
+        hemiSkyColor = 0x441111;
+        hemiGroundColor = 0x220505;
+        hemiIntensity = 0.6;
+        toneExposure = 0.9;
     } else {
         fogColor = 0x050508;
         fogDensity = 0.075;
@@ -1311,36 +1375,46 @@ function buildWeapon3D() {
     camera.add(gunGroup);
 }
 
-// Helper para clonar modelos riggeados (SkinnedMesh) en Three.js
+// Helper para clonar modelos riggeados (SkinnedMesh) en Three.js utilizando el algoritmo de SkeletonUtils
 function cloneRiggedModel(source) {
-    const clone = source.clone();
-    
-    // Buscar todos los huesos en el modelo origen y en el clonado
-    const sourceBones = [];
-    source.traverse(node => {
-        if (node.isBone) sourceBones.push(node);
-    });
-    
-    const cloneBones = [];
-    clone.traverse(node => {
-        if (node.isBone) cloneBones.push(node);
-    });
-    
-    // Re-vincular los SkinnedMesh del clon a los huesos clonados correspondientes
-    clone.traverse(node => {
-        if (node.isSkinnedMesh) {
-            const originalSkeleton = node.skeleton;
-            const newBones = [];
-            for (let i = 0; i < originalSkeleton.bones.length; i++) {
-                const originalBone = originalSkeleton.bones[i];
-                const matchingBone = cloneBones.find(b => b.name === originalBone.name);
-                newBones.push(matchingBone || originalBone);
+    if (!source) return null;
+    try {
+        const sourceLookup = new Map();
+        const cloneLookup = new Map();
+
+        const clone = source.clone();
+
+        // Mapear nodos originales a nodos clonados en paralelo
+        function parallelTraverse(a, b) {
+            sourceLookup.set(a, b);
+            cloneLookup.set(b, a);
+            for (let i = 0; i < a.children.length; i++) {
+                parallelTraverse(a.children[i], b.children[i]);
             }
-            node.bind(new THREE.Skeleton(newBones, originalSkeleton.boneInverses), node.matrixWorld);
         }
-    });
-    
-    return clone;
+        parallelTraverse(source, clone);
+
+        // Re-vincular esqueletos
+        clone.traverse(node => {
+            if (node.isSkinnedMesh) {
+                const sourceMesh = cloneLookup.get(node);
+                const sourceBones = sourceMesh.skeleton.bones;
+                
+                node.skeleton = sourceMesh.skeleton.clone();
+                node.bindMatrix.copy(sourceMesh.bindMatrix);
+                node.bindMatrixInverse.copy(sourceMesh.bindMatrixInverse);
+                
+                // Re-mapear los huesos del esqueleto clonado a los nodos clonados correspondientes
+                node.skeleton.bones = sourceBones.map(bone => sourceLookup.get(bone));
+                node.bind(node.skeleton, node.bindMatrix);
+            }
+        });
+
+        return clone;
+    } catch (err) {
+        console.error("Error al clonar el modelo riggeado usando SkeletonUtils clone:", err);
+        return source.clone(); // Fallback si algo falla
+    }
 }
 
 // --- CONTRATACIÓN Y MOVIMIENTO DE ZOMBIS ---
@@ -1382,35 +1456,36 @@ class Zombie {
         this.group.add(this.bodyGroup);
 
         if (cachedZombieModel) {
-            // Clonar el modelo 3D riggeado pre-escalado personalizado
-            this.zombieMesh = cloneRiggedModel(cachedZombieModel);
+            // Clonar el modelo 3D pre-escalado personalizado (el zombi robot original es estático)
+            this.zombieMesh = cachedZombieModel.clone(true);
             
             // Alinear la base del zombi al suelo usando el offset pre-calculado
             this.baseYOffset = zombieGLBBaseYOffset;
             this.zombieMesh.position.set(0, this.baseYOffset, 0);
             
-            // Configurar el AnimationMixer para animaciones de esqueleto
-            const clip = (this.type === 'RUNNER' && cachedMummyRunClip) ? cachedMummyRunClip : cachedMummyWalkClip;
-            if (clip) {
-                this.mixer = new THREE.AnimationMixer(this.zombieMesh);
-                this.activeAction = this.mixer.clipAction(clip);
-                // Escalar la velocidad de reproducción de la animación para que coincida con el movimiento
-                this.activeAction.timeScale = this.speedMultiplier * 0.95;
-                this.activeAction.play();
-            }
-            
-            // Clonar materiales para poder tintar independientemente y configurar sombras
+            // Clonar materiales para poder tintar independientemente y configurar sombras (soportando arrays de materiales)
             this.zombieMesh.traverse(child => {
                 if (child.isMesh) {
                     child.castShadow = true;
                     child.receiveShadow = true;
                     if (child.material) {
-                        child.material = child.material.clone();
-                        // Aplicar tintes según el tipo
-                        if (this.type === 'RUNNER') {
-                            child.material.color.setHex(0xff5555); // Tinte rojo para corredores
-                        } else if (this.type === 'SPITTER') {
-                            child.material.color.setHex(0x55ff55); // Tinte verde fuerte para escupidores
+                        if (Array.isArray(child.material)) {
+                            child.material = child.material.map(mat => {
+                                const clonedMat = mat.clone();
+                                if (this.type === 'RUNNER') {
+                                    clonedMat.color.setHex(0xff5555); // Tinte rojo para corredores
+                                } else if (this.type === 'SPITTER') {
+                                    clonedMat.color.setHex(0x55ff55); // Tinte verde fuerte para escupidores
+                                }
+                                return clonedMat;
+                            });
+                        } else {
+                            child.material = child.material.clone();
+                            if (this.type === 'RUNNER') {
+                                child.material.color.setHex(0xff5555); // Tinte rojo para corredores
+                            } else if (this.type === 'SPITTER') {
+                                child.material.color.setHex(0x55ff55); // Tinte verde fuerte para escupidores
+                            }
                         }
                     }
                 }
@@ -1544,16 +1619,8 @@ class Zombie {
     update(deltaTime, playerPos) {
         if (this.state === 'DEAD') return;
         
-        // Actualizar el AnimationMixer si está disponible y está vivo
-        if (this.mixer && this.state === 'ALIVE') {
-            this.mixer.update(deltaTime);
-        }
-        
         if (this.state === 'DYING') {
             // Animación de caída al morir
-            if (this.activeAction) {
-                this.activeAction.paused = true;
-            }
             if (this.group.rotation.x > -Math.PI / 2) {
                 this.group.rotation.x -= deltaTime * 4;
                 this.group.position.y = Math.max(0.1, this.group.position.y - deltaTime * 2);
@@ -1613,13 +1680,10 @@ class Zombie {
             
             // Animación de caminata
             if (this.zombieMesh) {
-                if (this.activeAction) {
-                    this.activeAction.paused = false;
-                }
-                // Limpiar cualquier rotación/desplazamiento residual procedimental en el mesh raíz
-                this.zombieMesh.rotation.z = 0;
-                this.zombieMesh.rotation.x = 0;
-                this.zombieMesh.position.y = this.baseYOffset;
+                this.walkCycle += deltaTime * 8 * this.speedMultiplier;
+                this.zombieMesh.rotation.z = Math.sin(this.walkCycle) * 0.08; // Tambaleo lateral
+                this.zombieMesh.rotation.x = 0.15 + Math.cos(this.walkCycle * 2) * 0.05; // Cabeceo
+                this.zombieMesh.position.y = this.baseYOffset + Math.abs(Math.sin(this.walkCycle * 2)) * 0.06; // Bote
             } else {
                 this.walkCycle += deltaTime * 8 * this.speedMultiplier;
                 this.leftLeg.rotation.x = Math.sin(this.walkCycle) * 0.45;
@@ -1632,9 +1696,6 @@ class Zombie {
             }
         } else {
             // Atacar!
-            if (this.activeAction) {
-                this.activeAction.paused = true;
-            }
             if (this.attackCooldownTimer <= 0 && player.health > 0) {
                 this.attack();
             }
@@ -1715,18 +1776,23 @@ class Zombie {
         if (this.zombieMesh) {
             this.zombieMesh.traverse(child => {
                 if (child.isMesh && child.material) {
-                    if (hexColor !== null) {
-                        child.material.color.setHex(hexColor);
-                    } else {
-                        // Restaurar tinte basado en variante
-                        if (this.type === 'RUNNER') {
-                            child.material.color.setHex(0xff5555);
-                        } else if (this.type === 'SPITTER') {
-                            child.material.color.setHex(0x55ff55);
-                        } else {
-                            child.material.color.setHex(0xffffff); // Sin tinte (original)
+                    const materials = Array.isArray(child.material) ? child.material : [child.material];
+                    materials.forEach(mat => {
+                        if (mat && mat.color) {
+                            if (hexColor !== null) {
+                                mat.color.setHex(hexColor);
+                            } else {
+                                // Restaurar tinte basado en variante
+                                if (this.type === 'RUNNER') {
+                                    mat.color.setHex(0xff5555);
+                                } else if (this.type === 'SPITTER') {
+                                    mat.color.setHex(0x55ff55);
+                                } else {
+                                    mat.color.setHex(0xffffff); // Sin tinte (original)
+                                }
+                            }
                         }
-                    }
+                    });
                 }
             });
         } else {
@@ -1790,14 +1856,341 @@ class Zombie {
     }
 }
 
+// --- CLASE DEL JEFE FINAL (NIVEL 4) ---
+class BossEnemy {
+    constructor(x, z) {
+        this.group = new THREE.Group();
+        this.group.position.set(x, 0, z);
+        this.state = 'ALIVE'; // ALIVE, DYING, DEAD
+        this.health = BOSS_HEALTH;
+        this.maxHealth = BOSS_HEALTH;
+        this.hurtTimer = 0;
+        this.attackCooldownTimer = 0;
+        this.spitCooldownTimer = 3000 + Math.random() * 2000;
+        this.walkCycle = 0;
+        
+        // Sistema de rush (forma rápida)
+        this.rushTimer = BOSS_RUSH_INTERVAL; // Tiempo hasta próximo rush
+        this.isRushing = false;
+        this.rushDurationTimer = 0;
+        
+        // Construir cuerpo del jefe
+        if (cachedBossModel) {
+            this.bossMesh = cachedBossModel.clone(true);
+            this.baseYOffset = bossGLBBaseYOffset;
+            this.bossMesh.position.set(0, this.baseYOffset, 0);
+            
+            // Clonar materiales y configurar sombras
+            this.bossMesh.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    if (child.material) {
+                        if (Array.isArray(child.material)) {
+                            child.material = child.material.map(mat => mat.clone());
+                        } else {
+                            child.material = child.material.clone();
+                        }
+                    }
+                }
+            });
+            
+            this.group.add(this.bossMesh);
+        } else {
+            // Modelo procedimental de respaldo (cubo gigante rojo)
+            const bodyGeo = new THREE.BoxGeometry(2.5, 3.5, 2.0);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x880000, roughness: 0.7, metalness: 0.5 });
+            this.bossMesh = new THREE.Mesh(bodyGeo, bodyMat);
+            this.bossMesh.position.y = 1.75;
+            this.bossMesh.castShadow = true;
+            this.baseYOffset = 0;
+            this.group.add(this.bossMesh);
+            
+            // Ojos
+            const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.4, 2.8, 1.05);
+            this.group.add(leftEye);
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
+            rightEye.position.set(0.4, 2.8, 1.05);
+            this.group.add(rightEye);
+        }
+        
+        // Luz amenazante roja del jefe
+        this.eyeLight = new THREE.PointLight(0xff2200, 2.0, 10.0);
+        this.eyeLight.position.set(0, 3.0, 0.5);
+        this.group.add(this.eyeLight);
+        
+        // Aura de fuego inferior
+        this.auraLight = new THREE.PointLight(0xff5500, 1.5, 8.0);
+        this.auraLight.position.set(0, 0.5, 0);
+        this.group.add(this.auraLight);
+        
+        scene.add(this.group);
+        
+        // Mostrar barra de vida del jefe
+        if (bossHud) {
+            bossHud.classList.remove('hidden');
+            bossHud.classList.remove('boss-low-health');
+        }
+        this.updateHealthBar();
+        
+        // Rugido de entrada
+        AudioSynth.playBossRoar();
+    }
+    
+    updateHealthBar() {
+        if (bossHealthFill) {
+            const pct = Math.max(0, this.health / this.maxHealth) * 100;
+            bossHealthFill.style.width = pct + '%';
+            
+            // Pulso de poca vida
+            if (bossHud) {
+                if (pct < 25) {
+                    bossHud.classList.add('boss-low-health');
+                } else {
+                    bossHud.classList.remove('boss-low-health');
+                }
+            }
+        }
+    }
+    
+    update(deltaTime, playerPos) {
+        if (this.state === 'DEAD') return;
+        
+        if (this.state === 'DYING') {
+            if (this.group.rotation.x > -Math.PI / 2) {
+                this.group.rotation.x -= deltaTime * 2; // Caída lenta y dramática
+                this.group.position.y = Math.max(0.1, this.group.position.y - deltaTime * 1.5);
+            } else {
+                this.state = 'DEAD';
+                // Ocultar barra de vida
+                if (bossHud) bossHud.classList.add('hidden');
+                // Victoria del nivel
+                setTimeout(() => triggerVictory(), 2000);
+            }
+            return;
+        }
+        
+        // Flash de daño
+        if (this.hurtTimer > 0) {
+            this.hurtTimer -= deltaTime;
+            if (this.hurtTimer <= 0) {
+                this.setMaterialColor(null);
+            }
+        }
+        
+        // Cooldown de ataque cuerpo a cuerpo
+        if (this.attackCooldownTimer > 0) {
+            this.attackCooldownTimer -= deltaTime * 1000;
+        }
+        
+        // Sistema de Rush
+        this.rushTimer -= deltaTime;
+        if (this.rushTimer <= 0 && !this.isRushing) {
+            this.isRushing = true;
+            this.rushDurationTimer = BOSS_RUSH_DURATION;
+            this.rushTimer = BOSS_RUSH_INTERVAL;
+            showFeedback("¡EL JEFE ENTRA EN FORMA RÁPIDA!");
+            AudioSynth.playBossRoar();
+        }
+        if (this.isRushing) {
+            this.rushDurationTimer -= deltaTime;
+            if (this.rushDurationTimer <= 0) {
+                this.isRushing = false;
+            }
+        }
+        
+        // IA: Perseguir al jugador
+        const dir = new THREE.Vector3().subVectors(playerPos, this.group.position);
+        dir.y = 0;
+        const dist = dir.length();
+        dir.normalize();
+        
+        const angle = Math.atan2(dir.x, dir.z);
+        this.group.rotation.y = angle;
+        
+        // Rugidos ocasionales
+        if (Math.random() < 0.005 && dist < 30) {
+            AudioSynth.playBossRoar();
+        }
+        
+        // Ataque de bola de ácido verde
+        if (dist >= BOSS_ACID_RANGE_MIN && dist <= BOSS_ACID_RANGE_MAX && this.state === 'ALIVE') {
+            this.spitCooldownTimer -= deltaTime * 1000;
+            if (this.spitCooldownTimer <= 0) {
+                this.spitAcid(dir);
+                this.spitCooldownTimer = 3000 + Math.random() * 2000;
+            }
+        }
+        
+        // Calcular velocidad actual
+        const speedMult = this.isRushing ? BOSS_RUSH_SPEED_MULTIPLIER : BOSS_SPEED_MULTIPLIER;
+        const currentSpeed = ZOMBIE_SPEED * speedMult;
+        
+        if (dist > BOSS_MELEE_RANGE) {
+            // Moverse hacia el jugador
+            const nextX = this.group.position.x + dir.x * currentSpeed;
+            const nextZ = this.group.position.z + dir.z * currentSpeed;
+            
+            const resolved = checkZombieWallCollisions(nextX, nextZ);
+            this.group.position.x = resolved.x;
+            this.group.position.z = resolved.z;
+            
+            // Animación de caminata
+            this.walkCycle += deltaTime * 6 * speedMult;
+            if (this.bossMesh) {
+                this.bossMesh.rotation.z = Math.sin(this.walkCycle) * 0.06;
+                this.bossMesh.rotation.x = 0.1 + Math.cos(this.walkCycle * 2) * 0.04;
+                this.bossMesh.position.y = this.baseYOffset + Math.abs(Math.sin(this.walkCycle * 2)) * 0.08;
+            }
+        } else {
+            // Ataque cuerpo a cuerpo
+            if (this.attackCooldownTimer <= 0 && player.health > 0) {
+                this.meleeAttack();
+            }
+        }
+        
+        // Pulso de aura de fuego
+        if (this.auraLight) {
+            this.auraLight.intensity = 1.5 + Math.sin(this.walkCycle * 3) * 0.5;
+        }
+        if (this.eyeLight) {
+            this.eyeLight.intensity = 2.0 + (this.isRushing ? Math.sin(this.walkCycle * 8) * 1.5 : 0);
+        }
+    }
+    
+    meleeAttack() {
+        this.attackCooldownTimer = 1500;
+        AudioSynth.playBossImpact();
+        
+        // Animación de golpe
+        if (this.bossMesh) {
+            const origZ = this.bossMesh.position.z;
+            this.bossMesh.position.z += 0.5;
+            setTimeout(() => {
+                if (this.bossMesh) this.bossMesh.position.z = origZ;
+            }, 250);
+        }
+        
+        damagePlayer(BOSS_MELEE_DAMAGE);
+        showFeedback("¡EL JEFE TE GOLPEÓ!");
+    }
+    
+    spitAcid(dir) {
+        AudioSynth.playMetallicClick(250, 0.2, 0.3);
+        
+        const startPos = this.group.position.clone();
+        startPos.y += 2.5; // Más alto que un zombie normal
+        
+        // Proyectil más grande
+        const projGeo = new THREE.SphereGeometry(0.25, 10, 10);
+        const projMat = new THREE.MeshBasicMaterial({ color: 0x39ff14 });
+        const projMesh = new THREE.Mesh(projGeo, projMat);
+        projMesh.position.copy(startPos);
+        
+        const projLight = new THREE.PointLight(0x39ff14, 2.5, 5);
+        projMesh.add(projLight);
+        
+        scene.add(projMesh);
+        
+        const targetPos = camera.position.clone();
+        targetPos.x += (Math.random() - 0.5) * 0.3;
+        targetPos.z += (Math.random() - 0.5) * 0.3;
+        
+        // Más rápido que un spitter normal
+        const velocity = new THREE.Vector3().subVectors(targetPos, startPos).normalize().multiplyScalar(0.25);
+        
+        acidProjectiles.push({
+            mesh: projMesh,
+            velocity: velocity,
+            life: 4.0,
+            damage: BOSS_ACID_DAMAGE
+        });
+    }
+    
+    damage(amount, isHeadshot) {
+        if (this.state !== 'ALIVE') return;
+        
+        // Headshots hacen x2 para el jefe (no x3 como zombies normales)
+        let finalDmg = amount;
+        if (isHeadshot) {
+            finalDmg = amount * 2;
+        }
+        
+        this.health -= finalDmg;
+        
+        this.setMaterialColor(0xff0000);
+        this.hurtTimer = 0.12;
+        
+        AudioSynth.playBossImpact();
+        this.updateHealthBar();
+        
+        if (this.health <= 0) {
+            this.state = 'DYING';
+            AudioSynth.stopBossMusic();
+            showFeedback("¡JEFE ELIMINADO! VICTORIA INMINENTE...");
+            
+            // Explosión de partículas de fuego
+            for (let i = 0; i < 30; i++) {
+                const sparkPos = this.group.position.clone();
+                sparkPos.y += Math.random() * 3;
+                particles.push(new Particle(sparkPos, 0xff4400, 0.08 + Math.random() * 0.06, 0.04));
+            }
+        }
+    }
+    
+    setMaterialColor(hexColor) {
+        if (!this.bossMesh) return;
+        this.bossMesh.traverse(child => {
+            if (child.isMesh && child.material) {
+                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                mats.forEach(mat => {
+                    if (hexColor !== null) {
+                        if (!mat._origColor) mat._origColor = mat.color.getHex();
+                        mat.color.setHex(hexColor);
+                    } else {
+                        if (mat._origColor !== undefined) {
+                            mat.color.setHex(mat._origColor);
+                            delete mat._origColor;
+                        }
+                    }
+                });
+            }
+        });
+    }
+    
+    dispose() {
+        scene.remove(this.group);
+        if (bossHud) bossHud.classList.add('hidden');
+    }
+}
+
 // Spawnea zombis en posiciones vacías del mapa
 function spawnZombies() {
     zombies.forEach(z => scene.remove(z.group));
     zombies = [];
     
+    // Limpiar jefe anterior si existe
+    if (bossEnemy) {
+        bossEnemy.dispose();
+        bossEnemy = null;
+    }
+    
     // Limpiar proyectiles de ácido viejos
     acidProjectiles.forEach(p => scene.remove(p.mesh));
     acidProjectiles = [];
+    
+    // Nivel 4: Jefe final en vez de zombies normales
+    if (currentLevel === 4) {
+        const mapSize = activeMap.length;
+        const centerX = Math.floor(mapSize / 2) * GRID_SIZE;
+        const centerZ = Math.floor(mapSize / 2) * GRID_SIZE;
+        bossEnemy = new BossEnemy(centerX, centerZ);
+        zombiesRemainingCount();
+        return;
+    }
     
     let spawned = 0;
     let attempts = 0;
@@ -2231,34 +2624,107 @@ function shoot() {
     });
     zombies.forEach(z => {
         if (z.state === 'ALIVE') {
-            targets.push(z.torso, z.head, z.leftArm, z.rightArm, z.leftLeg, z.rightLeg);
+            if (z.zombieMesh) {
+                targets.push(z.zombieMesh);
+            } else {
+                if (z.torso) targets.push(z.torso);
+                if (z.head) targets.push(z.head);
+                if (z.leftArm) targets.push(z.leftArm);
+                if (z.rightArm) targets.push(z.rightArm);
+                if (z.leftLeg) targets.push(z.leftLeg);
+                if (z.rightLeg) targets.push(z.rightLeg);
+            }
         }
     });
     
-    const intersects = raycaster.intersectObjects(targets);
+    if (bossEnemy && bossEnemy.state === 'ALIVE' && bossEnemy.bossMesh) {
+        targets.push(bossEnemy.bossMesh);
+    }
+    
+    // Pasar true para realizar intersección recursiva (necesaria para el modelo GLTF)
+    const intersects = raycaster.intersectObjects(targets, true);
     
     if (intersects.length > 0) {
         const hitObj = intersects[0].object;
         const hitPoint = intersects[0].point;
         
         let hitZombie = null;
-        for (let z of zombies) {
-            if (z.state === 'ALIVE' && (
-                hitObj === z.torso || 
-                hitObj === z.head || 
-                hitObj === z.leftArm || 
-                hitObj === z.rightArm ||
-                hitObj === z.leftLeg ||
-                hitObj === z.rightLeg
-            )) {
-                hitZombie = z;
-                break;
+        let hitBoss = false;
+        let isHeadshot = false;
+        
+        if (bossEnemy && bossEnemy.state === 'ALIVE' && bossEnemy.bossMesh) {
+            let parent = hitObj;
+            let found = false;
+            while (parent) {
+                if (parent === bossEnemy.bossMesh) {
+                    found = true;
+                    break;
+                }
+                parent = parent.parent;
+            }
+            if (found) {
+                hitBoss = true;
+                const localHitY = hitPoint.y - bossEnemy.group.position.y;
+                if (localHitY > 2.8) {
+                    isHeadshot = true;
+                }
             }
         }
         
-        if (hitZombie) {
+        if (!hitBoss) {
+            for (let z of zombies) {
+                if (z.state === 'ALIVE') {
+                    if (z.zombieMesh) {
+                        // Verificar si el objeto impactado es descendiente del zombieMesh del modelo GLB
+                        let parent = hitObj;
+                        let found = false;
+                        while (parent) {
+                            if (parent === z.zombieMesh) {
+                                found = true;
+                                break;
+                            }
+                            parent = parent.parent;
+                        }
+                        if (found) {
+                            hitZombie = z;
+                            // Altura relativa Y para headshot en zombi de 1.8 de altura (escala base 1.35 de group)
+                            const localHitY = hitPoint.y - z.group.position.y;
+                            if (localHitY > 1.45) {
+                                isHeadshot = true;
+                            }
+                            break;
+                        }
+                    } else {
+                        // Soporte procedimental
+                        if (
+                            hitObj === z.torso || 
+                            hitObj === z.head || 
+                            hitObj === z.leftArm || 
+                            hitObj === z.rightArm ||
+                            hitObj === z.leftLeg ||
+                            hitObj === z.rightLeg
+                        ) {
+                            hitZombie = z;
+                            if (hitObj === z.head) {
+                                isHeadshot = true;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (hitBoss) {
             let dmg = activeWep.damage;
-            if (hitObj === hitZombie.head) {
+            if (isHeadshot) {
+                showFeedback("¡TIRO CRÍTICO AL JEFE!");
+            }
+            bossEnemy.damage(dmg, isHeadshot);
+            spawnBloodSpatter(hitPoint);
+        } else if (hitZombie) {
+            let dmg = activeWep.damage;
+            if (isHeadshot) {
                 dmg = dmg * 3; // Triple daño por headshot
                 showFeedback("¡TIRO A LA CABEZA!");
             }
@@ -2453,8 +2919,8 @@ function triggerVictory() {
     document.exitPointerLock();
     AudioSynth.stopHorrorMusic();
     
-    if (currentLevel === 3) {
-        // Capítulo 1 Completado!
+    if (currentLevel === 4) {
+        // Capítulo 1 Completado! (Ahora después del nivel 4)
         gameState = 'VICTORY';
         victoryOverlay.classList.add('active');
         
@@ -2464,9 +2930,9 @@ function triggerVictory() {
         const btnEl = victoryOverlay.querySelector('.victory-btn');
         
         if (titleEl) titleEl.innerText = "CAPÍTULO 1 COMPLETADO";
-        if (subtitleEl) subtitleEl.innerText = "SOBREVIVISTE A LA MONTAÑA HELADA";
+        if (subtitleEl) subtitleEl.innerText = "DERROTASTE AL INFERNAL IRONCLAD";
         if (msgEl) {
-            msgEl.innerHTML = "Has escapado de la instalación biológica, cruzado la selva hostil y sobrevivido al frío extremo de la montaña.<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...";
+            msgEl.innerHTML = "Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...";
         }
         if (btnEl) btnEl.innerText = "VOLVER A JUGAR";
         
@@ -2940,6 +3406,16 @@ function setupControls() {
             if (k === '1') switchWeapon('shotgun');
             if (k === '2') switchWeapon('glock');
             if (k === '3') switchWeapon('m4');
+            
+            // Cheat code para saltar nivel
+            if (k === 'K') {
+                if (currentLevel < 4) {
+                    showFeedback("TRUCO ACTIVADO: VICTORIA INSTANTÁNEA");
+                    triggerVictory();
+                } else {
+                    showFeedback("YA ESTÁS EN EL ÚLTIMO NIVEL.");
+                }
+            }
         }
     });
     
@@ -3179,6 +3655,11 @@ function animate() {
         zombies.forEach(z => {
             z.update(deltaTime, player.position);
         });
+        
+        // Actualizar jefe
+        if (bossEnemy) {
+            bossEnemy.update(deltaTime, player.position);
+        }
         
         // Actualizar proyectiles de ácido de los Spitters
         for (let i = acidProjectiles.length - 1; i >= 0; i--) {

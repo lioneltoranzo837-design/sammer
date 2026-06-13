@@ -714,3 +714,92 @@ html, body {
     border-radius: 3px;
     cursor: crosshair;
 }
+
+/* --- BOSS HEALTH BAR (Level 4) --- */
+.boss-hud {
+    position: fixed;
+    top: 50px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 800;
+    text-align: center;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+}
+
+.boss-hud.hidden {
+    display: none;
+}
+
+.boss-name {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1.4rem;
+    color: #ff3333;
+    text-shadow: 0 0 10px rgba(255, 50, 50, 0.8), 0 0 30px rgba(255, 0, 0, 0.4);
+    letter-spacing: 4px;
+    margin-bottom: 6px;
+    animation: boss-name-flicker 3s infinite;
+}
+
+@keyframes boss-name-flicker {
+    0%, 92%, 100% { opacity: 1; }
+    93% { opacity: 0.7; }
+    94% { opacity: 1; }
+    96% { opacity: 0.6; }
+    97% { opacity: 1; }
+}
+
+.boss-health-bar-container {
+    width: 400px;
+    height: 16px;
+    background: rgba(20, 5, 5, 0.85);
+    border: 2px solid #660000;
+    border-radius: 2px;
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.3), inset 0 0 8px rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+    position: relative;
+}
+
+.boss-health-fill {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, #cc0000, #ff3300, #ff5500, #ff3300, #cc0000);
+    background-size: 200% 100%;
+    animation: boss-health-flow 2s linear infinite;
+    transition: width 0.3s ease-out;
+    box-shadow: 0 0 8px rgba(255, 50, 0, 0.6);
+    position: relative;
+}
+
+.boss-health-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.15), transparent);
+}
+
+@keyframes boss-health-flow {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+}
+
+.boss-hud.boss-low-health .boss-health-fill {
+    animation: boss-health-flow 2s linear infinite, boss-health-pulse 0.5s ease-in-out infinite;
+}
+
+.boss-hud.boss-low-health .boss-name {
+    animation: boss-name-flicker 3s infinite, boss-health-pulse 0.5s ease-in-out infinite;
+}
+
+.boss-hud.boss-low-health .boss-health-bar-container {
+    border-color: #ff0000;
+    box-shadow: 0 0 25px rgba(255, 0, 0, 0.6), inset 0 0 8px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes boss-health-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
