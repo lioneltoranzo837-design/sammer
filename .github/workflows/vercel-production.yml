@@ -1,0 +1,38 @@
+name: Deploy to Vercel Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_ORG_ID: team_u7GC3RJpRBqGElzIiTseTvXr
+      VERCEL_PROJECT_ID: prj_hAYAK4f4haocORuhaAPtAUFeeA3V
+      VERCEL_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes vercel@latest deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}" | tee vercel-deploy.log
+          deployment_url=$(grep -Eo 'https://[^[:space:]]+\.vercel\.app' vercel-deploy.log | tail -n 1)
+          if [ -z "$deployment_url" ]; then
+            echo "No Vercel deployment URL found" >&2
+            exit 1
+          fi
+          echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
+
+      - name: Alias production domain
+        run: npx --yes vercel@latest alias set "${{ steps.deploy.outputs.deployment_url }}" sammer.shiafu.com --token="${{ secrets.VERCEL_TOKEN }}"
