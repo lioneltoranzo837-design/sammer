@@ -688,3 +688,29 @@ html, body {
 #damage-flash.acid {
     background-color: rgba(0, 180, 0, 0.45) !important;
 }
+
+/* --- Minijuego de Cableado --- */
+.wiring-content {
+    max-width: 550px !important;
+    border-color: #ffa500 !important;
+    box-shadow: 0 0 30px rgba(255, 165, 0, 0.25) !important;
+    background: rgba(15, 10, 5, 0.95) !important;
+}
+
+#wiring-panel-container {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #0d0d0f;
+    border: 2px solid #333;
+    padding: 10px;
+    border-radius: 4px;
+    box-shadow: inset 0 0 15px rgba(0,0,0,0.9);
+}
+
+#wiring-canvas {
+    background-color: #121216;
+    border-radius: 3px;
+    cursor: crosshair;
+}

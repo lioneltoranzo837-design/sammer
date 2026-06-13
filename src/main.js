@@ -10,7 +10,8 @@ import {
     WEAPONS,
     ZOMBIE_ATTACK_COOLDOWN,
     ZOMBIE_ATTACK_DIST,
-    ZOMBIE_SPEED
+    ZOMBIE_SPEED,
+    getMapForLevel
 } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import {
@@ -18,7 +19,13 @@ import {
     generateCeilingTexture,
     generateFloorTexture,
     generateWallTexture,
-    generateZombieFaceTexture
+    generateZombieFaceTexture,
+    generateJungleWallTexture,
+    generateJungleFloorTexture,
+    generateJungleCeilingTexture,
+    generateMountainWallTexture,
+    generateMountainFloorTexture,
+    generateMountainCeilingTexture
 } from './rendering/textures.js';
 import {
     ammoClipEl,
@@ -54,12 +61,23 @@ let lights = [];
 let interactiveDoors = []; // Registro de puertas normales interactuadas
 let fuses = []; // Registro de fusibles en el mapa
 let fusesCollected = 0; // Fichas recogidas
+let ambientParticles = []; // Partículas ambientales flotantes (polvo/esporas/nieve)
+let hemisphereLight = null; // Luz hemisférica ambiental por bioma
+let decorations = []; // Objetos decorativos 3D ambientales
 let fuseBoxConsole = null; // Estructura 3D del generador final
 
 // Variables de Progresión y Nuevas Armas
 let currentLevel = 1;
+let activeMap = MAP;
 let supplyPoints = 0;
 let unlockedWeapons = { shotgun: true, glock: false, m4: false };
+
+// Variables para el Minijuego de Cableado
+let wiringFixed = false;
+let draggingWireIdx = -1;
+let mousePos = { x: 0, y: 0 };
+let leftSockets = [];
+let rightSockets = [];
 
 let isMouseDown = false;
 let autoFireTimer = 0;
@@ -97,25 +115,34 @@ async function initEngine() {
     // Reloj
     clock = new THREE.Clock();
     
-    // Renderizador
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight - 110); // Reservar espacio para el HUD
+    // Renderizador con mejoras de calidad gráfica
+    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // HiDPI sin excederse
+    renderer.setSize(window.innerWidth, window.innerHeight - 110);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; // Tone mapping cinematográfico
+    renderer.toneMappingExposure = 1.1;
+    renderer.outputEncoding = THREE.sRGBEncoding; // Color encoding correcto
     document.getElementById('game-container').appendChild(renderer.domElement);
     
-    // Luz ambiental muy tenue
-    const ambientLight = new THREE.AmbientLight(0x0a0a14);
+    // Luz ambiental base muy tenue
+    const ambientLight = new THREE.AmbientLight(0x0a0a14, 0.5);
     scene.add(ambientLight);
     
+    // Luz hemisférica para iluminación natural de relleno (cambia por bioma)
+    hemisphereLight = new THREE.HemisphereLight(0x111122, 0x080810, 0.3);
+    scene.add(hemisphereLight);
+    
     // Linterna acoplada a la cámara del jugador (SpotLight) - Potente y amplio rango
-    const flashlight = new THREE.SpotLight(0xfff9e6, 3.2, 40, Math.PI / 4.0, 0.6, 1.0);
+    const flashlight = new THREE.SpotLight(0xfff9e6, 3.2, 45, Math.PI / 3.8, 0.55, 0.9);
     flashlight.castShadow = true;
-    flashlight.shadow.mapSize.width = 1024;
-    flashlight.shadow.mapSize.height = 1024;
+    flashlight.shadow.mapSize.width = 2048; // Sombras de alta resolución
+    flashlight.shadow.mapSize.height = 2048;
     flashlight.shadow.camera.near = 0.5;
-    flashlight.shadow.camera.far = 40;
-    flashlight.shadow.bias = -0.001;
+    flashlight.shadow.camera.far = 45;
+    flashlight.shadow.bias = -0.0005;
+    flashlight.shadow.radius = 2; // Sombras suavizadas
     camera.add(flashlight);
     
     // Objetivo de la linterna (apunta al frente de la cámara)
@@ -152,11 +179,12 @@ async function initEngine() {
 
 // --- CONSTRUCTOR DE MAPA ---
 function buildMap3D() {
+    const activeMap = getMapForLevel(currentLevel);
     const wallGeo = new THREE.BoxGeometry(GRID_SIZE, WALL_HEIGHT, GRID_SIZE);
     
-    for (let z = 0; z < MAP.length; z++) {
-        for (let x = 0; x < MAP[z].length; x++) {
-            const type = MAP[z][x];
+    for (let z = 0; z < activeMap.length; z++) {
+        for (let x = 0; x < activeMap[z].length; x++) {
+            const type = activeMap[z][x];
             const posX = x * GRID_SIZE;
             const posZ = z * GRID_SIZE;
             
@@ -165,6 +193,7 @@ function buildMap3D() {
                 // Suelo
                 const floorGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
                 const floorMesh = new THREE.Mesh(floorGeo, floorMaterial);
+                floorMesh.name = "map_floor";
                 floorMesh.rotation.x = -Math.PI / 2;
                 floorMesh.position.set(posX, 0, posZ);
                 floorMesh.receiveShadow = true;
@@ -173,6 +202,7 @@ function buildMap3D() {
                 // Techo
                 const ceilGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
                 const ceilMesh = new THREE.Mesh(ceilGeo, ceilingMaterial);
+                ceilMesh.name = "map_ceiling";
                 ceilMesh.rotation.x = Math.PI / 2;
                 ceilMesh.position.set(posX, WALL_HEIGHT, posZ);
                 ceilMesh.receiveShadow = true;
@@ -191,6 +221,7 @@ function buildMap3D() {
                 }
                 
                 const wall = new THREE.Mesh(wallGeo, mat);
+                wall.name = "map_wall";
                 wall.position.set(posX, WALL_HEIGHT / 2, posZ);
                 wall.castShadow = true;
                 wall.receiveShadow = true;
@@ -208,6 +239,7 @@ function buildMap3D() {
                 // Puerta de Salida
                 const doorGeo = new THREE.BoxGeometry(GRID_SIZE, WALL_HEIGHT, 0.4);
                 const door = new THREE.Mesh(doorGeo, doorMaterial);
+                door.name = "map_wall";
                 door.position.set(posX, WALL_HEIGHT / 2, posZ);
                 door.castShadow = true;
                 door.receiveShadow = true;
@@ -227,9 +259,9 @@ function buildMap3D() {
             } else if (type === 3) {
                 // Puerta Normal Interactiva (Se abre con E)
                 let spanZ = false;
-                if (z > 0 && z < MAP.length - 1) {
-                    const cellAbove = MAP[z-1][x];
-                    const cellBelow = MAP[z+1][x];
+                if (z > 0 && z < activeMap.length - 1) {
+                    const cellAbove = activeMap[z-1][x];
+                    const cellBelow = activeMap[z+1][x];
                     if (cellAbove === 1 && cellBelow === 1) {
                         spanZ = true;
                     }
@@ -241,6 +273,7 @@ function buildMap3D() {
                 const doorGeo = new THREE.BoxGeometry(width, WALL_HEIGHT, depth);
                 const interactiveDoorMat = new THREE.MeshStandardMaterial({ map: generateWallTexture(4), roughness: 0.6, metalness: 0.4 });
                 const door = new THREE.Mesh(doorGeo, interactiveDoorMat);
+                door.name = "map_wall";
                 door.position.set(posX, WALL_HEIGHT / 2, posZ);
                 door.castShadow = true;
                 door.receiveShadow = true;
@@ -292,6 +325,525 @@ function buildMap3D() {
     }
 }
 
+// --- LIMPIEZA DE MAPA Y AMBIENTACIÓN ---
+function clearCurrentMap() {
+    // 1. Quitar meshes del mapa de la escena
+    const toRemove = [];
+    scene.traverse((child) => {
+        if (child.name === "map_floor" || child.name === "map_ceiling" || child.name === "map_wall") {
+            toRemove.push(child);
+        }
+        // Quitar calcomanías de sangre (planos que no son suelo/techo)
+        if (child.isMesh && child.geometry && child.geometry.type === 'PlaneGeometry' && child.name !== 'map_floor' && child.name !== 'map_ceiling') {
+            toRemove.push(child);
+        }
+    });
+    toRemove.forEach(mesh => {
+        scene.remove(mesh);
+        if (mesh.geometry) mesh.geometry.dispose();
+        if (mesh.material) {
+            if (Array.isArray(mesh.material)) {
+                mesh.material.forEach(m => m.dispose());
+            } else {
+                mesh.material.dispose();
+            }
+        }
+    });
+
+    // 2. Quitar luces y lámparas del mapa
+    lights.forEach(item => {
+        scene.remove(item.light);
+        scene.remove(item.lamp);
+        if (item.lamp.geometry) item.lamp.geometry.dispose();
+        if (item.lamp.material) item.lamp.material.dispose();
+    });
+    lights = [];
+
+    // 3. Quitar generador final de la escena
+    if (fuseBoxConsole && fuseBoxConsole.group) {
+        scene.remove(fuseBoxConsole.group);
+        fuseBoxConsole.group.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => m.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
+        fuseBoxConsole = null;
+    }
+
+    // 4. Limpiar arreglos de colisiones
+    colliders = [];
+    interactiveDoors = [];
+}
+
+function updateLevelEnvironment() {
+    activeMap = getMapForLevel(currentLevel);
+    let fogColor, fogDensity;
+    let wallTex, wallHazardTex, wallBloodTex;
+    let floorTex, ceilingTex;
+    let hemiSkyColor, hemiGroundColor, hemiIntensity;
+    let toneExposure;
+    
+    if (currentLevel === 2) {
+        fogColor = 0x071a06;
+        fogDensity = 0.065;
+        wallTex = generateJungleWallTexture();
+        wallHazardTex = generateJungleWallTexture();
+        wallBloodTex = generateJungleWallTexture();
+        floorTex = generateJungleFloorTexture();
+        ceilingTex = generateJungleCeilingTexture();
+        hemiSkyColor = 0x1a3a1a;
+        hemiGroundColor = 0x0a1a06;
+        hemiIntensity = 0.4;
+        toneExposure = 1.0;
+    } else if (currentLevel === 3) {
+        // Bright snowy environment
+        fogColor = 0xdbe5f0;
+        fogDensity = 0.025; // Less dense so the bright snow is visible
+        wallTex = generateMountainWallTexture();
+        wallHazardTex = generateMountainWallTexture();
+        wallBloodTex = generateMountainWallTexture();
+        floorTex = generateMountainFloorTexture();
+        ceilingTex = generateMountainCeilingTexture();
+        hemiSkyColor = 0xffffff;
+        hemiGroundColor = 0x8899aa;
+        hemiIntensity = 1.0;
+        toneExposure = 1.2;
+    } else {
+        fogColor = 0x050508;
+        fogDensity = 0.075;
+        wallTex = generateWallTexture(0);
+        wallHazardTex = generateWallTexture(1);
+        wallBloodTex = generateWallTexture(2);
+        floorTex = generateFloorTexture();
+        ceilingTex = generateCeilingTexture();
+        hemiSkyColor = 0x111122;
+        hemiGroundColor = 0x080810;
+        hemiIntensity = 0.3;
+        toneExposure = 1.1;
+    }
+    
+    // Cambiar niebla
+    if (scene.fog) {
+        scene.fog.color.setHex(fogColor);
+        scene.fog.density = fogDensity;
+    }
+    renderer.setClearColor(fogColor);
+    renderer.toneMappingExposure = toneExposure;
+    
+    // Actualizar luz hemisférica por bioma
+    if (hemisphereLight) {
+        hemisphereLight.color.setHex(hemiSkyColor);
+        hemisphereLight.groundColor.setHex(hemiGroundColor);
+        hemisphereLight.intensity = hemiIntensity;
+    }
+    
+    // Cambiar texturas en materiales existentes
+    if (wallMaterialStandard) {
+        wallMaterialStandard.map = wallTex;
+        wallMaterialStandard.needsUpdate = true;
+    }
+    if (wallMaterialHazard) {
+        wallMaterialHazard.map = wallHazardTex;
+        wallMaterialHazard.needsUpdate = true;
+    }
+    if (wallMaterialBlood) {
+        wallMaterialBlood.map = wallBloodTex;
+        wallMaterialBlood.needsUpdate = true;
+    }
+    if (floorMaterial) {
+        floorMaterial.map = floorTex;
+        floorMaterial.needsUpdate = true;
+    }
+    if (ceilingMaterial) {
+        ceilingMaterial.map = ceilingTex;
+        ceilingMaterial.needsUpdate = true;
+    }
+    
+    // Limpiar y regenerar decoraciones y partículas ambientales
+    clearDecorations();
+    spawnLevelDecorations();
+    clearAmbientParticles();
+    spawnAmbientParticles();
+}
+
+// --- DECORACIONES 3D AMBIENTALES ---
+function clearDecorations() {
+    decorations.forEach(d => {
+        scene.remove(d);
+        d.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => m.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
+    });
+    decorations = [];
+}
+
+function spawnLevelDecorations() {
+    const map = getMapForLevel(currentLevel);
+    let spawned = 0;
+    const maxDecorations = 20;
+    
+    for (let z = 2; z < map.length - 2 && spawned < maxDecorations; z++) {
+        for (let x = 2; x < map[z].length - 2 && spawned < maxDecorations; x++) {
+            if (map[z][x] !== 0) continue;
+            if (Math.random() > 0.12) continue; // ~12% de celdas vacías reciben decoración
+            
+            const posX = x * GRID_SIZE;
+            const posZ = z * GRID_SIZE;
+            
+            // Verificar que no esté en el spawn o salida
+            if (x < 3 && z < 3) continue;
+            if (x > 13 && z > 13) continue;
+            
+            let group;
+            if (currentLevel === 1) {
+                group = createFacilityDecoration(posX, posZ);
+            } else if (currentLevel === 2) {
+                group = createJungleDecoration(posX, posZ);
+            } else {
+                group = createMountainDecoration(posX, posZ);
+            }
+            
+            if (group) {
+                scene.add(group);
+                decorations.push(group);
+                spawned++;
+            }
+        }
+    }
+}
+
+function createFacilityDecoration(px, pz) {
+    const group = new THREE.Group();
+    const type = Math.floor(Math.random() * 4);
+    
+    if (type === 0) {
+        // Barril tóxico
+        const barrelGeo = new THREE.CylinderGeometry(0.35, 0.38, 1.0, 10);
+        const barrelMat = new THREE.MeshStandardMaterial({
+            color: 0x3a4a2e, roughness: 0.85, metalness: 0.3
+        });
+        const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+        barrel.position.set(px + (Math.random()-0.5)*1.5, 0.5, pz + (Math.random()-0.5)*1.5);
+        barrel.castShadow = true;
+        barrel.receiveShadow = true;
+        group.add(barrel);
+        
+        // Franja de peligro
+        const bandGeo = new THREE.CylinderGeometry(0.36, 0.39, 0.12, 10);
+        const bandMat = new THREE.MeshStandardMaterial({
+            color: 0xffaa00, roughness: 0.6, metalness: 0.2, emissive: 0x332200, emissiveIntensity: 0.2
+        });
+        const band = new THREE.Mesh(bandGeo, bandMat);
+        band.position.copy(barrel.position);
+        band.position.y = 0.65;
+        group.add(band);
+        
+        // Goteo tóxico luminoso
+        const dripGeo = new THREE.SphereGeometry(0.06, 6, 6);
+        const dripMat = new THREE.MeshBasicMaterial({ color: 0x44ff22, transparent: true, opacity: 0.7 });
+        const drip = new THREE.Mesh(dripGeo, dripMat);
+        drip.position.set(barrel.position.x + 0.35, 0.15, barrel.position.z);
+        group.add(drip);
+        
+        const dripLight = new THREE.PointLight(0x44ff22, 0.3, 1.5);
+        dripLight.position.copy(drip.position);
+        group.add(dripLight);
+    } else if (type === 1) {
+        // Caja de suministros militar
+        const crateGeo = new THREE.BoxGeometry(0.9, 0.6, 0.7);
+        const crateMat = new THREE.MeshStandardMaterial({
+            color: 0x2a2a1e, roughness: 0.9, metalness: 0.15
+        });
+        const crate = new THREE.Mesh(crateGeo, crateMat);
+        crate.position.set(px + (Math.random()-0.5)*1.2, 0.3, pz + (Math.random()-0.5)*1.2);
+        crate.rotation.y = Math.random() * Math.PI;
+        crate.castShadow = true;
+        crate.receiveShadow = true;
+        group.add(crate);
+        
+        // Refuerzos metálicos
+        const stripGeo = new THREE.BoxGeometry(0.92, 0.04, 0.72);
+        const stripMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.7, roughness: 0.5 });
+        const strip = new THREE.Mesh(stripGeo, stripMat);
+        strip.position.copy(crate.position);
+        strip.position.y = 0.45;
+        strip.rotation.y = crate.rotation.y;
+        group.add(strip);
+    } else if (type === 2) {
+        // Tubería rota con vapor
+        const pipeGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.5, 8);
+        const pipeMat = new THREE.MeshStandardMaterial({
+            color: 0x555555, roughness: 0.4, metalness: 0.8
+        });
+        const pipe = new THREE.Mesh(pipeGeo, pipeMat);
+        const offset = (Math.random()-0.5) * 1.2;
+        pipe.position.set(px + offset, 1.25, pz + (Math.random()-0.5) * 0.5);
+        pipe.rotation.z = Math.PI / 2 + (Math.random()-0.5) * 0.15;
+        pipe.castShadow = true;
+        group.add(pipe);
+    } else {
+        // Cable colgante del techo
+        const cableCount = 2 + Math.floor(Math.random() * 3);
+        for (let c = 0; c < cableCount; c++) {
+            const cableGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.2 + Math.random() * 1.5, 4);
+            const cableMat = new THREE.MeshStandardMaterial({
+                color: Math.random() > 0.5 ? 0x222222 : 0x332211, roughness: 0.9
+            });
+            const cable = new THREE.Mesh(cableGeo, cableMat);
+            cable.position.set(
+                px + (Math.random()-0.5) * 1.5,
+                WALL_HEIGHT - (0.3 + Math.random() * 0.8),
+                pz + (Math.random()-0.5) * 1.5
+            );
+            cable.rotation.z = (Math.random()-0.5) * 0.3;
+            cable.rotation.x = (Math.random()-0.5) * 0.3;
+            group.add(cable);
+        }
+    }
+    
+    return group;
+}
+
+function createJungleDecoration(px, pz) {
+    const group = new THREE.Group();
+    const type = Math.floor(Math.random() * 4);
+    
+    if (type === 0) {
+        // Arbusto frondoso
+        const bushGeo = new THREE.SphereGeometry(0.5 + Math.random() * 0.3, 8, 6);
+        const bushMat = new THREE.MeshStandardMaterial({
+            color: 0x2a5a1e, roughness: 0.95, metalness: 0.0
+        });
+        const bush = new THREE.Mesh(bushGeo, bushMat);
+        bush.position.set(px + (Math.random()-0.5)*1.8, 0.35, pz + (Math.random()-0.5)*1.8);
+        bush.scale.y = 0.7;
+        bush.castShadow = true;
+        bush.receiveShadow = true;
+        group.add(bush);
+        
+        // Hojas más claras por encima
+        const topGeo = new THREE.SphereGeometry(0.3, 6, 6);
+        const topMat = new THREE.MeshStandardMaterial({ color: 0x44882e, roughness: 0.9 });
+        const top = new THREE.Mesh(topGeo, topMat);
+        top.position.copy(bush.position);
+        top.position.y += 0.3;
+        group.add(top);
+    } else if (type === 1) {
+        // Hongo bioluminiscente
+        const stemGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.35, 6);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.95 });
+        const stem = new THREE.Mesh(stemGeo, stemMat);
+        const ox = px + (Math.random()-0.5)*1.5;
+        const oz = pz + (Math.random()-0.5)*1.5;
+        stem.position.set(ox, 0.175, oz);
+        group.add(stem);
+        
+        const capGeo = new THREE.SphereGeometry(0.18, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+        const glowColor = Math.random() > 0.5 ? 0x22ff88 : 0x00ccff;
+        const capMat = new THREE.MeshStandardMaterial({
+            color: glowColor, emissive: glowColor, emissiveIntensity: 0.6,
+            roughness: 0.4, metalness: 0.1, transparent: true, opacity: 0.85
+        });
+        const cap = new THREE.Mesh(capGeo, capMat);
+        cap.position.set(ox, 0.35, oz);
+        group.add(cap);
+        
+        const mushroomLight = new THREE.PointLight(glowColor, 0.5, 3.0);
+        mushroomLight.position.set(ox, 0.35, oz);
+        group.add(mushroomLight);
+    } else if (type === 2) {
+        // Tronco caído
+        const logGeo = new THREE.CylinderGeometry(0.18, 0.22, 2.0 + Math.random(), 8);
+        const logMat = new THREE.MeshStandardMaterial({
+            color: 0x3a2a18, roughness: 0.95, metalness: 0.0
+        });
+        const log = new THREE.Mesh(logGeo, logMat);
+        log.position.set(px + (Math.random()-0.5), 0.2, pz + (Math.random()-0.5));
+        log.rotation.z = Math.PI / 2;
+        log.rotation.y = Math.random() * Math.PI;
+        log.castShadow = true;
+        log.receiveShadow = true;
+        group.add(log);
+    } else {
+        // Lianas colgantes del techo
+        const vineCount = 3 + Math.floor(Math.random() * 4);
+        for (let v = 0; v < vineCount; v++) {
+            const vineGeo = new THREE.CylinderGeometry(0.02, 0.015, 1.5 + Math.random() * 2.0, 4);
+            const vineMat = new THREE.MeshStandardMaterial({ color: 0x1a4a12, roughness: 0.95 });
+            const vine = new THREE.Mesh(vineGeo, vineMat);
+            vine.position.set(
+                px + (Math.random()-0.5) * 2.0,
+                WALL_HEIGHT - (0.5 + Math.random() * 1.0),
+                pz + (Math.random()-0.5) * 2.0
+            );
+            vine.rotation.z = (Math.random()-0.5) * 0.4;
+            vine.rotation.x = (Math.random()-0.5) * 0.4;
+            group.add(vine);
+        }
+    }
+    
+    return group;
+}
+
+function createMountainDecoration(px, pz) {
+    const group = new THREE.Group();
+    const type = Math.floor(Math.random() * 4);
+    
+    if (type === 0) {
+        // Roca grande
+        const rockGeo = new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.3, 1);
+        const rockMat = new THREE.MeshStandardMaterial({
+            color: 0x555560, roughness: 0.95, metalness: 0.1
+        });
+        const rock = new THREE.Mesh(rockGeo, rockMat);
+        rock.position.set(px + (Math.random()-0.5)*1.5, 0.25, pz + (Math.random()-0.5)*1.5);
+        rock.scale.y = 0.6;
+        rock.rotation.set(Math.random(), Math.random(), Math.random());
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+        group.add(rock);
+        
+        // Escarcha encima
+        const frostGeo = new THREE.SphereGeometry(0.3, 6, 6, 0, Math.PI * 2, 0, Math.PI / 3);
+        const frostMat = new THREE.MeshStandardMaterial({
+            color: 0xddeeff, roughness: 0.2, metalness: 0.1,
+            transparent: true, opacity: 0.6
+        });
+        const frost = new THREE.Mesh(frostGeo, frostMat);
+        frost.position.copy(rock.position);
+        frost.position.y += 0.35;
+        group.add(frost);
+    } else if (type === 1) {
+        // Cristal de hielo luminoso
+        const crystalGeo = new THREE.ConeGeometry(0.12, 0.6 + Math.random() * 0.4, 5);
+        const crystalMat = new THREE.MeshStandardMaterial({
+            color: 0x88ccff, emissive: 0x2255aa, emissiveIntensity: 0.4,
+            roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.7
+        });
+        const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+        const ox = px + (Math.random()-0.5)*1.5;
+        const oz = pz + (Math.random()-0.5)*1.5;
+        crystal.position.set(ox, 0.3 + Math.random() * 0.2, oz);
+        crystal.rotation.z = (Math.random()-0.5) * 0.3;
+        crystal.castShadow = true;
+        group.add(crystal);
+        
+        const crystalLight = new THREE.PointLight(0x5599ff, 0.4, 2.5);
+        crystalLight.position.copy(crystal.position);
+        group.add(crystalLight);
+    } else if (type === 2) {
+        // Estalactita colgando del techo
+        const stalGeo = new THREE.ConeGeometry(0.08 + Math.random()*0.06, 0.8 + Math.random() * 0.6, 6);
+        const stalMat = new THREE.MeshStandardMaterial({
+            color: 0x665555, roughness: 0.8, metalness: 0.15
+        });
+        const stalactite = new THREE.Mesh(stalGeo, stalMat);
+        stalactite.position.set(
+            px + (Math.random()-0.5)*1.5,
+            WALL_HEIGHT - (0.4 + Math.random() * 0.3),
+            pz + (Math.random()-0.5)*1.5
+        );
+        stalactite.rotation.x = Math.PI; // Invertido, colgando
+        stalactite.castShadow = true;
+        group.add(stalactite);
+    } else {
+        // Montículo de nieve
+        const snowGeo = new THREE.SphereGeometry(0.5 + Math.random() * 0.3, 8, 6);
+        const snowMat = new THREE.MeshStandardMaterial({
+            color: 0xe8eff5, roughness: 0.6, metalness: 0.0
+        });
+        const snow = new THREE.Mesh(snowGeo, snowMat);
+        snow.position.set(px + (Math.random()-0.5)*1.2, 0.15, pz + (Math.random()-0.5)*1.2);
+        snow.scale.y = 0.3;
+        snow.receiveShadow = true;
+        group.add(snow);
+    }
+    
+    return group;
+}
+
+// --- PARTÍCULAS AMBIENTALES ---
+function clearAmbientParticles() {
+    ambientParticles.forEach(p => {
+        scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        p.mesh.material.dispose();
+    });
+    ambientParticles = [];
+}
+
+function spawnAmbientParticles() {
+    const map = getMapForLevel(currentLevel);
+    const count = 80; // Cantidad de partículas flotantes
+    let color, emissive, size, opacity;
+    
+    if (currentLevel === 2) {
+        color = 0x44ff66;
+        emissive = 0x22aa33;
+        size = 0.04;
+        opacity = 0.5;
+    } else if (currentLevel === 3) {
+        color = 0xffffff;
+        emissive = 0x8888aa;
+        size = 0.035;
+        opacity = 0.7;
+    } else {
+        color = 0x888888;
+        emissive = 0x222222;
+        size = 0.025;
+        opacity = 0.35;
+    }
+    
+    for (let i = 0; i < count; i++) {
+        // Elegir posición aleatoria dentro de celdas vacías
+        let attempts = 0;
+        while (attempts < 15) {
+            attempts++;
+            const gz = Math.floor(Math.random() * map.length);
+            const gx = Math.floor(Math.random() * map[gz].length);
+            if (map[gz][gx] !== 0) continue;
+            
+            const px = gx * GRID_SIZE + (Math.random()-0.5) * GRID_SIZE * 0.8;
+            const pz = gz * GRID_SIZE + (Math.random()-0.5) * GRID_SIZE * 0.8;
+            const py = 0.5 + Math.random() * (WALL_HEIGHT - 1.0);
+            
+            const geo = new THREE.SphereGeometry(size + Math.random() * size, 4, 4);
+            const mat = new THREE.MeshBasicMaterial({
+                color: color, transparent: true, opacity: opacity * (0.5 + Math.random() * 0.5)
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(px, py, pz);
+            scene.add(mesh);
+            
+            ambientParticles.push({
+                mesh: mesh,
+                baseY: py,
+                baseX: px,
+                baseZ: pz,
+                speed: 0.3 + Math.random() * 0.5,
+                phase: Math.random() * Math.PI * 2,
+                amplitude: 0.1 + Math.random() * 0.25,
+                driftX: (Math.random()-0.5) * 0.3,
+                driftZ: (Math.random()-0.5) * 0.3
+            });
+            break;
+        }
+    }
+}
+
+
 // --- CONSOLA GENERADORA FINAL (CAJA DE FUSIBLES) ---
 function buildFuseBox3D(posX, posZ) {
     const group = new THREE.Group();
@@ -335,6 +887,30 @@ function buildFuseBox3D(posX, posZ) {
     const ledLight = new THREE.PointLight(0xff0000, 0.6, 2.5);
     ledLight.position.set(0, 1.0, 0.35);
     group.add(ledLight);
+
+    // Cableado auxiliar para nivel 2+
+    let wiringLed = null;
+    let wiringLedLight = null;
+    if (currentLevel >= 2) {
+        const sidePanelGeo = new THREE.BoxGeometry(0.35, 0.7, 0.45);
+        const sidePanelMat = new THREE.MeshStandardMaterial({ color: 0x33353b, roughness: 0.8, metalness: 0.3 });
+        const sidePanel = new THREE.Mesh(sidePanelGeo, sidePanelMat);
+        sidePanel.position.set(0.55, 0.8, 0); // en el lado derecho
+        sidePanel.castShadow = true;
+        sidePanel.receiveShadow = true;
+        group.add(sidePanel);
+        
+        // LED de estado del cableado
+        const wLedGeo = new THREE.SphereGeometry(0.04, 8, 8);
+        const wLedMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+        wiringLed = new THREE.Mesh(wLedGeo, wLedMat);
+        wiringLed.position.set(0.55, 1.05, 0.18);
+        group.add(wiringLed);
+        
+        wiringLedLight = new THREE.PointLight(0xffaa00, 0.8, 2.0);
+        wiringLedLight.position.set(0.55, 1.05, 0.22);
+        group.add(wiringLedLight);
+    }
     
     scene.add(group);
     
@@ -342,6 +918,8 @@ function buildFuseBox3D(posX, posZ) {
         group: group,
         led: led,
         ledLight: ledLight,
+        wiringLed: wiringLed,
+        wiringLedLight: wiringLedLight,
         activated: false,
         minX: group.position.x - 0.4,
         maxX: group.position.x + 0.4,
@@ -377,11 +955,11 @@ function spawnFuses() {
     
     while (spawned < 3 && attempts < 150) {
         attempts++;
-        const z = Math.floor(Math.random() * MAP.length);
-        const x = Math.floor(Math.random() * MAP[z].length);
+        const z = Math.floor(Math.random() * activeMap.length);
+        const x = Math.floor(Math.random() * activeMap[z].length);
         
         // Debe ser vacío, no muy pegado a la consola de salida y no pegado al spawn
-        if (MAP[z][x] === 0) {
+        if (activeMap[z][x] === 0) {
             if ((x < 3 && z < 3) || (x > 12 && z > 12)) continue;
             
             // Comprobar colisión con fusibles ya posicionados
@@ -669,6 +1247,26 @@ class Zombie {
         this.head.castShadow = true;
         this.group.add(this.head);
         
+        // Ojos emisivos brillantes (visibles en la oscuridad)
+        const eyeColor = this.type === 'SPITTER' ? 0x39ff14 : (this.type === 'RUNNER' ? 0xffaa00 : 0xff2200);
+        const eyeGeo = new THREE.SphereGeometry(0.04, 6, 6);
+        const eyeMat = new THREE.MeshBasicMaterial({
+            color: eyeColor, transparent: true, opacity: 0.95
+        });
+        
+        this.leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+        this.leftEye.position.set(-0.1, 1.32, 0.25);
+        this.group.add(this.leftEye);
+        
+        this.rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
+        this.rightEye.position.set(0.1, 1.32, 0.25);
+        this.group.add(this.rightEye);
+        
+        // Luz puntual tenue desde los ojos para glow
+        this.eyeLight = new THREE.PointLight(eyeColor, 0.4, 3.0);
+        this.eyeLight.position.set(0, 1.32, 0.28);
+        this.group.add(this.eyeLight);
+        
         // Brazos estirados al frente hostilmente
         const armGeo = new THREE.BoxGeometry(0.18, 0.18, 0.65);
         const armMat = new THREE.MeshStandardMaterial({ color: this.colorSkin });
@@ -897,10 +1495,10 @@ function spawnZombies() {
     
     while (spawned < zombiesToSpawn && attempts < 200) {
         attempts++;
-        const z = Math.floor(Math.random() * MAP.length);
-        const x = Math.floor(Math.random() * MAP[z].length);
+        const z = Math.floor(Math.random() * activeMap.length);
+        const x = Math.floor(Math.random() * activeMap[z].length);
         
-        if (MAP[z][x] === 0) {
+        if (activeMap[z][x] === 0) {
             if (x < 3 && z < 3) continue;
             
             const px = x * GRID_SIZE;
@@ -993,9 +1591,9 @@ function checkCollisions(newX, newZ) {
             const gx = currentGridX + dx;
             const gz = currentGridZ + dz;
             
-            if (gx < 0 || gx >= MAP[0].length || gz < 0 || gz >= MAP.length) continue;
+            if (gx < 0 || gx >= activeMap[0].length || gz < 0 || gz >= activeMap.length) continue;
             
-            const type = MAP[gz][gx];
+            const type = activeMap[gz][gx];
             if (type === 1 || type === 2 || type === 3) {
                 // Si es compuerta normal interactiva
                 if (type === 3) {
@@ -1061,9 +1659,9 @@ function checkZombieWallCollisions(zX, zZ) {
             const gx = currentGridX + dx;
             const gz = currentGridZ + dz;
             
-            if (gx < 0 || gx >= MAP[0].length || gz < 0 || gz >= MAP.length) continue;
+            if (gx < 0 || gx >= activeMap[0].length || gz < 0 || gz >= activeMap.length) continue;
             
-            const type = MAP[gz][gx];
+            const type = activeMap[gz][gx];
             if (type === 1 || type === 2 || type === 3) {
                 if (type === 3) {
                     const door = interactiveDoors.find(d => d.gridX === gx && d.gridZ === gz);
@@ -1198,6 +1796,15 @@ function tryOpenDoor() {
     })();
 
     if ((isCloseToConsole || isCloseToExitDoor) && fuseBoxConsole && !fuseBoxConsole.activated) {
+        if (currentLevel >= 2 && !wiringFixed) {
+            if (isCloseToConsole) {
+                openWiringMinigame();
+            } else {
+                showFeedback("ERROR: CABLEADO AUXILIAR DAÑADO. REPARA EL PANEL CON 'E'");
+            }
+            return;
+        }
+        
         if (fusesCollected >= 3) {
             // Activar generador!
             fuseBoxConsole.activated = true;
@@ -1407,7 +2014,7 @@ function reload() {
 }
 
 // --- FLUJO DE ESTADOS DE JUEGO ---
-function startGame() {
+async function startGame() {
     AudioSynth.init();
     
     // Restablecer variables de progresión y tienda
@@ -1415,8 +2022,25 @@ function startGame() {
     supplyPoints = 0;
     unlockedWeapons.glock = false;
     unlockedWeapons.m4 = false;
+    wiringFixed = false;
     
     document.getElementById('level-display').innerText = `SECTOR C-14   |   NIVEL ${currentLevel}`;
+
+    // Reconstruir el mapa para el Nivel 1
+    clearCurrentMap();
+    updateLevelEnvironment();
+    buildMap3D();
+    await addBloodWallMessages(scene, currentLevel);
+
+    // Restablecer textos de victoria original en el overlay
+    const titleEl = victoryOverlay.querySelector('.victory-title');
+    const subtitleEl = victoryOverlay.querySelector('.subtitle');
+    const msgEl = victoryOverlay.querySelector('.victory-message');
+    const btnEl = victoryOverlay.querySelector('.victory-btn');
+    if (titleEl) titleEl.innerText = "MISIÓN COMPLETADA";
+    if (subtitleEl) subtitleEl.innerText = "SECTOR PURGADO COMPLETAMENTE";
+    if (msgEl) msgEl.innerText = "Has restaurado la energía y escapado con vida de la instalación. Excelente trabajo, soldado.";
+    if (btnEl) btnEl.innerText = "REINICIAR OPERACIÓN";
     
     // Restablecer inventarios de armas
     WEAPONS.shotgun.clip = WEAPONS.shotgun.clipMax;
@@ -1440,7 +2064,7 @@ function startGame() {
     
     document.getElementById('weapon-name').innerText = WEAPONS.shotgun.name;
     
-    player.position.set(GRID_SIZE * 1.5, 1.8, GRID_SIZE * 1.5);
+    player.position.set(GRID_SIZE * 1.0, 1.8, GRID_SIZE * 1.0);
     player.yaw = 0;
     player.pitch = 0;
     player.isReloading = false;
@@ -1513,22 +2137,37 @@ function triggerGameOver() {
 }
 
 function triggerVictory() {
-    // Al escapar, ir al Refugio/Upgrade Shop en vez de ganar de golpe
-    gameState = 'SHOP';
     isMouseDown = false;
     document.exitPointerLock();
-    
-    // Ganar +1 punto de suministro
-    supplyPoints += 1;
-    document.getElementById('supply-points').innerText = supplyPoints;
-    
-    updateShopButtons();
-    
-    // Mostrar overlay del refugio
-    document.getElementById('upgrade-overlay').classList.add('active');
-    
     AudioSynth.stopHorrorMusic();
-    AudioSynth.playWinTune();
+    
+    if (currentLevel === 3) {
+        // Capítulo 1 Completado!
+        gameState = 'VICTORY';
+        victoryOverlay.classList.add('active');
+        
+        const titleEl = victoryOverlay.querySelector('.victory-title');
+        const subtitleEl = victoryOverlay.querySelector('.subtitle');
+        const msgEl = victoryOverlay.querySelector('.victory-message');
+        const btnEl = victoryOverlay.querySelector('.victory-btn');
+        
+        if (titleEl) titleEl.innerText = "CAPÍTULO 1 COMPLETADO";
+        if (subtitleEl) subtitleEl.innerText = "SOBREVIVISTE A LA MONTAÑA HELADA";
+        if (msgEl) {
+            msgEl.innerHTML = "Has escapado de la instalación biológica, cruzado la selva hostil y sobrevivido al frío extremo de la montaña.<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...";
+        }
+        if (btnEl) btnEl.innerText = "VOLVER A JUGAR";
+        
+        AudioSynth.playWinTune();
+    } else {
+        // Ir a la tienda / refugio
+        gameState = 'SHOP';
+        supplyPoints += 1;
+        document.getElementById('supply-points').innerText = supplyPoints;
+        updateShopButtons();
+        document.getElementById('upgrade-overlay').classList.add('active');
+        AudioSynth.playWinTune();
+    }
 }
 
 // --- MECÁNICAS DE TIENDA Y CAMBIO DE ARMAS ---
@@ -1622,9 +2261,18 @@ function buyRations() {
     }
 }
 
-function startNextLevel() {
+async function startNextLevel() {
     currentLevel++;
     document.getElementById('level-display').innerText = `SECTOR C-14   |   NIVEL ${currentLevel}`;
+
+    // Reconstruir el mapa para el nuevo nivel
+    clearCurrentMap();
+    updateLevelEnvironment();
+    buildMap3D();
+    await addBloodWallMessages(scene, currentLevel);
+    
+    // Restablecer variables del minijuego de cableado
+    wiringFixed = false;
     
     // Restaurar salud y armadura al 100% en el nuevo nivel
     player.health = MAX_HEALTH;
@@ -1658,7 +2306,7 @@ function startNextLevel() {
         door.isOpen = false;
     });
 
-    player.position.set(GRID_SIZE * 1.5, 1.8, GRID_SIZE * 1.5);
+    player.position.set(GRID_SIZE * 1.0, 1.8, GRID_SIZE * 1.0);
     camera.position.copy(player.position);
     
     // Limpiar partículas y proyectiles
@@ -1694,6 +2342,250 @@ function startNextLevel() {
     showFeedback(`INICIANDO NIVEL ${currentLevel}. RECUPERA LOS FUSIBLES`);
 }
 
+// --- MINIJUEGO DE CABLEADO (CANVAS DRAG & DROP) ---
+function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
+    }
+}
+
+function openWiringMinigame() {
+    gameState = 'WIRING';
+    document.exitPointerLock();
+    
+    const overlay = document.getElementById('wiring-overlay');
+    if (overlay) overlay.classList.add('active');
+    
+    const symbols = ['O', 'Δ', '☆', 'X'];
+    const colors = ['#ff3333', '#ffff33', '#3333ff', '#33ff33'];
+    
+    const itemsLeft = [
+        { symbol: 'O', color: '#ff3333' },
+        { symbol: 'Δ', color: '#ffff33' },
+        { symbol: '☆', color: '#3333ff' },
+        { symbol: 'X', color: '#33ff33' }
+    ];
+    const itemsRight = [...itemsLeft];
+    
+    shuffleArray(itemsLeft);
+    shuffleArray(itemsRight);
+    
+    leftSockets = itemsLeft.map((item, idx) => ({
+        id: idx,
+        x: 60,
+        y: 80 + idx * 80,
+        symbol: item.symbol,
+        color: item.color,
+        connectedTo: null
+    }));
+    
+    rightSockets = itemsRight.map((item, idx) => ({
+        id: idx,
+        x: 440,
+        y: 80 + idx * 80,
+        symbol: item.symbol,
+        color: item.color
+    }));
+    
+    draggingWireIdx = -1;
+    drawWiring();
+}
+
+function closeWiringMinigame() {
+    const overlay = document.getElementById('wiring-overlay');
+    if (overlay) overlay.classList.remove('active');
+    
+    gameState = 'PLAYING';
+    document.body.requestPointerLock();
+}
+
+function drawWiring() {
+    const canvas = document.getElementById('wiring-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.fillStyle = '#121216';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Cuadrícula retro
+    ctx.strokeStyle = '#1b1b22';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+    }
+    
+    // Dibujar cables conectados
+    leftSockets.forEach(left => {
+        if (left.connectedTo !== null) {
+            const right = rightSockets[left.connectedTo];
+            ctx.strokeStyle = left.color;
+            ctx.lineWidth = 5;
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = left.color;
+            ctx.beginPath();
+            ctx.moveTo(left.x, left.y);
+            ctx.bezierCurveTo(left.x + 150, left.y, right.x - 150, right.y, right.x, right.y);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+    });
+    
+    // Dibujar cable siendo arrastrado
+    if (draggingWireIdx !== -1) {
+        const left = leftSockets[draggingWireIdx];
+        ctx.strokeStyle = left.color;
+        ctx.lineWidth = 5;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = left.color;
+        ctx.beginPath();
+        ctx.moveTo(left.x, left.y);
+        ctx.bezierCurveTo(left.x + 150, left.y, mousePos.x - 100, mousePos.y, mousePos.x, mousePos.y);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+    
+    // Dibujar sockets izquierdos
+    leftSockets.forEach(socket => {
+        ctx.fillStyle = '#1e1e24';
+        ctx.strokeStyle = socket.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(socket.x, socket.y, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 16px "Share Tech Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(socket.symbol, socket.x - 28, socket.y);
+        
+        ctx.fillStyle = socket.color;
+        ctx.beginPath();
+        ctx.arc(socket.x, socket.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    // Dibujar sockets derechos
+    rightSockets.forEach(socket => {
+        ctx.fillStyle = '#1e1e24';
+        ctx.strokeStyle = socket.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(socket.x, socket.y, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 16px "Share Tech Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(socket.symbol, socket.x + 28, socket.y);
+        
+        ctx.fillStyle = socket.color;
+        ctx.beginPath();
+        ctx.arc(socket.x, socket.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+    });
+}
+
+function checkWiringVictory() {
+    const allConnected = leftSockets.every(s => s.connectedTo !== null);
+    if (allConnected) {
+        wiringFixed = true;
+        showFeedback("CABLEADO AUXILIAR RESTAURADO");
+        AudioSynth.playPowerRestored();
+        
+        if (fuseBoxConsole && fuseBoxConsole.wiringLed) {
+            fuseBoxConsole.wiringLed.material.color.setHex(0x00ff41);
+            fuseBoxConsole.wiringLedLight.color.setHex(0x00ff41);
+            fuseBoxConsole.wiringLedLight.intensity = 0.8;
+        }
+        
+        setTimeout(() => {
+            closeWiringMinigame();
+        }, 1000);
+    }
+}
+
+function setupWiringCanvasEvents() {
+    const canvas = document.getElementById('wiring-canvas');
+    if (!canvas) return;
+    
+    canvas.addEventListener('mousedown', (e) => {
+        if (gameState !== 'WIRING') return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        
+        for (let i = 0; i < leftSockets.length; i++) {
+            const socket = leftSockets[i];
+            const dist = Math.sqrt((mx - socket.x)**2 + (my - socket.y)**2);
+            if (dist < 25) {
+                draggingWireIdx = i;
+                mousePos.x = mx;
+                mousePos.y = my;
+                socket.connectedTo = null;
+                AudioSynth.playMetallicClick(800, 0.05, 0.1);
+                drawWiring();
+                break;
+            }
+        }
+    });
+    
+    canvas.addEventListener('mousemove', (e) => {
+        if (gameState !== 'WIRING' || draggingWireIdx === -1) return;
+        const rect = canvas.getBoundingClientRect();
+        mousePos.x = e.clientX - rect.left;
+        mousePos.y = e.clientY - rect.top;
+        drawWiring();
+    });
+    
+    canvas.addEventListener('mouseup', (e) => {
+        if (gameState !== 'WIRING' || draggingWireIdx === -1) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        
+        let connected = false;
+        for (let i = 0; i < rightSockets.length; i++) {
+            const socket = rightSockets[i];
+            const dist = Math.sqrt((mx - socket.x)**2 + (my - socket.y)**2);
+            if (dist < 25) {
+                if (socket.symbol === leftSockets[draggingWireIdx].symbol) {
+                    leftSockets[draggingWireIdx].connectedTo = i;
+                    AudioSynth.playMetallicClick(1200, 0.1, 0.15);
+                    connected = true;
+                    checkWiringVictory();
+                } else {
+                    AudioSynth.playMetallicClick(300, 0.15, 0.2);
+                    showFeedback("ERROR: SÍMBOLOS INCOMPATIBLES");
+                }
+                break;
+            }
+        }
+        
+        if (!connected) {
+            AudioSynth.playMetallicClick(400, 0.05, 0.1);
+        }
+        
+        draggingWireIdx = -1;
+        drawWiring();
+    });
+}
+
 // --- BINDING DE CONTROLES ---
 function setupControls() {
     startBtn.addEventListener('click', startGame);
@@ -1705,10 +2597,14 @@ function setupControls() {
     document.getElementById('buy-m4-btn').addEventListener('click', buyM4);
     document.getElementById('buy-rations-btn').addEventListener('click', buyRations);
     document.getElementById('next-level-btn').addEventListener('click', startNextLevel);
+
+    // Eventos del minijuego de cableado
+    document.getElementById('abort-wiring-btn').addEventListener('click', closeWiringMinigame);
+    setupWiringCanvasEvents();
     
     document.addEventListener('pointerlockchange', () => {
         if (document.pointerLockElement === document.body) {
-            if (gameState === 'MENU' || gameState === 'GAMEOVER' || gameState === 'VICTORY' || gameState === 'SHOP') {
+            if (gameState === 'MENU' || gameState === 'GAMEOVER' || gameState === 'VICTORY' || gameState === 'SHOP' || gameState === 'WIRING') {
                 document.exitPointerLock();
             }
         } else {
@@ -1894,6 +2790,19 @@ function animate() {
                 item.lamp.material.color.setHex(item.isRed ? 0xcc0000 : 0xe59400);
             }
         });
+
+        // Actualizar luces de cableado auxiliar en consola
+        if (currentLevel >= 2 && fuseBoxConsole && fuseBoxConsole.wiringLed) {
+            if (!wiringFixed) {
+                const flash = Math.sin(clock.getElapsedTime() * 8) > 0;
+                fuseBoxConsole.wiringLed.material.color.setHex(flash ? 0xffaa00 : 0x221100);
+                fuseBoxConsole.wiringLedLight.intensity = flash ? 0.8 : 0.0;
+            } else {
+                fuseBoxConsole.wiringLed.material.color.setHex(0x00ff41);
+                fuseBoxConsole.wiringLedLight.color.setHex(0x00ff41);
+                fuseBoxConsole.wiringLedLight.intensity = 0.8;
+            }
+        }
         
         // Movimiento del jugador
         updatePlayerMovement(deltaTime);
@@ -1979,8 +2888,8 @@ function animate() {
             const gridZ = Math.floor((proj.mesh.position.z + GRID_SIZE/2) / GRID_SIZE);
             let hitWall = false;
             
-            if (gridX >= 0 && gridX < MAP[0].length && gridZ >= 0 && gridZ < MAP.length) {
-                const type = MAP[gridZ][gridX];
+            if (gridX >= 0 && gridX < activeMap[0].length && gridZ >= 0 && gridZ < activeMap.length) {
+                const type = activeMap[gridZ][gridX];
                 if (type === 1 || type === 2 || type === 3) {
                     const boxMinX = gridX * GRID_SIZE - GRID_SIZE/2;
                     const boxMaxX = gridX * GRID_SIZE + GRID_SIZE/2;
@@ -2010,6 +2919,17 @@ function animate() {
                 continue;
             }
         }
+        
+        // Actualizar partículas ambientales flotantes
+        const elapsedTime = clock.getElapsedTime();
+        ambientParticles.forEach(p => {
+            p.mesh.position.y = p.baseY + Math.sin(elapsedTime * p.speed + p.phase) * p.amplitude;
+            p.mesh.position.x = p.baseX + Math.sin(elapsedTime * p.speed * 0.7 + p.phase * 1.3) * p.driftX;
+            p.mesh.position.z = p.baseZ + Math.cos(elapsedTime * p.speed * 0.5 + p.phase * 0.8) * p.driftZ;
+            // Pulsación de opacidad sutil
+            p.mesh.material.opacity = p.mesh.material.opacity * 0.99 + 
+                (0.15 + 0.2 * Math.abs(Math.sin(elapsedTime * p.speed * 0.3 + p.phase))) * 0.01;
+        });
         
         // Efecto bobbing de caminar
         const walkSpeed = player.velocity.length();
