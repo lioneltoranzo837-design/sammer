@@ -53,7 +53,9 @@ try {
             elseif ($ext -eq ".png") { $mime = "image/png" }
             elseif ($ext -eq ".jpg" -or $ext -eq ".jpeg") { $mime = "image/jpeg" }
             elseif ($ext -eq ".ico") { $mime = "image/x-icon" }
+            elseif ($ext -eq ".glb") { $mime = "model/gltf-binary" }
             
+            $response.Headers.Add("Access-Control-Allow-Origin", "*")
             $response.ContentType = $mime
             $response.ContentLength64 = $bytes.Length
             $response.OutputStream.Write($bytes, 0, $bytes.Length)

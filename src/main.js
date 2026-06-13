@@ -90,6 +90,11 @@ let shotgunMeshGroup, glockMeshGroup, m4MeshGroup;
 let wallMaterialStandard, wallMaterialHazard, wallMaterialBlood, doorMaterial;
 let floorMaterial, ceilingMaterial;
 let zombieFaceTexture;
+let cachedZombieModel = null;
+let cachedMummyWalkClip = null;
+let cachedMummyRunClip = null;
+let zombieGLBScaleFactor = 1.0;
+let zombieGLBBaseYOffset = 0.0;
 
 // Arma y disparo
 let gunGroup;
@@ -161,6 +166,60 @@ async function initEngine() {
     ceilingMaterial = new THREE.MeshStandardMaterial({ map: generateCeilingTexture(), roughness: 0.8, metalness: 0.2 });
     
     zombieFaceTexture = generateZombieFaceTexture();
+    
+    // Carga del modelo de zombie GLB (Caballero Momia) en segundo plano con sus animaciones
+    try {
+        console.log("Iniciando carga de Caballero Momia GLB con animaciones en segundo plano...");
+        const gltfLoader = new THREE.GLTFLoader();
+        
+        // 1. Cargar modelo base con animación de caminata
+        gltfLoader.load(
+            'assets/animation_temp/Meshy_AI_Sandsworn_Mummy_Knigh_biped/Meshy_AI_Sandsworn_Mummy_Knigh_biped_Animation_Walking_withSkin.glb',
+            (gltfWalk) => {
+                cachedZombieModel = gltfWalk.scene;
+                if (gltfWalk.animations && gltfWalk.animations.length > 0) {
+                    cachedMummyWalkClip = gltfWalk.animations[0];
+                }
+                
+                // Pre-calcular la escala y el offset de Y para optimizar instanciación
+                cachedZombieModel.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(cachedZombieModel);
+                const size = box.getSize(new THREE.Vector3());
+                const height = size.y || 1.8;
+                zombieGLBScaleFactor = 1.8 / height;
+                
+                // Aplicar escala al modelo base
+                cachedZombieModel.scale.set(zombieGLBScaleFactor, zombieGLBScaleFactor, zombieGLBScaleFactor);
+                cachedZombieModel.updateMatrixWorld(true);
+                
+                // Calcular el offset
+                const boxScaled = new THREE.Box3().setFromObject(cachedZombieModel);
+                zombieGLBBaseYOffset = -boxScaled.min.y;
+                console.log(`Modelo de Caballero Momia cargado y pre-escalado. Altura original: ${height}, Factor de escala: ${zombieGLBScaleFactor}, Offset Y: ${zombieGLBBaseYOffset}`);
+                
+                // 2. Cargar animación de correr para extraer el clip de carrera
+                gltfLoader.load(
+                    'assets/animation_temp/Meshy_AI_Sandsworn_Mummy_Knigh_biped/Meshy_AI_Sandsworn_Mummy_Knigh_biped_Animation_Running_withSkin.glb',
+                    (gltfRun) => {
+                        if (gltfRun.animations && gltfRun.animations.length > 0) {
+                            cachedMummyRunClip = gltfRun.animations[0];
+                            console.log("Animación de carrera cargada con éxito.");
+                        }
+                    },
+                    undefined,
+                    (err) => {
+                        console.error("Error al cargar la animación de carrera de la momia:", err);
+                    }
+                );
+            },
+            undefined,
+            (err) => {
+                console.error("Error al cargar la momia GLB (caminata), se usará el modelo procedimental de respaldo:", err);
+            }
+        );
+    } catch (err) {
+        console.error("Error al inicializar el cargador GLTF:", err);
+    }
     
     // Construir el mapa
     buildMap3D();
@@ -1038,9 +1097,9 @@ function buildWeapon3D() {
     // 1. SHOTGUN MESH GROUP
     shotgunMeshGroup = new THREE.Group();
     
-    // Barrilete izquierdo (Cilindro metálico)
-    const barrelGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.45, 12);
-    const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1c1e22, roughness: 0.3, metalness: 0.95 });
+    // Barrilete izquierdo (Cilindro metálico detallado)
+    const barrelGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.5, 16);
+    const barrelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.95 });
     const leftBarrel = new THREE.Mesh(barrelGeo, barrelMat);
     leftBarrel.rotation.x = Math.PI / 2;
     leftBarrel.position.set(-0.015, 0, -0.22);
@@ -1054,126 +1113,189 @@ function buildWeapon3D() {
     rightBarrel.castShadow = true;
     shotgunMeshGroup.add(rightBarrel);
     
-    // Culata y soporte del cañón (Madera marrón)
+    // Costilla ventilada (Vented rib) entre cañones
+    const ribGeo = new THREE.BoxGeometry(0.015, 0.008, 0.45);
+    const ribMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.8 });
+    const rib = new THREE.Mesh(ribGeo, ribMat);
+    rib.position.set(0, 0.012, -0.22);
+    shotgunMeshGroup.add(rib);
+
+    // Culata y soporte del cañón (Madera barnizada o polímero táctico)
     const stockGeo = new THREE.BoxGeometry(0.05, 0.05, 0.22);
-    const stockMat = new THREE.MeshStandardMaterial({ color: 0x422312, roughness: 0.85, metalness: 0.05 });
+    const stockMat = new THREE.MeshStandardMaterial({ color: 0x241108, roughness: 0.8, metalness: 0.1 });
     const stock = new THREE.Mesh(stockGeo, stockMat);
     stock.position.set(0, -0.035, 0.02);
     shotgunMeshGroup.add(stock);
     
-    // Empuñadura de recarga metálica inferior
+    // Empuñadura de recarga metálica inferior (Pump) texturizada
     const pumpGeo = new THREE.BoxGeometry(0.045, 0.035, 0.16);
-    const pumpMat = new THREE.MeshStandardMaterial({ color: 0x24140a, roughness: 0.9 });
+    const pumpMat = new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.9, bumpScale: 0.02 });
     const pump = new THREE.Mesh(pumpGeo, pumpMat);
     pump.position.set(0, -0.025, -0.16);
     shotgunMeshGroup.add(pump);
     
+    // Tubo de munición inferior
+    const magTubeGeo = new THREE.CylinderGeometry(0.01, 0.01, 0.35, 12);
+    const magTube = new THREE.Mesh(magTubeGeo, barrelMat);
+    magTube.rotation.x = Math.PI / 2;
+    magTube.position.set(0, -0.015, -0.22);
+    shotgunMeshGroup.add(magTube);
+
     gunGroup.add(shotgunMeshGroup);
     
-    // 2. GLOCK MESH GROUP
+    // 2. GLOCK MESH GROUP (Táctica con láser)
     glockMeshGroup = new THREE.Group();
     glockMeshGroup.visible = false; // Oculta inicialmente
     
-    const glockMat = new THREE.MeshStandardMaterial({ color: 0x151618, roughness: 0.6, metalness: 0.8 });
+    const glockSlideMat = new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.4, metalness: 0.85 });
+    const glockPolyMat = new THREE.MeshStandardMaterial({ color: 0x0f1011, roughness: 0.85, metalness: 0.2 });
     
-    // Empuñadura
-    const glockGripGeo = new THREE.BoxGeometry(0.025, 0.09, 0.035);
-    const glockGrip = new THREE.Mesh(glockGripGeo, glockMat);
+    // Empuñadura ergonómica
+    const glockGripGeo = new THREE.BoxGeometry(0.026, 0.09, 0.038);
+    const glockGrip = new THREE.Mesh(glockGripGeo, glockPolyMat);
     glockGrip.position.set(0, -0.05, -0.02);
-    glockGrip.rotation.x = -Math.PI / 10;
+    glockGrip.rotation.x = -Math.PI / 9;
     glockMeshGroup.add(glockGrip);
     
-    // Corredera
-    const glockSlideGeo = new THREE.BoxGeometry(0.028, 0.032, 0.16);
-    const glockSlide = new THREE.Mesh(glockSlideGeo, glockMat);
+    // Corredera detallada
+    const glockSlideGeo = new THREE.BoxGeometry(0.029, 0.032, 0.165);
+    const glockSlide = new THREE.Mesh(glockSlideGeo, glockSlideMat);
     glockSlide.position.set(0, 0, -0.08);
     glockMeshGroup.add(glockSlide);
     
-    // Punta del cañón
-    const glockTipGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.02, 8);
-    const glockTipMat = new THREE.MeshStandardMaterial({ color: 0x222, metalness: 0.9 });
+    // Punta del cañón (más oscuro)
+    const glockTipGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.02, 12);
+    const glockTipMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.95 });
     const glockTip = new THREE.Mesh(glockTipGeo, glockTipMat);
     glockTip.rotation.x = Math.PI / 2;
     glockTip.position.set(0, 0.004, -0.17);
     glockMeshGroup.add(glockTip);
     
-    // Guardamonte
-    const guardGeo = new THREE.BoxGeometry(0.012, 0.02, 0.03);
-    const guard = new THREE.Mesh(guardGeo, glockMat);
-    guard.position.set(0, -0.03, -0.04);
+    // Miras de hierro (Iron Sights) con puntos brillantes
+    const sightBackGeo = new THREE.BoxGeometry(0.015, 0.005, 0.008);
+    const sightBack = new THREE.Mesh(sightBackGeo, glockSlideMat);
+    sightBack.position.set(0, 0.018, -0.01);
+    glockMeshGroup.add(sightBack);
+    
+    const sightFrontGeo = new THREE.BoxGeometry(0.004, 0.005, 0.008);
+    const sightFront = new THREE.Mesh(sightFrontGeo, glockSlideMat);
+    sightFront.position.set(0, 0.018, -0.155);
+    glockMeshGroup.add(sightFront);
+    
+    const sightDotMat = new THREE.MeshBasicMaterial({ color: 0x39ff14 });
+    const sightDot = new THREE.Mesh(new THREE.SphereGeometry(0.0015, 4, 4), sightDotMat);
+    sightDot.position.set(0, 0.018, -0.16);
+    glockMeshGroup.add(sightDot);
+
+    // Guardamonte y gatillo
+    const guardGeo = new THREE.BoxGeometry(0.012, 0.025, 0.035);
+    const guard = new THREE.Mesh(guardGeo, glockPolyMat);
+    guard.position.set(0, -0.035, -0.05);
     glockMeshGroup.add(guard);
+    
+    // Módulo Láser bajo el cañón
+    const laserModuleGeo = new THREE.BoxGeometry(0.02, 0.02, 0.04);
+    const laserModule = new THREE.Mesh(laserModuleGeo, glockPolyMat);
+    laserModule.position.set(0, -0.025, -0.13);
+    glockMeshGroup.add(laserModule);
+    
+    const laserDotMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const laserLens = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.002, 8), laserDotMat);
+    laserLens.rotation.x = Math.PI / 2;
+    laserLens.position.set(0, -0.025, -0.151);
+    glockMeshGroup.add(laserLens);
     
     gunGroup.add(glockMeshGroup);
     
-    // 3. M4 CARBINE MESH GROUP
+    // 3. M4 CARBINE MESH GROUP (Totalmente Táctica)
     m4MeshGroup = new THREE.Group();
     m4MeshGroup.visible = false; // Oculta inicialmente
     
-    const m4MetalMat = new THREE.MeshStandardMaterial({ color: 0x2c2d30, roughness: 0.45, metalness: 0.85 });
-    const m4PlasticMat = new THREE.MeshStandardMaterial({ color: 0x111112, roughness: 0.9, metalness: 0.1 });
+    const m4MetalMat = new THREE.MeshStandardMaterial({ color: 0x222325, roughness: 0.35, metalness: 0.9 });
+    const m4PlasticMat = new THREE.MeshStandardMaterial({ color: 0x151617, roughness: 0.85, metalness: 0.15 });
     
-    // Recibidor
-    const m4RecGeo = new THREE.BoxGeometry(0.03, 0.055, 0.22);
+    // Recibidor superior e inferior detallado
+    const m4RecGeo = new THREE.BoxGeometry(0.032, 0.058, 0.22);
     const m4Receiver = new THREE.Mesh(m4RecGeo, m4MetalMat);
     m4Receiver.position.set(0, -0.01, -0.1);
     m4MeshGroup.add(m4Receiver);
     
-    // Guardamanos (Rieles)
-    const m4GuardGeo = new THREE.BoxGeometry(0.038, 0.038, 0.20);
-    const m4Guard = new THREE.Mesh(m4GuardGeo, m4PlasticMat);
-    m4Guard.position.set(0, -0.01, -0.31);
+    // Guardamanos picatinny (Rieles tácticos)
+    const m4GuardGeo = new THREE.BoxGeometry(0.042, 0.042, 0.22);
+    const m4Guard = new THREE.Mesh(m4GuardGeo, m4MetalMat);
+    m4Guard.position.set(0, -0.01, -0.32);
     m4MeshGroup.add(m4Guard);
     
-    // Cañón
-    const m4BarrelGeo = new THREE.CylinderGeometry(0.009, 0.009, 0.24, 8);
+    // Cañón externo
+    const m4BarrelGeo = new THREE.CylinderGeometry(0.009, 0.009, 0.28, 12);
     const m4Barrel = new THREE.Mesh(m4BarrelGeo, m4MetalMat);
     m4Barrel.rotation.x = Math.PI / 2;
-    m4Barrel.position.set(0, -0.01, -0.48);
+    m4Barrel.position.set(0, -0.01, -0.5);
     m4MeshGroup.add(m4Barrel);
     
-    // Bocacha apagallamas
-    const m4TipGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.04, 8);
+    // Bocacha apagallamas estilo birdcage
+    const m4TipGeo = new THREE.CylinderGeometry(0.013, 0.013, 0.045, 12);
     const m4Tip = new THREE.Mesh(m4TipGeo, m4MetalMat);
     m4Tip.rotation.x = Math.PI / 2;
-    m4Tip.position.set(0, -0.01, -0.56);
+    m4Tip.position.set(0, -0.01, -0.6);
     m4MeshGroup.add(m4Tip);
     
     // Empuñadura
-    const m4GripGeo = new THREE.BoxGeometry(0.026, 0.075, 0.032);
+    const m4GripGeo = new THREE.BoxGeometry(0.026, 0.08, 0.035);
     const m4Grip = new THREE.Mesh(m4GripGeo, m4PlasticMat);
-    m4Grip.position.set(0, -0.07, -0.05);
+    m4Grip.position.set(0, -0.075, -0.04);
     m4Grip.rotation.x = -Math.PI / 8;
     m4MeshGroup.add(m4Grip);
     
-    // Culata
-    const m4StockGeo = new THREE.BoxGeometry(0.028, 0.065, 0.14);
+    // Culata táctica ajustable
+    const m4StockGeo = new THREE.BoxGeometry(0.03, 0.07, 0.16);
     const m4Stock = new THREE.Mesh(m4StockGeo, m4PlasticMat);
-    m4Stock.position.set(0, -0.025, 0.07);
+    m4Stock.position.set(0, -0.025, 0.08);
     m4MeshGroup.add(m4Stock);
     
-    // Cargador
-    const m4MagGeo = new THREE.BoxGeometry(0.024, 0.13, 0.048);
+    // Tubo de culata metálico
+    const m4BufferGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.06, 12);
+    const m4Buffer = new THREE.Mesh(m4BufferGeo, m4MetalMat);
+    m4Buffer.rotation.x = Math.PI / 2;
+    m4Buffer.position.set(0, -0.01, 0.02);
+    m4MeshGroup.add(m4Buffer);
+    
+    // Cargador curvado
+    const m4MagGeo = new THREE.BoxGeometry(0.025, 0.14, 0.055);
     const m4Mag = new THREE.Mesh(m4MagGeo, m4MetalMat);
-    m4Mag.position.set(0, -0.10, -0.15);
+    m4Mag.position.set(0, -0.11, -0.14);
     m4Mag.rotation.x = Math.PI / 16;
     m4MeshGroup.add(m4Mag);
     
-    // Mira ACOG
-    const m4ScopeGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.09, 8);
-    const m4Scope = new THREE.Mesh(m4ScopeGeo, m4MetalMat);
-    m4Scope.rotation.x = Math.PI / 2;
-    m4Scope.position.set(0, 0.035, -0.11);
-    m4MeshGroup.add(m4Scope);
+    // Mira holográfica EOTech realista
+    const m4HoloGeo = new THREE.BoxGeometry(0.025, 0.035, 0.06);
+    const m4Holo = new THREE.Mesh(m4HoloGeo, m4MetalMat);
+    m4Holo.position.set(0, 0.035, -0.1);
+    m4MeshGroup.add(m4Holo);
     
-    const m4ScopeMountGeo = new THREE.BoxGeometry(0.012, 0.02, 0.05);
-    const m4ScopeMount = new THREE.Mesh(m4ScopeMountGeo, m4MetalMat);
-    m4ScopeMount.position.set(0, 0.02, -0.11);
-    m4MeshGroup.add(m4ScopeMount);
+    const m4HoloGlassGeo = new THREE.BoxGeometry(0.02, 0.025, 0.002);
+    const m4HoloGlassMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.4 });
+    const m4HoloGlass = new THREE.Mesh(m4HoloGlassGeo, m4HoloGlassMat);
+    m4HoloGlass.position.set(0, 0.035, -0.125);
+    m4MeshGroup.add(m4HoloGlass);
+
+    // Linterna táctica lateral
+    const lightBodyGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.08, 12);
+    const lightBody = new THREE.Mesh(lightBodyGeo, m4MetalMat);
+    lightBody.rotation.x = Math.PI / 2;
+    lightBody.position.set(0.025, -0.01, -0.35);
+    m4MeshGroup.add(lightBody);
+
+    const lightLensMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const lightLens = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.002, 12), lightLensMat);
+    lightLens.rotation.x = Math.PI / 2;
+    lightLens.position.set(0.025, -0.01, -0.39);
+    m4MeshGroup.add(lightLens);
     
     gunGroup.add(m4MeshGroup);
     
-    // Luz de fogonazo de disparo
-    muzzleLight = new THREE.PointLight(0xff7700, 0, 8);
+    // Luz de fogonazo de disparo central
+    muzzleLight = new THREE.PointLight(0xffaa00, 0, 8);
     muzzleLight.position.set(0, 0, -0.46);
     gunGroup.add(muzzleLight);
     
@@ -1187,6 +1309,38 @@ function buildWeapon3D() {
     // Posicionar el arma en la esquina inferior derecha
     gunGroup.position.set(0.18, -0.20, -0.45);
     camera.add(gunGroup);
+}
+
+// Helper para clonar modelos riggeados (SkinnedMesh) en Three.js
+function cloneRiggedModel(source) {
+    const clone = source.clone();
+    
+    // Buscar todos los huesos en el modelo origen y en el clonado
+    const sourceBones = [];
+    source.traverse(node => {
+        if (node.isBone) sourceBones.push(node);
+    });
+    
+    const cloneBones = [];
+    clone.traverse(node => {
+        if (node.isBone) cloneBones.push(node);
+    });
+    
+    // Re-vincular los SkinnedMesh del clon a los huesos clonados correspondientes
+    clone.traverse(node => {
+        if (node.isSkinnedMesh) {
+            const originalSkeleton = node.skeleton;
+            const newBones = [];
+            for (let i = 0; i < originalSkeleton.bones.length; i++) {
+                const originalBone = originalSkeleton.bones[i];
+                const matchingBone = cloneBones.find(b => b.name === originalBone.name);
+                newBones.push(matchingBone || originalBone);
+            }
+            node.bind(new THREE.Skeleton(newBones, originalSkeleton.boneInverses), node.matrixWorld);
+        }
+    });
+    
+    return clone;
 }
 
 // --- CONTRATACIÓN Y MOVIMIENTO DE ZOMBIS ---
@@ -1205,98 +1359,184 @@ class Zombie {
             this.maxHealth = 45;
             this.health = 45;
             this.speedMultiplier = 1.65; // Corredor rápido
-            this.colorClothing = 0x8a1c1c; // Ropa ensangrentada roja
-            this.colorSkin = 0x5a3e3e; // Piel podrida rojiza
+            this.colorClothing = 0x5c1515; // Ropa oscura ensangrentada
+            this.colorSkin = 0x4a3636; // Piel necrosada
         } else if (this.type === 'SPITTER') {
             this.maxHealth = 80;
             this.health = 80;
             this.speedMultiplier = 0.6; // Escupidor lento
-            this.colorClothing = 0x1c4d1f; // Ropa verde tóxica
-            this.colorSkin = 0x6e8e5d; // Piel verde verdosa
-            this.spitCooldownTimer = 1000 + Math.random() * 1500; // Recarga de primer escupitajo
+            this.colorClothing = 0x133815; // Ropa rasgada pantanosa
+            this.colorSkin = 0x5a754b; // Piel verde putrefacta
+            this.spitCooldownTimer = 1000 + Math.random() * 1500;
         } else {
             // NORMAL
             this.maxHealth = 100;
             this.health = 100;
             this.speedMultiplier = 1.0;
-            this.colorClothing = 0x493466; // Ropa púrpura clásica
-            this.colorSkin = 0x42543c; // Piel verde
+            this.colorClothing = 0x2d2538; // Ropa oscura/púrpura
+            this.colorSkin = 0x3d4a36; // Piel verde grisácea
         }
         
-        // Cuerpo (Caja de ropa rota)
-        const torsoGeo = new THREE.BoxGeometry(0.7, 1.1, 0.4);
-        const torsoMat = new THREE.MeshStandardMaterial({ color: this.colorClothing, roughness: 0.85 });
-        this.torso = new THREE.Mesh(torsoGeo, torsoMat);
-        this.torso.position.y = 0.55;
-        this.torso.castShadow = true;
-        this.torso.receiveShadow = true;
-        this.group.add(this.torso);
-        
-        // Cabeza (Caja con textura de cara procedimental tintada)
-        const headGeo = new THREE.BoxGeometry(0.48, 0.48, 0.48);
-        this.headMaterials = [
-            new THREE.MeshStandardMaterial({ color: this.colorSkin }), // derecha
-            new THREE.MeshStandardMaterial({ color: this.colorSkin }), // izquierda
-            new THREE.MeshStandardMaterial({ color: this.colorSkin }), // arriba
-            new THREE.MeshStandardMaterial({ color: this.colorSkin }), // abajo
-            new THREE.MeshStandardMaterial({ map: zombieFaceTexture, color: this.colorSkin }), // frente (+Z)
-            new THREE.MeshStandardMaterial({ color: this.colorSkin })  // atrás
-        ];
-        this.head = new THREE.Mesh(headGeo, this.headMaterials);
-        this.head.position.y = 1.28;
-        this.head.castShadow = true;
-        this.group.add(this.head);
-        
-        // Ojos emisivos brillantes (visibles en la oscuridad)
-        const eyeColor = this.type === 'SPITTER' ? 0x39ff14 : (this.type === 'RUNNER' ? 0xffaa00 : 0xff2200);
-        const eyeGeo = new THREE.SphereGeometry(0.04, 6, 6);
-        const eyeMat = new THREE.MeshBasicMaterial({
-            color: eyeColor, transparent: true, opacity: 0.95
-        });
-        
-        this.leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-        this.leftEye.position.set(-0.1, 1.32, 0.25);
-        this.group.add(this.leftEye);
-        
-        this.rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
-        this.rightEye.position.set(0.1, 1.32, 0.25);
-        this.group.add(this.rightEye);
-        
-        // Luz puntual tenue desde los ojos para glow
-        this.eyeLight = new THREE.PointLight(eyeColor, 0.4, 3.0);
-        this.eyeLight.position.set(0, 1.32, 0.28);
-        this.group.add(this.eyeLight);
-        
-        // Brazos estirados al frente hostilmente
-        const armGeo = new THREE.BoxGeometry(0.18, 0.18, 0.65);
-        const armMat = new THREE.MeshStandardMaterial({ color: this.colorSkin });
-        
-        this.leftArm = new THREE.Mesh(armGeo, armMat);
-        this.leftArm.position.set(-0.38, 0.85, 0.3);
-        this.leftArm.castShadow = true;
-        this.group.add(this.leftArm);
-        
-        this.rightArm = new THREE.Mesh(armGeo, armMat);
-        this.rightArm.position.set(0.38, 0.85, 0.3);
-        this.rightArm.castShadow = true;
-        this.group.add(this.rightArm);
-        
-        // Piernas
-        const legGeo = new THREE.BoxGeometry(0.22, 0.6, 0.22);
-        const legMat = new THREE.MeshStandardMaterial({ color: 0x111115 });
-        
-        this.leftLeg = new THREE.Mesh(legGeo, legMat);
-        this.leftLeg.position.set(-0.2, 0.3, 0);
-        this.leftLeg.castShadow = true;
-        this.group.add(this.leftLeg);
-        
-        this.rightLeg = new THREE.Mesh(legGeo, legMat);
-        this.rightLeg.position.set(0.2, 0.3, 0);
-        this.rightLeg.castShadow = true;
-        this.group.add(this.rightLeg);
-        
-        // Escalar zombis para que tengan un tamaño humano realista (aprox. 1.9m de altura)
-        this.group.scale.set(1.2, 1.25, 1.2);
+        // Contenedor del cuerpo (para inclinar al zombie hacia adelante)
+        this.bodyGroup = new THREE.Group();
+        this.group.add(this.bodyGroup);
+
+        if (cachedZombieModel) {
+            // Clonar el modelo 3D riggeado pre-escalado personalizado
+            this.zombieMesh = cloneRiggedModel(cachedZombieModel);
+            
+            // Alinear la base del zombi al suelo usando el offset pre-calculado
+            this.baseYOffset = zombieGLBBaseYOffset;
+            this.zombieMesh.position.set(0, this.baseYOffset, 0);
+            
+            // Configurar el AnimationMixer para animaciones de esqueleto
+            const clip = (this.type === 'RUNNER' && cachedMummyRunClip) ? cachedMummyRunClip : cachedMummyWalkClip;
+            if (clip) {
+                this.mixer = new THREE.AnimationMixer(this.zombieMesh);
+                this.activeAction = this.mixer.clipAction(clip);
+                // Escalar la velocidad de reproducción de la animación para que coincida con el movimiento
+                this.activeAction.timeScale = this.speedMultiplier * 0.95;
+                this.activeAction.play();
+            }
+            
+            // Clonar materiales para poder tintar independientemente y configurar sombras
+            this.zombieMesh.traverse(child => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    if (child.material) {
+                        child.material = child.material.clone();
+                        // Aplicar tintes según el tipo
+                        if (this.type === 'RUNNER') {
+                            child.material.color.setHex(0xff5555); // Tinte rojo para corredores
+                        } else if (this.type === 'SPITTER') {
+                            child.material.color.setHex(0x55ff55); // Tinte verde fuerte para escupidores
+                        }
+                    }
+                }
+            });
+            
+            this.group.add(this.zombieMesh);
+            
+            // Ojos / luz puntual frontal según tipo
+            const eyeColor = this.type === 'SPITTER' ? 0x39ff14 : (this.type === 'RUNNER' ? 0xff4400 : 0xffea00);
+            this.eyeLight = new THREE.PointLight(eyeColor, 0.7, 4.0);
+            this.eyeLight.position.set(0, 1.5, 0.2); // Colocar cerca de la cabeza
+            this.group.add(this.eyeLight);
+        } else {
+            // --- CÓDIGO PROCEDIMENTAL DE RESPALDO (VIEJO) ---
+            // Torso (Más alto y delgado)
+            const torsoGeo = new THREE.BoxGeometry(0.65, 1.2, 0.35);
+            const torsoMat = new THREE.MeshStandardMaterial({ color: this.colorClothing, roughness: 0.9, metalness: 0.1 });
+            this.torso = new THREE.Mesh(torsoGeo, torsoMat);
+            this.torso.position.y = 0.6;
+            this.torso.castShadow = true;
+            this.torso.receiveShadow = true;
+            this.bodyGroup.add(this.torso);
+
+            // Detalles de costillas / huesos expuestos en el pecho
+            const ribGeo = new THREE.BoxGeometry(0.35, 0.4, 0.1);
+            const ribMat = new THREE.MeshStandardMaterial({ color: 0x8a8578, roughness: 0.9 });
+            this.ribcage = new THREE.Mesh(ribGeo, ribMat);
+            this.ribcage.position.set(0, 0.7, 0.18);
+            this.bodyGroup.add(this.ribcage);
+            
+            // Manchas de sangre en el torso
+            const bloodGeo = new THREE.BoxGeometry(0.5, 0.6, 0.05);
+            const bloodMat = new THREE.MeshStandardMaterial({ color: 0x400000, roughness: 1.0 });
+            this.blood = new THREE.Mesh(bloodGeo, bloodMat);
+            this.blood.position.set(0.05, 0.5, 0.16);
+            this.bodyGroup.add(this.blood);
+
+            // Cabeza (Caja con textura de cara procedimental)
+            const headGeo = new THREE.BoxGeometry(0.45, 0.45, 0.45);
+            this.headMaterials = [
+                new THREE.MeshStandardMaterial({ color: this.colorSkin }),
+                new THREE.MeshStandardMaterial({ color: this.colorSkin }),
+                new THREE.MeshStandardMaterial({ color: this.colorSkin }),
+                new THREE.MeshStandardMaterial({ color: this.colorSkin }),
+                new THREE.MeshStandardMaterial({ map: zombieFaceTexture, color: this.colorSkin }), // Frente
+                new THREE.MeshStandardMaterial({ color: this.colorSkin })
+            ];
+            this.head = new THREE.Mesh(headGeo, this.headMaterials);
+            this.head.position.set(0, 1.4, 0.1); // Cabeza echada hacia adelante
+            this.head.rotation.x = -0.15; // Mirando ligeramente hacia abajo/adelante
+            this.head.castShadow = true;
+            this.bodyGroup.add(this.head);
+
+            // Mandíbula caída y desencajada (Terrorífico)
+            const jawGeo = new THREE.BoxGeometry(0.35, 0.25, 0.35);
+            const jawMat = new THREE.MeshStandardMaterial({ color: this.colorSkin });
+            this.jaw = new THREE.Mesh(jawGeo, jawMat);
+            this.jaw.position.set(0, -0.28, 0.05);
+            this.jaw.rotation.x = 0.4; // Colgando
+            this.head.add(this.jaw);
+
+            // Ojos emisivos brillantes (visibles en la oscuridad)
+            const eyeColor = this.type === 'SPITTER' ? 0x39ff14 : (this.type === 'RUNNER' ? 0xffaa00 : 0xff2200);
+            const eyeGeo = new THREE.SphereGeometry(0.05, 8, 8);
+            const eyeMat = new THREE.MeshBasicMaterial({
+                color: eyeColor, transparent: true, opacity: 0.95
+            });
+            
+            this.leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            this.leftEye.position.set(-0.12, 0.05, 0.23);
+            this.head.add(this.leftEye);
+            
+            this.rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
+            this.rightEye.position.set(0.12, 0.05, 0.23);
+            this.head.add(this.rightEye);
+            
+            // Luz puntual tenue desde los ojos
+            this.eyeLight = new THREE.PointLight(eyeColor, 0.6, 4.0);
+            this.eyeLight.position.set(0, 0.05, 0.25);
+            this.head.add(this.eyeLight);
+            
+            // Brazos estirados irregularmente
+            const armGeo = new THREE.BoxGeometry(0.16, 0.16, 0.8);
+            const armMat = new THREE.MeshStandardMaterial({ color: this.colorSkin });
+            
+            this.leftArm = new THREE.Mesh(armGeo, armMat);
+            this.leftArm.position.set(-0.45, 0.95, 0.4);
+            this.leftArm.rotation.y = 0.2; // Torcido
+            this.leftArm.rotation.x = 0.1;
+            this.leftArm.castShadow = true;
+            this.bodyGroup.add(this.leftArm);
+            
+            this.rightArm = new THREE.Mesh(armGeo, armMat);
+            this.rightArm.position.set(0.45, 1.05, 0.35); // Un brazo más alto que el otro
+            this.rightArm.rotation.y = -0.15;
+            this.rightArm.rotation.x = -0.2;
+            this.rightArm.castShadow = true;
+            this.bodyGroup.add(this.rightArm);
+            
+            // Piernas (Huesudas)
+            const legGeo = new THREE.BoxGeometry(0.2, 0.7, 0.2);
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.9 });
+            
+            this.leftLeg = new THREE.Mesh(legGeo, legMat);
+            this.leftLeg.position.set(-0.2, 0.35, 0);
+            this.leftLeg.castShadow = true;
+            this.group.add(this.leftLeg);
+            
+            this.rightLeg = new THREE.Mesh(legGeo, legMat);
+            this.rightLeg.position.set(0.2, 0.35, 0);
+            this.rightLeg.castShadow = true;
+            this.group.add(this.rightLeg);
+
+            // Inclinar todo el torso hacia adelante para que luzca acechante
+            this.bodyGroup.position.y = 0.7; // Levantar el pivote
+            this.torso.position.y -= 0.7; // Ajustar posición relativa
+            this.head.position.y -= 0.7;
+            this.leftArm.position.y -= 0.7;
+            this.rightArm.position.y -= 0.7;
+            this.ribcage.position.y -= 0.7;
+            this.blood.position.y -= 0.7;
+            this.bodyGroup.rotation.x = 0.15; // Inclinación
+        }
+
+        // Escalar zombis para que tengan un tamaño más amenazante
+        this.group.scale.set(1.25, 1.35, 1.25);
         
         scene.add(this.group);
     }
@@ -1304,8 +1544,16 @@ class Zombie {
     update(deltaTime, playerPos) {
         if (this.state === 'DEAD') return;
         
+        // Actualizar el AnimationMixer si está disponible y está vivo
+        if (this.mixer && this.state === 'ALIVE') {
+            this.mixer.update(deltaTime);
+        }
+        
         if (this.state === 'DYING') {
             // Animación de caída al morir
+            if (this.activeAction) {
+                this.activeAction.paused = true;
+            }
             if (this.group.rotation.x > -Math.PI / 2) {
                 this.group.rotation.x -= deltaTime * 4;
                 this.group.position.y = Math.max(0.1, this.group.position.y - deltaTime * 2);
@@ -1364,16 +1612,29 @@ class Zombie {
             this.group.position.z = resolved.z;
             
             // Animación de caminata
-            this.walkCycle += deltaTime * 8 * this.speedMultiplier;
-            this.leftLeg.rotation.x = Math.sin(this.walkCycle) * 0.45;
-            this.rightLeg.rotation.x = -Math.sin(this.walkCycle) * 0.45;
-            this.leftArm.rotation.x = (Math.sin(this.walkCycle * 0.5) * 0.1);
-            this.rightArm.rotation.x = -(Math.sin(this.walkCycle * 0.5) * 0.1);
-            
-            this.torso.position.y = 0.55 + Math.abs(Math.sin(this.walkCycle * 2)) * 0.05;
-            this.head.position.y = 1.28 + Math.abs(Math.sin(this.walkCycle * 2)) * 0.04;
+            if (this.zombieMesh) {
+                if (this.activeAction) {
+                    this.activeAction.paused = false;
+                }
+                // Limpiar cualquier rotación/desplazamiento residual procedimental en el mesh raíz
+                this.zombieMesh.rotation.z = 0;
+                this.zombieMesh.rotation.x = 0;
+                this.zombieMesh.position.y = this.baseYOffset;
+            } else {
+                this.walkCycle += deltaTime * 8 * this.speedMultiplier;
+                this.leftLeg.rotation.x = Math.sin(this.walkCycle) * 0.45;
+                this.rightLeg.rotation.x = -Math.sin(this.walkCycle) * 0.45;
+                this.leftArm.rotation.x = (Math.sin(this.walkCycle * 0.5) * 0.1);
+                this.rightArm.rotation.x = -(Math.sin(this.walkCycle * 0.5) * 0.1);
+                
+                this.torso.position.y = 0.55 + Math.abs(Math.sin(this.walkCycle * 2)) * 0.05;
+                this.head.position.y = 1.28 + Math.abs(Math.sin(this.walkCycle * 2)) * 0.04;
+            }
         } else {
             // Atacar!
+            if (this.activeAction) {
+                this.activeAction.paused = true;
+            }
             if (this.attackCooldownTimer <= 0 && player.health > 0) {
                 this.attack();
             }
@@ -1413,16 +1674,24 @@ class Zombie {
         });
         
         // Animación rápida de escupitajo
-        const originalL = this.leftArm.rotation.x;
-        const originalR = this.rightArm.rotation.x;
-        this.leftArm.rotation.x = -0.5;
-        this.rightArm.rotation.x = -0.5;
-        setTimeout(() => {
-            if (this.state === 'ALIVE') {
-                this.leftArm.rotation.x = originalL;
-                this.rightArm.rotation.x = originalR;
-            }
-        }, 300);
+        if (this.zombieMesh) {
+            const originalZ = this.zombieMesh.position.z;
+            this.zombieMesh.position.z += 0.25;
+            setTimeout(() => {
+                if (this.zombieMesh) this.zombieMesh.position.z = originalZ;
+            }, 300);
+        } else {
+            const originalL = this.leftArm.rotation.x;
+            const originalR = this.rightArm.rotation.x;
+            this.leftArm.rotation.x = -0.5;
+            this.rightArm.rotation.x = -0.5;
+            setTimeout(() => {
+                if (this.state === 'ALIVE' && this.leftArm) {
+                    this.leftArm.rotation.x = originalL;
+                    this.rightArm.rotation.x = originalR;
+                }
+            }, 300);
+        }
     }
 
     damage(amount) {
@@ -1443,36 +1712,79 @@ class Zombie {
     }
 
     setMaterialColor(hexColor) {
-        const list = [this.torso, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg];
-        list.forEach(mesh => {
-            if (hexColor !== null) {
-                mesh.material.color.setHex(hexColor);
-            } else {
-                if (mesh === this.torso) mesh.material.color.setHex(this.colorClothing);
-                else if (mesh === this.leftLeg || mesh === this.rightLeg) mesh.material.color.setHex(0x111115);
-                else mesh.material.color.setHex(this.colorSkin);
+        if (this.zombieMesh) {
+            this.zombieMesh.traverse(child => {
+                if (child.isMesh && child.material) {
+                    if (hexColor !== null) {
+                        child.material.color.setHex(hexColor);
+                    } else {
+                        // Restaurar tinte basado en variante
+                        if (this.type === 'RUNNER') {
+                            child.material.color.setHex(0xff5555);
+                        } else if (this.type === 'SPITTER') {
+                            child.material.color.setHex(0x55ff55);
+                        } else {
+                            child.material.color.setHex(0xffffff); // Sin tinte (original)
+                        }
+                    }
+                }
+            });
+        } else {
+            const list = [this.torso, this.leftArm, this.rightArm, this.leftLeg, this.rightLeg, this.jaw];
+            list.forEach(mesh => {
+                if (mesh) {
+                    if (hexColor !== null) {
+                        mesh.material.color.setHex(hexColor);
+                    } else {
+                        if (mesh === this.torso) mesh.material.color.setHex(this.colorClothing);
+                        else if (mesh === this.leftLeg || mesh === this.rightLeg) mesh.material.color.setHex(0x111115);
+                        else mesh.material.color.setHex(this.colorSkin);
+                    }
+                }
+            });
+            
+            if (this.ribcage && this.blood) {
+                if (hexColor !== null) {
+                    this.ribcage.material.color.setHex(hexColor);
+                    this.blood.material.color.setHex(hexColor);
+                } else {
+                    this.ribcage.material.color.setHex(0x8a8578);
+                    this.blood.material.color.setHex(0x400000);
+                }
             }
-        });
-        
-        this.headMaterials.forEach((mat, idx) => {
-            if (hexColor !== null) {
-                mat.color.setHex(hexColor);
-            } else {
-                mat.color.setHex(this.colorSkin);
+            
+            if (this.headMaterials) {
+                this.headMaterials.forEach((mat) => {
+                    if (hexColor !== null) {
+                        mat.color.setHex(hexColor);
+                    } else {
+                        mat.color.setHex(this.colorSkin);
+                    }
+                });
             }
-        });
+        }
     }
 
     attack() {
         this.attackCooldownTimer = ZOMBIE_ATTACK_COOLDOWN;
         
-        const originalZ = this.leftArm.position.z;
-        this.leftArm.position.z += 0.25;
-        this.rightArm.position.z += 0.25;
-        setTimeout(() => {
-            this.leftArm.position.z = originalZ;
-            this.rightArm.position.z = originalZ;
-        }, 200);
+        if (this.zombieMesh) {
+            const originalZ = this.zombieMesh.position.z;
+            this.zombieMesh.position.z += 0.35;
+            setTimeout(() => {
+                if (this.zombieMesh) this.zombieMesh.position.z = originalZ;
+            }, 200);
+        } else {
+            const originalZ = this.leftArm.position.z;
+            this.leftArm.position.z += 0.25;
+            this.rightArm.position.z += 0.25;
+            setTimeout(() => {
+                if (this.leftArm) {
+                    this.leftArm.position.z = originalZ;
+                    this.rightArm.position.z = originalZ;
+                }
+            }, 200);
+        }
         
         damagePlayer(18 + Math.floor(Math.random() * 8));
     }
