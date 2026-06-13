@@ -10,6 +10,17 @@ export class SoundSynth {
         this.musicActive = false;
         this.musicTimer = null;
         this.musicStep = 0;
+        
+        // Nuevas capas sutiles
+        this.droneOsc = null;
+        this.droneGain = null;
+        this.droneLFO = null;
+        this.noiseSource = null;
+        this.noiseFilter = null;
+        this.noiseGain = null;
+        this.noiseTimer = null;
+        this.padOscillators = [];
+        this.screechTimer = null;
     }
 
     init() {
@@ -66,6 +77,154 @@ export class SoundSynth {
         }
     }
 
+    startDroneLayer() {
+        if (!this.ctx) return;
+        
+        // Drone muy grave (30Hz) con LFO lento para movimiento sutil
+        this.droneOsc = this.ctx.createOscillator();
+        this.droneOsc.type = 'sine';
+        this.droneOsc.frequency.setValueAtTime(30, this.ctx.currentTime);
+        
+        // LFO para modulación lenta de frecuencia
+        this.droneLFO = this.ctx.createOscillator();
+        this.droneLFO.type = 'sine';
+        this.droneLFO.frequency.setValueAtTime(0.1, this.ctx.currentTime);
+        
+        const lfoGain = this.ctx.createGain();
+        lfoGain.gain.setValueAtTime(2, this.ctx.currentTime);
+        
+        this.droneLFO.connect(lfoGain);
+        lfoGain.connect(this.droneOsc.frequency);
+        
+        // Filtro paso bajo muy bajo para mantenerlo sutil
+        const lowpass = this.ctx.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.setValueAtTime(60, this.ctx.currentTime);
+        
+        this.droneGain = this.ctx.createGain();
+        this.droneGain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+        
+        this.droneOsc.connect(lowpass);
+        lowpass.connect(this.droneGain);
+        this.droneGain.connect(this.ctx.destination);
+        
+        this.droneOsc.start();
+        this.droneLFO.start();
+    }
+    
+    startNoiseTexture() {
+        if (!this.ctx) return;
+        
+        // Crear ruido rosa
+        const bufferSize = this.ctx.sampleRate * 2;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            data[i] = (lastOut + (0.02 * white)) / 1.02;
+            lastOut = data[i];
+            data[i] *= 3.5;
+        }
+        
+        let lastOut = 0;
+        
+        this.noiseSource = this.ctx.createBufferSource();
+        this.noiseSource.buffer = buffer;
+        this.noiseSource.loop = true;
+        
+        this.noiseFilter = this.ctx.createBiquadFilter();
+        this.noiseFilter.type = 'bandpass';
+        this.noiseFilter.frequency.setValueAtTime(400, this.ctx.currentTime);
+        this.noiseFilter.Q.setValueAtTime(0.5, this.ctx.currentTime);
+        
+        this.noiseGain = this.ctx.createGain();
+        this.noiseGain.gain.setValueAtTime(0.03, this.ctx.currentTime);
+        
+        this.noiseSource.connect(this.noiseFilter);
+        this.noiseFilter.connect(this.noiseGain);
+        this.noiseGain.connect(this.ctx.destination);
+        
+        this.noiseSource.start();
+        
+        // Timer para modulación lenta del filtro
+        const modulateFilter = () => {
+            if (!this.musicActive || !this.ctx) return;
+            
+            const newFreq = 300 + Math.random() * 300;
+            this.noiseFilter.frequency.linearRampToValueAtTime(newFreq, this.ctx.currentTime + 4);
+            
+            this.noiseTimer = setTimeout(modulateFilter, 4000);
+        };
+        
+        modulateFilter();
+    }
+    
+    startHarmonicPad() {
+        if (!this.ctx) return;
+        
+        // Acorde menor disonante con evolución lenta
+        const frequencies = [130.81, 155.56, 196.00, 233.08]; // Cm7
+        
+        frequencies.forEach((freq, index) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            
+            // Variación sutil de frecuencia por oscilador
+            const lfo = this.ctx.createOscillator();
+            lfo.type = 'sine';
+            lfo.frequency.setValueAtTime(0.05 + index * 0.01, this.ctx.currentTime);
+            
+            const lfoGain = this.ctx.createGain();
+            lfoGain.gain.setValueAtTime(1 + index * 0.5, this.ctx.currentTime);
+            
+            lfo.connect(lfoGain);
+            lfoGain.connect(osc.frequency);
+            
+            // Envolvente lenta
+            gain.gain.setValueAtTime(0, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.04 - index * 0.005, this.ctx.currentTime + 2);
+            
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            
+            osc.start();
+            lfo.start();
+            
+            this.padOscillators.push({ osc, gain, lfo });
+        });
+    }
+    
+    startScreechTimer() {
+        if (!this.ctx) return;
+        
+        const playScreech = () => {
+            if (!this.musicActive || !this.ctx) return;
+            
+            const rand = Math.random();
+            
+            if (rand < 0.4) {
+                // Intervalo de segunda menor ultra disonante y aguda
+                this.playHorrorScreech(2637, 2793, 0.08, 1.2); 
+            } else if (rand < 0.7) {
+                // Segunda menor de tono medio alto
+                this.playHorrorScreech(1975, 2093, 0.06, 0.9);
+            } else {
+                // Deslizamiento neumático de pánico
+                this.playSlidingPanic(1400, 300, 0.4, 0.07);
+            }
+            
+            // Intervalo aleatorio entre 90 y 150 segundos (1.5 - 2.5 minutos)
+            const randomInterval = 90000 + Math.random() * 60000;
+            this.screechTimer = setTimeout(playScreech, randomInterval);
+        };
+        
+        // Primer screech después de 30 segundos
+        this.screechTimer = setTimeout(playScreech, 30000);
+    }
+    
     startHorrorMusic() {
         if (!this.ctx) return;
         
@@ -73,6 +232,10 @@ export class SoundSynth {
         this.stopHorrorMusic();
         
         this.startAmbientHum();
+        this.startDroneLayer();
+        this.startNoiseTexture();
+        this.startHarmonicPad();
+        this.startScreechTimer();
         
         this.musicActive = true;
         this.musicStep = 0;
@@ -87,21 +250,9 @@ export class SoundSynth {
                 this.playHeartbeat(58, 0.25); // thud más agudo y ligero
             }
             
-            // Melodía / screech disonante desesperante aleatorio
-            if (this.musicStep % 8 === 0) {
-                // Intervalo de segunda menor ultra disonante y aguda (Tensión extrema)
-                this.playHorrorScreech(2637, 2793, 0.08, 1.2); 
-            } else if (this.musicStep % 8 === 3) {
-                // Segunda menor de tono medio alto (Desesperante)
-                this.playHorrorScreech(1975, 2093, 0.06, 0.9);
-            } else if (this.musicStep % 8 === 6) {
-                // Escupido / Deslizamiento neumático de pánico
-                this.playSlidingPanic(1400, 300, 0.4, 0.07);
-            }
-            
             this.musicStep++;
             
-            // ¡Dinamismo Desesperante!: El ritmo del latido y los ruidos se acelera si la vida del jugador es baja
+            // ¡Dinamismo Desesperante!: El ritmo del latido se acelera si la vida del jugador es baja
             let interval = 700; // Tempo normal
             const player = window.player;
             if (player && player.health < 40) {
@@ -118,11 +269,57 @@ export class SoundSynth {
 
     stopHorrorMusic() {
         this.musicActive = false;
+        
         if (this.musicTimer) {
             clearTimeout(this.musicTimer);
             this.musicTimer = null;
         }
+        
+        if (this.screechTimer) {
+            clearTimeout(this.screechTimer);
+            this.screechTimer = null;
+        }
+        
+        if (this.noiseTimer) {
+            clearTimeout(this.noiseTimer);
+            this.noiseTimer = null;
+        }
+        
         this.stopAmbientHum();
+        
+        // Detener drone layer
+        if (this.droneOsc) {
+            try { this.droneOsc.stop(); } catch(e){}
+            this.droneOsc = null;
+        }
+        if (this.droneLFO) {
+            try { this.droneLFO.stop(); } catch(e){}
+            this.droneLFO = null;
+        }
+        if (this.droneGain) {
+            this.droneGain = null;
+        }
+        
+        // Detener textura de ruido
+        if (this.noiseSource) {
+            try { this.noiseSource.stop(); } catch(e){}
+            this.noiseSource = null;
+        }
+        if (this.noiseFilter) {
+            this.noiseFilter = null;
+        }
+        if (this.noiseGain) {
+            this.noiseGain = null;
+        }
+        
+        // Detener pad armónico
+        this.padOscillators.forEach(pad => {
+            try { 
+                pad.osc.stop(); 
+                pad.lfo.stop();
+            } catch(e){}
+        });
+        this.padOscillators = [];
     }
 
     playHeartbeat(freq, gainVal) {
