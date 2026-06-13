@@ -67,8 +67,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="src/GLTFLoader.js"></script>
     <script>
-        // Redirect console.log and console.error to a custom HUD div for on-screen debugging
+        // Redirect console.log and console.error to a custom HUD div for on-screen debugging.
+        // Disabled by default; enable with ?debug=1 or ?debugLogs=1.
         (function() {
+            const params = new URLSearchParams(window.location.search);
+            const debugLogsEnabled = params.get('debug') === '1' || params.get('debugLogs') === '1';
+            if (!debugLogsEnabled) return;
+
             const logs = [];
             let container = null;
             function addLog(msg, color) {

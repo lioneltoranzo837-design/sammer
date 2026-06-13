@@ -153,8 +153,8 @@ export const BLOOD_MESSAGE_FONT_URL = 'assets/fonts/SHLOP.ttf';
 
 export const BLOOD_WALL_MESSAGES = [
     'Bitcoin o Muerte!',
-    'CORRÉ!',
-    'ACÁ NADIE RESPAWNEA BIEN',
+    'CORRE!',
+    'ACA NADIE RESPAWNEA BIEN',
     'NO ABRAS LA PUERTA ROJA',
     'Sin television y sin cerveza...',
     'ARCA sabe de tus Bitcoins',
