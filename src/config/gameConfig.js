@@ -7,6 +7,17 @@ export const ZOMBIE_SPEED = 0.025;
 export const ZOMBIE_ATTACK_DIST = 1.3;
 export const ZOMBIE_ATTACK_COOLDOWN = 1500; // ms
 export const ZOMBIE_SPAWN_COUNT = 8;
+export const SPIDER_SPAWN_COUNT = 3;
+export const SPIDER_HEALTH = 60;
+export const SPIDER_SPEED = 0.035;
+export const SPIDER_CEILING_Y = WALL_HEIGHT - 0.35;
+export const SPIDER_SHOT_DAMAGE = 12;
+export const SPIDER_SHOT_SPEED = 0.2;
+export const SPIDER_SHOT_RANGE = 18;
+export const SPIDER_SHOT_COOLDOWN_MIN = 1800;
+export const SPIDER_SHOT_COOLDOWN_MAX = 3200;
+export const SPIDER_PLAYER_START_SAFE_CELLS = 4;
+export const SPIDER_MIN_SEPARATION_CELLS = 3;
 export const MAX_HEALTH = 100;
 export const MAX_ARMOR = 100;
 

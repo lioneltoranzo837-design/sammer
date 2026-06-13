@@ -11,6 +11,17 @@ import {
     ZOMBIE_ATTACK_COOLDOWN,
     ZOMBIE_ATTACK_DIST,
     ZOMBIE_SPEED,
+    SPIDER_SPAWN_COUNT,
+    SPIDER_HEALTH,
+    SPIDER_SPEED,
+    SPIDER_CEILING_Y,
+    SPIDER_SHOT_DAMAGE,
+    SPIDER_SHOT_SPEED,
+    SPIDER_SHOT_RANGE,
+    SPIDER_SHOT_COOLDOWN_MIN,
+    SPIDER_SHOT_COOLDOWN_MAX,
+    SPIDER_PLAYER_START_SAFE_CELLS,
+    SPIDER_MIN_SEPARATION_CELLS,
     BOSS_HEALTH,
     BOSS_MELEE_DAMAGE,
     BOSS_ACID_DAMAGE,
@@ -71,6 +82,7 @@ window.player = player;
 let keyboard = createKeyboardState();
 let colliders = [];
 let zombies = [];
+let spiders = [];
 let particles = [];
 let lights = [];
 let interactiveDoors = []; // Registro de puertas normales interactuadas
@@ -1731,7 +1743,10 @@ class Zombie {
             mesh: projMesh,
             velocity: velocity,
             life: 3.5,
-            damage: 15
+            damage: 15,
+            type: 'acid',
+            isAcid: true,
+            impactColor: 0x39ff14
         });
         
         // Animación rápida de escupitajo
@@ -1853,6 +1868,210 @@ class Zombie {
         }
         
         damagePlayer(18 + Math.floor(Math.random() * 8));
+    }
+}
+
+class CeilingSpider {
+    constructor(x, z) {
+        this.group = new THREE.Group();
+        this.group.position.set(x, SPIDER_CEILING_Y, z);
+        this.state = 'ALIVE';
+        this.health = SPIDER_HEALTH;
+        this.hurtTimer = 0;
+        this.shotCooldownTimer = SPIDER_SHOT_COOLDOWN_MIN + Math.random() * (SPIDER_SHOT_COOLDOWN_MAX - SPIDER_SHOT_COOLDOWN_MIN);
+        this.walkCycle = Math.random() * Math.PI * 2;
+        this.hitMeshes = [];
+        this.legs = [];
+        this.legBaseRotations = [];
+
+        const spiderMat = this.createMaterial(0x171018);
+        const headMat = this.createMaterial(0x24131c);
+        const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff3300 });
+        eyeMat.userData.originalColor = 0xff3300;
+
+        const bodyGeo = new THREE.SphereGeometry(0.5, 12, 8);
+        this.body = new THREE.Mesh(bodyGeo, spiderMat);
+        this.body.scale.set(1.2, 0.28, 0.85);
+        this.body.castShadow = true;
+        this.group.add(this.body);
+        this.hitMeshes.push(this.body);
+
+        const headGeo = new THREE.SphereGeometry(0.24, 10, 8);
+        this.head = new THREE.Mesh(headGeo, headMat);
+        this.head.position.set(0, -0.02, 0.48);
+        this.head.scale.set(1.0, 0.75, 0.9);
+        this.head.castShadow = true;
+        this.group.add(this.head);
+        this.hitMeshes.push(this.head);
+
+        const eyeGeo = new THREE.SphereGeometry(0.045, 6, 6);
+        this.leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+        this.leftEye.position.set(-0.08, 0.02, 0.67);
+        this.group.add(this.leftEye);
+        this.hitMeshes.push(this.leftEye);
+
+        this.rightEye = new THREE.Mesh(eyeGeo.clone(), eyeMat.clone());
+        this.rightEye.material.userData.originalColor = 0xff3300;
+        this.rightEye.position.set(0.08, 0.02, 0.67);
+        this.group.add(this.rightEye);
+        this.hitMeshes.push(this.rightEye);
+
+        for (let side = -1; side <= 1; side += 2) {
+            for (let i = 0; i < 4; i++) {
+                const legGeo = new THREE.CylinderGeometry(0.025, 0.018, 0.82, 6);
+                const leg = new THREE.Mesh(legGeo, this.createMaterial(0x130d10));
+                leg.position.set(side * 0.52, -0.08, -0.35 + i * 0.23);
+                leg.rotation.z = side > 0 ? Math.PI / 2 : -Math.PI / 2;
+                leg.rotation.y = (-0.38 + i * 0.25) * side;
+                leg.castShadow = true;
+                this.group.add(leg);
+                this.legs.push(leg);
+                this.legBaseRotations.push(leg.rotation.y);
+                this.hitMeshes.push(leg);
+            }
+        }
+
+        this.eyeLight = new THREE.PointLight(0xff2200, 0.6, 3.5);
+        this.eyeLight.position.set(0, 0.0, 0.55);
+        this.group.add(this.eyeLight);
+
+        scene.add(this.group);
+    }
+
+    createMaterial(color) {
+        const material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.9, metalness: 0.05 });
+        material.userData.originalColor = color;
+        return material;
+    }
+
+    update(deltaTime, playerPos) {
+        if (this.state === 'DEAD') return;
+
+        if (this.state === 'DYING') {
+            this.group.position.y = Math.max(0.12, this.group.position.y - deltaTime * 2.4);
+            this.group.rotation.x += deltaTime * 5.0;
+            this.group.rotation.z += deltaTime * 1.5;
+            if (this.group.position.y <= 0.12) {
+                this.state = 'DEAD';
+                zombiesRemainingCount();
+            }
+            return;
+        }
+
+        if (this.hurtTimer > 0) {
+            this.hurtTimer -= deltaTime;
+            if (this.hurtTimer <= 0) {
+                this.setMaterialColor(null);
+            }
+        }
+
+        this.shotCooldownTimer -= deltaTime * 1000;
+
+        const dir = new THREE.Vector3().subVectors(playerPos, this.group.position);
+        dir.y = 0;
+        const dist = dir.length();
+        if (dist > 0.001) {
+            dir.normalize();
+            this.group.rotation.y = Math.atan2(dir.x, dir.z);
+        }
+
+        if (dist > 4.5) {
+            const nextX = this.group.position.x + dir.x * SPIDER_SPEED;
+            const nextZ = this.group.position.z + dir.z * SPIDER_SPEED;
+            const resolved = checkZombieWallCollisions(nextX, nextZ);
+            this.group.position.x = resolved.x;
+            this.group.position.z = resolved.z;
+        }
+
+        this.walkCycle += deltaTime * 8;
+        this.body.rotation.z = Math.sin(this.walkCycle) * 0.08;
+        this.legs.forEach((leg, index) => {
+            leg.rotation.y = this.legBaseRotations[index] + Math.sin(this.walkCycle + index) * 0.18;
+        });
+
+        if (dist <= SPIDER_SHOT_RANGE && this.shotCooldownTimer <= 0 && player.health > 0) {
+            this.shootAtPlayer();
+            this.shotCooldownTimer = SPIDER_SHOT_COOLDOWN_MIN + Math.random() * (SPIDER_SHOT_COOLDOWN_MAX - SPIDER_SHOT_COOLDOWN_MIN);
+        }
+    }
+
+    shootAtPlayer() {
+        AudioSynth.playMetallicClick(900, 0.08, 0.12);
+
+        const startPos = this.group.position.clone();
+        startPos.y -= 0.18;
+
+        const projGeo = new THREE.SphereGeometry(0.1, 8, 8);
+        const projMat = new THREE.MeshBasicMaterial({ color: 0xddeeff });
+        const projMesh = new THREE.Mesh(projGeo, projMat);
+        projMesh.position.copy(startPos);
+
+        const projLight = new THREE.PointLight(0xbfdcff, 1.0, 2.5);
+        projMesh.add(projLight);
+        scene.add(projMesh);
+
+        const targetPos = camera.position.clone();
+        targetPos.x += (Math.random() - 0.5) * 0.35;
+        targetPos.y += (Math.random() - 0.5) * 0.2;
+        targetPos.z += (Math.random() - 0.5) * 0.35;
+
+        const velocity = new THREE.Vector3().subVectors(targetPos, startPos).normalize().multiplyScalar(SPIDER_SHOT_SPEED);
+
+        acidProjectiles.push({
+            mesh: projMesh,
+            velocity: velocity,
+            life: 3.2,
+            damage: SPIDER_SHOT_DAMAGE,
+            type: 'spider',
+            isAcid: false,
+            impactColor: 0xddeeff
+        });
+
+    }
+
+    damage(amount) {
+        if (this.state !== 'ALIVE') return;
+
+        this.health -= amount;
+        this.setMaterialColor(0xff0000);
+        this.hurtTimer = 0.12;
+        AudioSynth.playZombieHurt();
+
+        if (this.health <= 0) {
+            this.state = 'DYING';
+            this.eyeLight.intensity = 0.15;
+        }
+    }
+
+    setMaterialColor(hexColor) {
+        this.group.traverse(child => {
+            if (child.isMesh && child.material) {
+                const materials = Array.isArray(child.material) ? child.material : [child.material];
+                materials.forEach(mat => {
+                    if (mat && mat.color) {
+                        if (hexColor !== null) {
+                            mat.color.setHex(hexColor);
+                        } else if (mat.userData.originalColor !== undefined) {
+                            mat.color.setHex(mat.userData.originalColor);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    dispose() {
+        scene.remove(this.group);
+        this.group.traverse(child => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(m => m.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        });
     }
 }
 
@@ -2106,7 +2325,10 @@ class BossEnemy {
             mesh: projMesh,
             velocity: velocity,
             life: 4.0,
-            damage: BOSS_ACID_DAMAGE
+            damage: BOSS_ACID_DAMAGE,
+            type: 'acid',
+            isAcid: true,
+            impactColor: 0x39ff14
         });
     }
     
@@ -2167,10 +2389,65 @@ class BossEnemy {
     }
 }
 
+function clearSpiders() {
+    spiders.forEach(spider => spider.dispose());
+    spiders = [];
+}
+
+function isSpiderSpawnCellValid(x, z, selectedCells) {
+    if (activeMap[z][x] !== 0) return false;
+    if (x < SPIDER_PLAYER_START_SAFE_CELLS && z < SPIDER_PLAYER_START_SAFE_CELLS) return false;
+
+    return selectedCells.every(cell => {
+        const dx = x - cell.x;
+        const dz = z - cell.z;
+        return Math.sqrt(dx * dx + dz * dz) >= SPIDER_MIN_SEPARATION_CELLS;
+    });
+}
+
+function findSpiderSpawnCell(selectedCells) {
+    for (let attempt = 0; attempt < 120; attempt++) {
+        const z = Math.floor(Math.random() * activeMap.length);
+        const x = Math.floor(Math.random() * activeMap[z].length);
+        if (isSpiderSpawnCellValid(x, z, selectedCells)) {
+            return { x, z };
+        }
+    }
+
+    for (let z = 0; z < activeMap.length; z++) {
+        for (let x = 0; x < activeMap[z].length; x++) {
+            if (isSpiderSpawnCellValid(x, z, selectedCells)) {
+                return { x, z };
+            }
+        }
+    }
+
+    return null;
+}
+
+function spawnSpiders() {
+    clearSpiders();
+    if (currentLevel === 4) return;
+
+    const selectedCells = [];
+    while (selectedCells.length < SPIDER_SPAWN_COUNT) {
+        const cell = findSpiderSpawnCell(selectedCells);
+        if (!cell) break;
+        selectedCells.push(cell);
+    }
+
+    selectedCells.forEach(cell => {
+        const px = cell.x * GRID_SIZE + (Math.random() - 0.5) * GRID_SIZE * 0.25;
+        const pz = cell.z * GRID_SIZE + (Math.random() - 0.5) * GRID_SIZE * 0.25;
+        spiders.push(new CeilingSpider(px, pz));
+    });
+}
+
 // Spawnea zombis en posiciones vacías del mapa
 function spawnZombies() {
     zombies.forEach(z => scene.remove(z.group));
     zombies = [];
+    clearSpiders();
     
     // Limpiar jefe anterior si existe
     if (bossEnemy) {
@@ -2224,11 +2501,12 @@ function spawnZombies() {
             spawned++;
         }
     }
+    spawnSpiders();
     zombiesRemainingCount();
 }
 
 function zombiesRemainingCount() {
-    const aliveCount = zombies.filter(z => z.state === 'ALIVE').length;
+    const aliveCount = zombies.filter(z => z.state === 'ALIVE').length + spiders.filter(spider => spider.state === 'ALIVE').length;
     zombieCountEl.innerText = aliveCount;
     
     if (aliveCount === 0 && gameState === 'PLAYING') {
@@ -2636,6 +2914,11 @@ function shoot() {
             }
         }
     });
+    spiders.forEach(spider => {
+        if (spider.state === 'ALIVE') {
+            spider.hitMeshes.forEach(mesh => targets.push(mesh));
+        }
+    });
     
     if (bossEnemy && bossEnemy.state === 'ALIVE' && bossEnemy.bossMesh) {
         targets.push(bossEnemy.bossMesh);
@@ -2649,6 +2932,7 @@ function shoot() {
         const hitPoint = intersects[0].point;
         
         let hitZombie = null;
+        let hitSpider = null;
         let hitBoss = false;
         let isHeadshot = false;
         
@@ -2672,6 +2956,25 @@ function shoot() {
         }
         
         if (!hitBoss) {
+            for (let spider of spiders) {
+                if (spider.state !== 'ALIVE') continue;
+                let parent = hitObj;
+                let found = false;
+                while (parent) {
+                    if (parent === spider.group) {
+                        found = true;
+                        break;
+                    }
+                    parent = parent.parent;
+                }
+                if (found) {
+                    hitSpider = spider;
+                    break;
+                }
+            }
+        }
+
+        if (!hitBoss && !hitSpider) {
             for (let z of zombies) {
                 if (z.state === 'ALIVE') {
                     if (z.zombieMesh) {
@@ -2721,6 +3024,9 @@ function shoot() {
                 showFeedback("¡TIRO CRÍTICO AL JEFE!");
             }
             bossEnemy.damage(dmg, isHeadshot);
+            spawnBloodSpatter(hitPoint);
+        } else if (hitSpider) {
+            hitSpider.damage(activeWep.damage);
             spawnBloodSpatter(hitPoint);
         } else if (hitZombie) {
             let dmg = activeWep.damage;
@@ -2801,6 +3107,7 @@ async function startGame() {
     unlockedWeapons.glock = false;
     unlockedWeapons.m4 = false;
     wiringFixed = false;
+    clearSpiders();
     
     document.getElementById('level-display').innerText = `SECTOR C-14   |   NIVEL ${currentLevel}`;
 
@@ -3042,6 +3349,7 @@ function buyRations() {
 async function startNextLevel() {
     currentLevel++;
     document.getElementById('level-display').innerText = `SECTOR C-14   |   NIVEL ${currentLevel}`;
+    clearSpiders();
 
     // Reconstruir el mapa para el nuevo nivel
     clearCurrentMap();
@@ -3655,13 +3963,16 @@ function animate() {
         zombies.forEach(z => {
             z.update(deltaTime, player.position);
         });
+
+        spiders.forEach(spider => {
+            spider.update(deltaTime, player.position);
+        });
         
         // Actualizar jefe
         if (bossEnemy) {
             bossEnemy.update(deltaTime, player.position);
         }
         
-        // Actualizar proyectiles de ácido de los Spitters
         for (let i = acidProjectiles.length - 1; i >= 0; i--) {
             const proj = acidProjectiles[i];
             proj.mesh.position.add(proj.velocity);
@@ -3670,7 +3981,7 @@ function animate() {
             // Colisión con el jugador
             const distToPlayer = proj.mesh.position.distanceTo(camera.position);
             if (distToPlayer < 0.8) {
-                damagePlayer(proj.damage, true);
+                damagePlayer(proj.damage, proj.isAcid !== false);
                 scene.remove(proj.mesh);
                 acidProjectiles.splice(i, 1);
                 continue;
@@ -3702,10 +4013,10 @@ function animate() {
             }
             
             if (hitWall || proj.life <= 0) {
-                // Spawnear partículas de salpicadura verde
                 AudioSynth.playMetallicClick(900, 0.05, 0.08);
+                const impactColor = proj.impactColor || 0x39ff14;
                 for (let k = 0; k < 8; k++) {
-                    particles.push(new Particle(proj.mesh.position, 0x39ff14, 0.04 + Math.random()*0.03, 0.02));
+                    particles.push(new Particle(proj.mesh.position, impactColor, 0.04 + Math.random()*0.03, 0.02));
                 }
                 scene.remove(proj.mesh);
                 acidProjectiles.splice(i, 1);
