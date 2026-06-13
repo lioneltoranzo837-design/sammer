@@ -14,9 +14,17 @@ export class SoundSynth {
 
     init() {
         if (this.ctx) return;
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new AudioContextClass();
-        this.startHorrorMusic();
+        try {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (AudioContextClass) {
+                this.ctx = new AudioContextClass();
+                this.startHorrorMusic();
+            } else {
+                console.warn("Web Audio API no está soportada en este navegador.");
+            }
+        } catch (e) {
+            console.error("No se pudo inicializar el sintetizador de audio:", e);
+        }
     }
 
     startAmbientHum() {

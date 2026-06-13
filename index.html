@@ -3,6 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        // Capturador global de errores para mostrar en pantalla
+        window.addEventListener('error', function(event) {
+            let message = event.message || 'Error de carga de recurso o script (posible bloqueo de CORS)';
+            let source = event.filename || 'Desconocido';
+            let lineno = event.lineno || 0;
+            let colno = event.colno || 0;
+            let error = event.error;
+            
+            const errDiv = document.createElement('div');
+            errDiv.style.position = 'fixed';
+            errDiv.style.top = '10px';
+            errDiv.style.left = '10px';
+            errDiv.style.right = '10px';
+            errDiv.style.backgroundColor = 'rgba(150, 0, 0, 0.95)';
+            errDiv.style.color = '#fff';
+            errDiv.style.padding = '15px';
+            errDiv.style.border = '3px solid red';
+            errDiv.style.zIndex = '100000';
+            errDiv.style.fontFamily = 'monospace';
+            errDiv.style.fontSize = '12px';
+            errDiv.style.maxHeight = '80vh';
+            errDiv.style.overflowY = 'auto';
+            errDiv.style.whiteSpace = 'pre-wrap';
+            
+            let stack = error && error.stack ? error.stack : 'No hay stack trace disponible.';
+            errDiv.innerHTML = `<strong>ERROR DETECTADO:</strong><br>${message}<br><br><strong>Archivo:</strong> ${source}:${lineno}:${colno}<br><br><strong>Detalles / Stack:</strong><br>${stack}`;
+            document.body.appendChild(errDiv);
+        }, true);
+
+        window.addEventListener('unhandledrejection', function(event) {
+            const errDiv = document.createElement('div');
+            errDiv.style.position = 'fixed';
+            errDiv.style.top = '10px';
+            errDiv.style.left = '10px';
+            errDiv.style.right = '10px';
+            errDiv.style.backgroundColor = 'rgba(150, 0, 0, 0.95)';
+            errDiv.style.color = '#fff';
+            errDiv.style.padding = '15px';
+            errDiv.style.border = '3px solid red';
+            errDiv.style.zIndex = '100000';
+            errDiv.style.fontFamily = 'monospace';
+            errDiv.style.fontSize = '12px';
+            errDiv.style.maxHeight = '80vh';
+            errDiv.style.overflowY = 'auto';
+            errDiv.style.whiteSpace = 'pre-wrap';
+            
+            let reason = event.reason;
+            let message = reason && reason.message ? reason.message : reason;
+            let stack = reason && reason.stack ? reason.stack : 'No hay stack trace disponible.';
+            errDiv.innerHTML = `<strong>PROMESA RECHAZADA NO CONTROLADA:</strong><br>${message}<br><br><strong>Detalles / Stack:</strong><br>${stack}`;
+            document.body.appendChild(errDiv);
+        });
+    </script>
     <title>DREAD FACILITY - Doom-like 3D Horror Survival</title>
     <link rel="stylesheet" href="styles/styles.css">
     <!-- Google Fonts for retro industrial tech feeling -->
