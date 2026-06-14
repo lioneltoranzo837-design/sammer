@@ -66,6 +66,7 @@
     <!-- Three.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="src/GLTFLoader.js"></script>
+    <script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
     <script>
         // Redirect console.log and console.error to a custom HUD div for on-screen debugging.
         // Disabled by default; enable with ?debug=1 or ?debugLogs=1.
@@ -168,6 +169,11 @@
                 </ul>
             </div>
             <button id="start-btn" class="retro-btn">INICIAR OPERACIÓN</button>
+            <button id="nostr-connect-btn" class="retro-btn">Connect Nostr</button>
+            <div id="nostr-manual-section" style="display:none">
+                <input type="password" id="nostr-nsec-input" placeholder="nsec1..." />
+                <button id="nostr-nsec-btn" class="retro-btn">Ingresar nsec</button>
+            </div>
         </div>
     </div>
 
@@ -308,6 +314,6 @@
     </div>
 
     <!-- Main Game Script -->
-    <script type="module" src="src/main.js"></script>
+    <script type="module" src="src/main.js?v=202606140320"></script>
 </body>
 </html>

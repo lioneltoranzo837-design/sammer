@@ -4,6 +4,10 @@ export const victoryOverlay = document.getElementById('victory-overlay');
 export const startBtn = document.getElementById('start-btn');
 export const restartBtn = document.getElementById('restart-btn');
 export const winBtn = document.getElementById('win-btn');
+export const nostrConnectBtn = document.getElementById('nostr-connect-btn');
+export const nostrNsecInput = document.getElementById('nostr-nsec-input');
+export const nostrNsecBtn = document.getElementById('nostr-nsec-btn');
+export const nostrManualSection = document.getElementById('nostr-manual-section');
 
 export const healthVal = document.getElementById('health-value');
 export const healthBar = document.getElementById('health-bar');

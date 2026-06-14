@@ -3,3 +3,6 @@
 .omo/
 .claude/
 .vercel
+.env
+.playwright-mcp/
+.tmp/

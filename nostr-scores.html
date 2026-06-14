@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sammer Nostr Scores Viewer</title>
+    <script src="https://unpkg.com/nostr-tools/lib/nostr.bundle.js"></script>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #070a0d;
+            --panel: #11161c;
+            --border: #2d3945;
+            --text: #d8e1ea;
+            --muted: #8a9aaa;
+            --accent: #8ef0c8;
+            --danger: #ff7f7f;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background: radial-gradient(circle at top, #13202b 0%, var(--bg) 45%);
+            color: var(--text);
+        }
+
+        .page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 32px 20px 48px;
+        }
+
+        .panel {
+            background: rgba(17, 22, 28, 0.96);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 32px;
+            letter-spacing: 0.04em;
+        }
+
+        p {
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: bold;
+            color: var(--muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        input,
+        textarea,
+        button {
+            width: 100%;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            padding: 12px 14px;
+            background: #0b1015;
+            color: var(--text);
+            font: inherit;
+        }
+
+        textarea {
+            min-height: 110px;
+            resize: vertical;
+        }
+
+        button {
+            background: linear-gradient(180deg, #17303d 0%, #10242d 100%);
+            color: var(--accent);
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            filter: brightness(1.08);
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .status {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 8px;
+            background: #0b1015;
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+
+        .status.error {
+            color: var(--danger);
+        }
+
+        .status.success {
+            color: var(--accent);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            overflow: hidden;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 12px 10px;
+            border-bottom: 1px solid rgba(45, 57, 69, 0.8);
+            vertical-align: top;
+            font-size: 14px;
+        }
+
+        th {
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 12px;
+        }
+
+        code {
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        details {
+            margin-top: 8px;
+        }
+
+        .empty {
+            margin-top: 20px;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <section class="panel">
+            <h1>Sammer Nostr Scores</h1>
+            <p>
+                Esta página consulta eventos <code>kind: 78</code> publicados por el juego.
+                No busca notas públicas del feed, sino app data del score.
+            </p>
+
+            <div class="grid">
+                <div>
+                    <label for="npub-input">NPUB del juego o pubkey hex</label>
+                    <input id="npub-input" value="npub1lhv8jr5vgchudqx02l6c2guj4z3zh2fl7fsrqffsxrrd54gfj29s6msy42">
+                </div>
+
+                <div>
+                    <label for="limit-input">Límite</label>
+                    <input id="limit-input" type="number" min="1" max="200" value="50">
+                </div>
+            </div>
+
+            <div style="margin-top: 16px;">
+                <label for="relays-input">Relays (uno por línea)</label>
+                <textarea id="relays-input">wss://relay.damus.io
+wss://relay.nostr.band
+wss://nos.lol</textarea>
+            </div>
+
+            <div class="actions">
+                <button id="load-btn">Cargar leaderboard global</button>
+            </div>
+
+            <div id="status" class="status">Listo para consultar.</div>
+            <div id="results"></div>
+        </section>
+    </main>
+
+    <script>
+        const npubInput = document.getElementById('npub-input');
+        const limitInput = document.getElementById('limit-input');
+        const relaysInput = document.getElementById('relays-input');
+        const loadBtn = document.getElementById('load-btn');
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+
+        function setStatus(message, tone = '') {
+            statusEl.textContent = message;
+            statusEl.className = `status${tone ? ` ${tone}` : ''}`;
+        }
+
+        function normalizePubkey(value) {
+            const input = value.trim();
+            if (!input) {
+                throw new Error('Ingresa un npub o pubkey hex.');
+            }
+
+            if (input.startsWith('npub1')) {
+                const decoded = window.NostrTools.nip19.decode(input);
+                if (decoded.type !== 'npub') {
+                    throw new Error('El npub no es válido.');
+                }
+                return decoded.data;
+            }
+
+            if (/^[a-f0-9]{64}$/i.test(input)) {
+                return input.toLowerCase();
+            }
+
+            throw new Error('Formato inválido. Usa npub o pubkey hex de 64 caracteres.');
+        }
+
+        function parseRelays(value) {
+            return value
+                .split('\n')
+                .map((item) => item.trim())
+                .filter(Boolean);
+        }
+
+        function isSammerScoreEvent(event) {
+            return event.tags.some((tag) => tag[0] === 'game' && tag[1] === 'sammer')
+                || event.tags.some((tag) => tag[0] === 'd' && typeof tag[1] === 'string' && tag[1].startsWith('sammer-score-'));
+        }
+
+        function tagValue(event, key) {
+            return event.tags.find((tag) => tag[0] === key)?.[1] ?? '';
+        }
+
+        function renderResults(events) {
+            if (!events.length) {
+                resultsEl.innerHTML = '<div class="empty">No se encontraron publicaciones de score para este juego.</div>';
+                return;
+            }
+
+            const rows = events.map((event) => {
+                let parsedContent = {};
+                try {
+                    parsedContent = JSON.parse(event.content || '{}');
+                } catch (error) {
+                    parsedContent = {};
+                }
+
+                const score = tagValue(event, 'score') || parsedContent.score || '';
+                const level = tagValue(event, 'level') || parsedContent.level || '';
+                const timestamp = tagValue(event, 'timestamp') || parsedContent.timestamp || '';
+                const player = tagValue(event, 'player') || event.pubkey || '';
+                const date = new Date(event.created_at * 1000).toISOString();
+
+                return `
+                    <tr>
+                        <td>${date}</td>
+                        <td><code>${window.NostrTools.nip19.npubEncode(player)}</code></td>
+                        <td>${score}</td>
+                        <td>${level}</td>
+                        <td>${timestamp}</td>
+                        <td><code>${event.id}</code></td>
+                        <td>
+                            <details>
+                                <summary>Ver raw</summary>
+                                <pre>${escapeHtml(JSON.stringify(event, null, 2))}</pre>
+                            </details>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            resultsEl.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Jugador</th>
+                            <th>Score</th>
+                            <th>Level</th>
+                            <th>Timestamp</th>
+                            <th>Event ID</th>
+                            <th>Detalle</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            `;
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;');
+        }
+
+        async function loadScores() {
+            loadBtn.disabled = true;
+            resultsEl.innerHTML = '';
+
+            try {
+                const gamePubkey = normalizePubkey(npubInput.value);
+                const relays = parseRelays(relaysInput.value);
+                const limit = Number(limitInput.value || 50);
+
+                if (!relays.length) {
+                    throw new Error('Debes ingresar al menos un relay.');
+                }
+
+                setStatus('Consultando relays...', '');
+
+                const pool = new window.NostrTools.SimplePool();
+                const events = await pool.querySync(relays, {
+                    kinds: [78],
+                    '#p': [gamePubkey],
+                    limit
+                });
+                pool.close(relays);
+
+                const filteredEvents = (events || [])
+                    .filter(isSammerScoreEvent)
+                    .sort((a, b) => b.created_at - a.created_at);
+
+                renderResults(filteredEvents);
+                setStatus(`Consulta completa. Encontrados ${filteredEvents.length} eventos de Sammer.`, 'success');
+            } catch (error) {
+                console.error(error);
+                setStatus(error.message || 'No se pudo consultar los scores.', 'error');
+                resultsEl.innerHTML = '';
+            } finally {
+                loadBtn.disabled = false;
+            }
+        }
+
+        loadBtn.addEventListener('click', loadScores);
+    </script>
+</body>
+</html>

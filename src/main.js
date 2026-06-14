@@ -69,7 +69,11 @@ import {
     winBtn,
     zombieCountEl,
     bossHud,
-    bossHealthFill
+    bossHealthFill,
+    nostrConnectBtn,
+    nostrNsecInput,
+    nostrNsecBtn,
+    nostrManualSection
 } from './ui/dom.js';
 
 const { THREE } = window;
@@ -98,6 +102,15 @@ let currentLevel = 1;
 let activeMap = MAP;
 let supplyPoints = 0;
 let unlockedWeapons = { shotgun: true, glock: false, m4: false };
+
+let playerNostrPubkey = null;
+let playerNostrPrivateKey = null;
+const NOSTR_GAME_PUBKEY = 'fdd8790e8c462fc680cf57f5852392a8a22ba93ff26030253030c6da5509928b';
+const NOSTR_SCORE_RELAYS = [
+    'wss://relay.damus.io',
+    'wss://relay.nostr.band',
+    'wss://nos.lol'
+];
 
 // Variables para el Minijuego de Cableado
 let wiringFixed = false;
@@ -142,15 +155,15 @@ async function initEngine() {
     // Escena oscura con niebla densa de terror
     scene = new THREE.Scene();
     scene.fog = new THREE.FogExp2(0x050508, 0.08); // niebla grisácea/azulada oscura
-    
+
     // Cámara
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight - 110), 0.1, 1000);
     camera.position.copy(player.position);
     scene.add(camera);
-    
+
     // Reloj
     clock = new THREE.Clock();
-    
+
     // Renderizador con mejoras de calidad gráfica
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // HiDPI sin excederse
@@ -161,15 +174,15 @@ async function initEngine() {
     renderer.toneMappingExposure = 1.1;
     renderer.outputEncoding = THREE.sRGBEncoding; // Color encoding correcto
     document.getElementById('game-container').appendChild(renderer.domElement);
-    
+
     // Luz ambiental base muy tenue
     const ambientLight = new THREE.AmbientLight(0x0a0a14, 0.5);
     scene.add(ambientLight);
-    
+
     // Luz hemisférica para iluminación natural de relleno (cambia por bioma)
     hemisphereLight = new THREE.HemisphereLight(0x111122, 0x080810, 0.3);
     scene.add(hemisphereLight);
-    
+
     // Linterna acoplada a la cámara del jugador (SpotLight) - Potente y amplio rango
     const flashlight = new THREE.SpotLight(0xfff9e6, 3.2, 45, Math.PI / 3.8, 0.55, 0.9);
     flashlight.castShadow = true;
@@ -180,24 +193,24 @@ async function initEngine() {
     flashlight.shadow.bias = -0.0005;
     flashlight.shadow.radius = 2; // Sombras suavizadas
     camera.add(flashlight);
-    
+
     // Objetivo de la linterna (apunta al frente de la cámara)
     const flashTarget = new THREE.Object3D();
     flashTarget.position.set(0, 0, -1);
     camera.add(flashTarget);
     flashlight.target = flashTarget;
-    
+
     // Carga de Texturas procedimentales
     wallMaterialStandard = new THREE.MeshStandardMaterial({ map: generateWallTexture(0), roughness: 0.75, metalness: 0.25 });
     wallMaterialHazard = new THREE.MeshStandardMaterial({ map: generateWallTexture(1), roughness: 0.75, metalness: 0.25 });
     wallMaterialBlood = new THREE.MeshStandardMaterial({ map: generateWallTexture(2), roughness: 0.75, metalness: 0.25 });
     doorMaterial = new THREE.MeshStandardMaterial({ map: generateWallTexture(3), roughness: 0.6, metalness: 0.4 });
-    
+
     floorMaterial = new THREE.MeshStandardMaterial({ map: generateFloorTexture(), roughness: 0.9, metalness: 0.1 });
     ceilingMaterial = new THREE.MeshStandardMaterial({ map: generateCeilingTexture(), roughness: 0.8, metalness: 0.2 });
-    
+
     zombieFaceTexture = generateZombieFaceTexture();
-    
+
     // Carga del modelo de zombie GLB original en segundo plano
     try {
         console.log("Iniciando carga de modelo de zombie GLB original en segundo plano...");
@@ -206,12 +219,12 @@ async function initEngine() {
             'assets/Meshy_AI_1_0613035518_texture.glb',
             (gltf) => {
                 cachedZombieModel = gltf.scene;
-                
+
                 // Pre-calcular la escala y el offset de Y para optimizar instanciación
                 cachedZombieModel.updateMatrixWorld(true);
                 const box = new THREE.Box3().setFromObject(cachedZombieModel);
                 const size = box.getSize(new THREE.Vector3());
-                
+
                 // Proteger contra altura 0 o NaN
                 let height = size.y;
                 if (isNaN(height) || height < 0.01) {
@@ -221,11 +234,11 @@ async function initEngine() {
                 if (isNaN(zombieGLBScaleFactor) || !isFinite(zombieGLBScaleFactor)) {
                     zombieGLBScaleFactor = 1.0;
                 }
-                
+
                 // Aplicar escala al modelo base
                 cachedZombieModel.scale.set(zombieGLBScaleFactor, zombieGLBScaleFactor, zombieGLBScaleFactor);
                 cachedZombieModel.updateMatrixWorld(true);
-                
+
                 // Calcular el offset
                 const boxScaled = new THREE.Box3().setFromObject(cachedZombieModel);
                 zombieGLBBaseYOffset = -boxScaled.min.y;
@@ -242,7 +255,7 @@ async function initEngine() {
     } catch (err) {
         console.error("Error al inicializar el cargador GLTF:", err);
     }
-    
+
     // Carga del modelo del Jefe Final (Level 4) en segundo plano
     try {
         console.log("Iniciando carga de modelo de jefe GLB en segundo plano...");
@@ -251,11 +264,11 @@ async function initEngine() {
             'assets/Meshy_AI_Infernal_Ironclad_0613141919_texture.glb',
             (gltf) => {
                 cachedBossModel = gltf.scene;
-                
+
                 cachedBossModel.updateMatrixWorld(true);
                 const box = new THREE.Box3().setFromObject(cachedBossModel);
                 const size = box.getSize(new THREE.Vector3());
-                
+
                 let height = size.y;
                 if (isNaN(height) || height < 0.01) {
                     height = 4.0;
@@ -264,10 +277,10 @@ async function initEngine() {
                 if (isNaN(bossGLBScaleFactor) || !isFinite(bossGLBScaleFactor)) {
                     bossGLBScaleFactor = 1.0;
                 }
-                
+
                 cachedBossModel.scale.set(bossGLBScaleFactor, bossGLBScaleFactor, bossGLBScaleFactor);
                 cachedBossModel.updateMatrixWorld(true);
-                
+
                 const boxScaled = new THREE.Box3().setFromObject(cachedBossModel);
                 bossGLBBaseYOffset = -boxScaled.min.y;
                 if (isNaN(bossGLBBaseYOffset) || !isFinite(bossGLBBaseYOffset)) {
@@ -283,20 +296,130 @@ async function initEngine() {
     } catch (err) {
         console.error("Error al inicializar cargador GLTF del jefe:", err);
     }
-    
+
     // Construir el mapa
     buildMap3D();
     await addBloodWallMessages(scene);
-    
+
     // Ensamblar arma
     buildWeapon3D();
-    
+
     // Manejo de eventos
     window.addEventListener('resize', onWindowResize);
     setupControls();
-    
+
     // Bucle de renderizado
     animate();
+}
+
+function initNostrUI() {
+    nostrConnectBtn.addEventListener('click', async () => {
+        if (window.nostr) {
+            try {
+                const pubkey = await window.nostr.getPublicKey();
+                playerNostrPrivateKey = null;
+                playerNostrPubkey = pubkey;
+                nostrManualSection.style.display = 'none';
+                nostrNsecInput.value = '';
+                updateNostrButton();
+                showFeedback('NOSTR CONECTADO');
+            } catch (e) {
+                console.error('NIP-07 error:', e);
+                showManualSection();
+            }
+        } else {
+            showManualSection();
+        }
+    });
+
+    nostrNsecBtn.addEventListener('click', () => {
+        const nsec = nostrNsecInput.value.trim();
+        if (!nsec) return;
+
+        try {
+            const { nip19, getPublicKey } = window.NostrTools;
+            const decoded = nip19.decode(nsec);
+            if (decoded.type !== 'nsec') {
+                throw new Error('Expected nsec private key');
+            }
+
+            playerNostrPrivateKey = decoded.data;
+            playerNostrPubkey = getPublicKey(playerNostrPrivateKey);
+            nostrManualSection.style.display = 'none';
+            nostrNsecInput.value = '';
+            updateNostrButton();
+            showFeedback('NOSTR CONECTADO');
+        } catch (error) {
+            console.error('Manual Nostr login error:', error);
+            showFeedback('NSEC INVALIDO');
+        }
+    });
+}
+
+function showManualSection() {
+    nostrManualSection.style.display = 'block';
+}
+
+function updateNostrButton() {
+    const short = playerNostrPubkey ? playerNostrPubkey.substring(0, 8) + '...' : 'Not connected';
+    nostrConnectBtn.textContent = short;
+}
+
+async function publishScore() {
+    try {
+        if (!playerNostrPubkey) {
+            return;
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        const unsignedEvent = {
+            kind: 78,
+            content: JSON.stringify({
+                game: 'sammer',
+                score: supplyPoints,
+                level: currentLevel,
+                timestamp: now
+            }),
+            created_at: now,
+            tags: [
+                ['d', `sammer-score-${currentLevel}-${now}`],
+                ['game', 'sammer'],
+                ['p', NOSTR_GAME_PUBKEY],
+                ['p', playerNostrPubkey],
+                ['player', playerNostrPubkey],
+                ['score', supplyPoints.toString()],
+                ['level', currentLevel.toString()],
+                ['timestamp', now.toString()]
+            ],
+            pubkey: playerNostrPubkey
+        };
+
+        let signedEvent;
+        if (playerNostrPrivateKey) {
+            signedEvent = window.NostrTools.finalizeEvent(unsignedEvent, playerNostrPrivateKey);
+        } else if (typeof window.nostr?.signEvent === 'function') {
+            signedEvent = await window.nostr.signEvent(unsignedEvent);
+        } else {
+            throw new Error('No Nostr signer available for score publishing');
+        }
+
+        const pool = new window.NostrTools.SimplePool();
+        const publishResults = await Promise.allSettled(pool.publish(NOSTR_SCORE_RELAYS, signedEvent));
+        pool.close(NOSTR_SCORE_RELAYS);
+
+        const successfulPublishes = publishResults.filter(
+            (result) => result.status === 'fulfilled' && result.value === ''
+        );
+        if (successfulPublishes.length === 0) {
+            throw new Error('Failed to publish score to configured relays');
+        }
+
+        console.log('Score published:', signedEvent.id, publishResults);
+        showFeedback('PUNTAJE PUBLICADO EN NOSTR');
+    } catch (error) {
+        console.error('Publish score error:', error);
+        showFeedback('NO SE PUDO PUBLICAR EL PUNTAJE');
+    }
 }
 
 // --- CONSTRUCTOR DE MAPA ---
@@ -3219,6 +3342,10 @@ function triggerGameOver() {
     deathOverlay.classList.add('active');
     AudioSynth.stopHorrorMusic();
     AudioSynth.playLoseTune();
+
+    if (playerNostrPubkey) {
+        publishScore().catch(error => console.error('Publish score error:', error));
+    }
 }
 
 function triggerVictory() {
@@ -3252,6 +3379,11 @@ function triggerVictory() {
         updateShopButtons();
         document.getElementById('upgrade-overlay').classList.add('active');
         AudioSynth.playWinTune();
+
+        // Publicar puntuación si está logueado
+        if (playerNostrPubkey) {
+            publishScore().catch(e => console.error('Publish score error:', e));
+        }
     }
 }
 
@@ -3674,6 +3806,8 @@ function setupWiringCanvasEvents() {
 
 // --- BINDING DE CONTROLES ---
 function setupControls() {
+    initNostrUI();
+
     startBtn.addEventListener('click', startGame);
     restartBtn.addEventListener('click', startGame);
     winBtn.addEventListener('click', startGame);
