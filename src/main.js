@@ -35,6 +35,7 @@ import {
     getMapForLevel
 } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
+import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import {
     addBloodWallMessages,
     generateCeilingTexture,
@@ -784,9 +785,9 @@ function spawnLevelDecorations() {
 
 function createFacilityDecoration(px, pz) {
     const group = new THREE.Group();
-    const type = Math.floor(Math.random() * 4);
+    const type = pickFacilityDecorationType(Math.random());
     
-    if (type === 0) {
+    if (type === 'barrel') {
         // Barril tóxico
         const barrelGeo = new THREE.CylinderGeometry(0.35, 0.38, 1.0, 10);
         const barrelMat = new THREE.MeshStandardMaterial({
@@ -818,7 +819,7 @@ function createFacilityDecoration(px, pz) {
         const dripLight = new THREE.PointLight(0x44ff22, 0.3, 1.5);
         dripLight.position.copy(drip.position);
         group.add(dripLight);
-    } else if (type === 1) {
+    } else if (type === 'crate') {
         // Caja de suministros militar
         const crateGeo = new THREE.BoxGeometry(0.9, 0.6, 0.7);
         const crateMat = new THREE.MeshStandardMaterial({
@@ -839,18 +840,6 @@ function createFacilityDecoration(px, pz) {
         strip.position.y = 0.45;
         strip.rotation.y = crate.rotation.y;
         group.add(strip);
-    } else if (type === 2) {
-        // Tubería rota con vapor
-        const pipeGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.5, 8);
-        const pipeMat = new THREE.MeshStandardMaterial({
-            color: 0x555555, roughness: 0.4, metalness: 0.8
-        });
-        const pipe = new THREE.Mesh(pipeGeo, pipeMat);
-        const offset = (Math.random()-0.5) * 1.2;
-        pipe.position.set(px + offset, 1.25, pz + (Math.random()-0.5) * 0.5);
-        pipe.rotation.z = Math.PI / 2 + (Math.random()-0.5) * 0.15;
-        pipe.castShadow = true;
-        group.add(pipe);
     } else {
         // Cable colgante del techo
         const cableCount = 2 + Math.floor(Math.random() * 3);
