@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, getMapForLevel } from './config/gameConfig.js';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, GAME_PAYOUT_NWC_URI, getMapForLevel } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, computeCurrentJackpot, createEntryGateState } from './nostr/paymentGate.js';
@@ -41,7 +41,6 @@ const NOSTR_SCORE_RELAYS = [
     'wss://nos.lol'
 ];
 const ENTRY_FEE_SATS = 100;
-const GAME_PAYOUT_NSEC_STORAGE_KEY = 'sammerGamePayoutNsec';
 const JACKPOT_LEDGER_KIND = 30078;
 const STARTUP_LEADERBOARD_LIMIT = 5;
 // Variables para el Minijuego de Cableado
@@ -263,7 +262,7 @@ function updateNostrButton() {
 }
 function isGamePayoutReady() {
     try {
-        return Boolean(getGamePayoutPrivateKey()) && Boolean(window.webln);
+        return Boolean(getGamePayoutSecret());
     }
     catch {
         return false;
@@ -499,28 +498,80 @@ function signUnsignedNostrEvent(unsignedEvent) {
     }
     throw new Error('No hay firmador Nostr disponible para esta operación.');
 }
-function getGamePayoutPrivateKey() {
-    const configuredNsec = window.localStorage.getItem(GAME_PAYOUT_NSEC_STORAGE_KEY)?.trim();
-    if (!configuredNsec) {
+function getGamePayoutSecret() {
+    const configuredUri = GAME_PAYOUT_NWC_URI.trim();
+    if (!configuredUri) {
         return null;
     }
-    const decoded = window.NostrTools.nip19.decode(configuredNsec);
-    if (decoded.type !== 'nsec') {
-        throw new Error('La clave de payout del juego no es un nsec válido.');
+    const secretMatch = configuredUri.match(/[?&]secret=([^&]+)/);
+    if (!secretMatch?.[1]) {
+        throw new Error('La configuración NWC del payout no tiene secret.');
     }
-    const payoutPrivateKey = decoded.data;
-    const payoutPubkey = window.NostrTools.getPublicKey(payoutPrivateKey);
-    if (payoutPubkey !== NOSTR_GAME_PUBKEY) {
-        throw new Error('La clave de payout no coincide con el pubkey Nostr del juego.');
+    return decodeURIComponent(secretMatch[1]);
+}
+function parseGamePayoutNwcUri() {
+    const configuredUri = GAME_PAYOUT_NWC_URI.trim();
+    if (!configuredUri) {
+        throw new Error('La instancia no configuró un NWC para el payout del jackpot.');
     }
-    return payoutPrivateKey;
+    const walletPubkeyMatch = configuredUri.match(/^nostr\+walletconnect:\/\/([^?]+)/);
+    const relayMatch = configuredUri.match(/[?&]relay=([^&]+)/);
+    const secret = getGamePayoutSecret();
+    if (!walletPubkeyMatch?.[1] || !relayMatch?.[1] || !secret) {
+        throw new Error('La configuración NWC del payout está incompleta.');
+    }
+    return {
+        relay: decodeURIComponent(relayMatch[1]),
+        secret,
+        walletPubkey: walletPubkeyMatch[1],
+    };
 }
 function signGamePayoutEvent(unsignedEvent) {
-    const payoutPrivateKey = getGamePayoutPrivateKey();
-    if (!payoutPrivateKey) {
-        throw new Error('Falta configurar el nsec del juego en localStorage para pagar el jackpot.');
+    const payoutSecret = getGamePayoutSecret();
+    if (!payoutSecret) {
+        throw new Error('Falta configurar el NWC del juego para pagar el jackpot.');
     }
-    return window.NostrTools.finalizeEvent(unsignedEvent, payoutPrivateKey);
+    return window.NostrTools.finalizeEvent(unsignedEvent, payoutSecret);
+}
+async function sendGameNwcRequest(method, params) {
+    const { relay, secret, walletPubkey } = parseGamePayoutNwcUri();
+    const requesterPubkey = window.NostrTools.getPublicKey(secret);
+    const content = await window.NostrTools.nip04.encrypt(secret, walletPubkey, JSON.stringify({ method, params }));
+    const unsignedEvent = {
+        kind: 23194,
+        created_at: Math.floor(Date.now() / 1000),
+        content,
+        tags: [['p', walletPubkey]],
+        pubkey: requesterPubkey,
+    };
+    const signedEvent = window.NostrTools.finalizeEvent(unsignedEvent, secret);
+    const pool = new window.NostrTools.SimplePool();
+    try {
+        await Promise.allSettled(pool.publish([relay], signedEvent));
+        const responses = await pool.querySync([relay], {
+            kinds: [23195],
+            authors: [walletPubkey],
+            '#p': [requesterPubkey],
+            limit: 10,
+        });
+        const matchingResponse = (responses || [])
+            .sort((left, right) => right.created_at - left.created_at)
+            .find((response) => response.tags.some((tag) => tag[0] === 'e' && tag[1] === signedEvent.id));
+        if (!matchingResponse) {
+            throw new Error('La wallet NWC no devolvió respuesta al payout.');
+        }
+        const decryptedContent = await window.NostrTools.nip04.decrypt(secret, walletPubkey, matchingResponse.content);
+        const parsed = JSON.parse(decryptedContent);
+        if (parsed.error) {
+            throw new Error(parsed.error.message || 'La wallet NWC rechazó el payout.');
+        }
+        return parsed.result;
+    }
+    finally {
+        if (typeof pool.close === 'function') {
+            pool.close([relay]);
+        }
+    }
 }
 function buildJackpotLedgerEvent(type, amountSats) {
     const now = Math.floor(Date.now() / 1000);
@@ -646,13 +697,6 @@ async function loadCurrentJackpot() {
             return [receipt.id, description.pubkey];
         })
             .filter(Boolean));
-        const paidEntryEvents = (receipts || [])
-            .filter((receipt) => validReceiptPayers.has(receipt.id))
-            .map((receipt) => ({
-            amountSats: ENTRY_FEE_SATS,
-            createdAt: receipt.created_at || 0,
-            type: 'entry-loss',
-        }));
         const validClaimReceipts = new Map((receipts || [])
             .map((receipt) => {
             const description = parseZapDescription(receipt);
@@ -684,7 +728,22 @@ async function loadCurrentJackpot() {
                 && matchingClaim.winnerPubkey === event.playerPubkey
                 && matchingClaim.amountSats === event.amountSats;
         });
-        const jackpotState = computeCurrentJackpot([...paidEntryEvents, ...validatedClaimEvents]);
+        const countedReceiptIds = new Set();
+        const validatedLossEvents = parseJackpotLedgerEvents(events).filter((event) => {
+            if (event.type !== 'entry-loss' || !event.receiptId || !event.pubkey || !event.playerPubkey) {
+                return false;
+            }
+            const payerPubkey = validReceiptPayers.get(event.receiptId);
+            if (!payerPubkey || countedReceiptIds.has(event.receiptId)) {
+                return false;
+            }
+            const isMatchingPayer = event.pubkey === payerPubkey && event.playerPubkey === payerPubkey;
+            if (isMatchingPayer) {
+                countedReceiptIds.add(event.receiptId);
+            }
+            return isMatchingPayer;
+        });
+        const jackpotState = computeCurrentJackpot([...validatedLossEvents, ...validatedClaimEvents]);
         currentJackpotSats = jackpotState.currentPotSats;
         updateEntryGateUI();
     }
@@ -858,9 +917,6 @@ async function attemptJackpotPayout(amountSats) {
     if (typeof window.NostrTools?.nip57?.makeZapRequest !== 'function') {
         throw new Error('El bundle Nostr actual no soporta NIP-57 para payout.');
     }
-    if (!window.webln) {
-        throw new Error('Falta una wallet WebLN del operador para enviar el payout del jackpot.');
-    }
     const winnerZapConfig = await loadZapConfigurationForPubkey(playerNostrPubkey);
     const amountMillisats = amountSats * 1000;
     const signedZapRequest = signGamePayoutEvent(window.NostrTools.nip57.makeZapRequest({
@@ -874,8 +930,7 @@ async function attemptJackpotPayout(amountSats) {
     if (!invoiceData?.pr || typeof invoiceData.pr !== 'string') {
         throw new Error('No se pudo generar la factura del ganador para el payout zap.');
     }
-    await window.webln.enable();
-    await window.webln.sendPayment(invoiceData.pr);
+    await sendGameNwcRequest('pay_invoice', { invoice: invoiceData.pr });
     const pool = new window.NostrTools.SimplePool();
     try {
         const receipts = await pool.querySync(NOSTR_SCORE_RELAYS, {
@@ -3616,6 +3671,11 @@ function triggerGameOver() {
     AudioSynth.playLoseTune();
     if (playerNostrPubkey) {
         publishScore().catch(error => console.error('Publish score error:', error));
+    }
+    if (entryGateState.isPaid && entryGateState.verifiedReceiptId) {
+        publishJackpotLedgerEvent('entry-loss', ENTRY_FEE_SATS)
+            .then(() => loadCurrentJackpot())
+            .catch(error => console.error('Jackpot loss publish error:', error));
     }
     resetEntryGateState();
 }
