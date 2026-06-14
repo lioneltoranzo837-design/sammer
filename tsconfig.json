@@ -16,9 +16,5 @@
   "include": [
     "ts-src/**/*.ts",
     "ts-src/**/*.d.ts"
-  ],
-  "exclude": [
-    "ts-src/main.ts",
-    "ts-src/rendering/**/*.ts"
   ]
 }
