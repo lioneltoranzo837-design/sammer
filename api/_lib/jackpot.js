@@ -106,14 +106,50 @@ export function parseZapDescription(receipt) {
 }
 
 export function parseLedgerEvent(event) {
+    const rawType = event.tags.find((tag) => tag[0] === 'type')?.[1];
     return {
         amountSats: Number.parseInt(event.tags.find((tag) => tag[0] === 'amount')?.[1] || '0', 10),
         createdAt: Number.parseInt(event.tags.find((tag) => tag[0] === 'timestamp')?.[1] || String(event.created_at || 0), 10),
         playerPubkey: event.tags.find((tag) => tag[0] === 'player')?.[1] || '',
         pubkey: event.pubkey,
         receiptId: event.tags.find((tag) => tag[0] === 'receipt')?.[1] || '',
-        type: event.tags.find((tag) => tag[0] === 'type')?.[1] === 'jackpot-claim' ? 'jackpot-claim' : 'entry-loss',
+        type: rawType === 'jackpot-claim' ? 'jackpot-claim' : (rawType === 'claim-lock' ? 'claim-lock' : 'entry-loss'),
     };
+}
+
+export async function fetchGameZapConfig() {
+    const pool = createPool();
+
+    try {
+        const profileEvents = await pool.querySync(SCORE_RELAYS, {
+            authors: [getGamePubkey()],
+            kinds: [0],
+            limit: 1,
+        });
+        const profileEvent = (profileEvents || []).sort((left, right) => right.created_at - left.created_at)[0];
+        if (!profileEvent) {
+            throw new Error('Game metadata not found on configured relays.');
+        }
+
+        const profile = JSON.parse(profileEvent.content || '{}');
+        if (!profile.lud16 || typeof profile.lud16 !== 'string' || !profile.lud16.includes('@')) {
+            throw new Error('Game metadata does not expose a valid lud16.');
+        }
+
+        const [name, domain] = profile.lud16.split('@');
+        const lnurlUrl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString();
+        const response = await fetch(lnurlUrl);
+        const payload = await response.json();
+        if (!payload?.allowsNostr || !payload?.nostrPubkey) {
+            throw new Error('Game LNURL endpoint does not support Nostr zaps.');
+        }
+
+        return {
+            providerPubkey: payload.nostrPubkey,
+        };
+    } finally {
+        pool.close(SCORE_RELAYS);
+    }
 }
 
 export async function fetchReceiptById(receiptId) {
@@ -133,15 +169,28 @@ export async function verifyEntryReceipt(receiptId, expectedPlayerPubkey) {
         throw new Error('Receipt not found on configured relays.');
     }
 
+    if (!verifyEvent(receipt)) {
+        throw new Error('Receipt event signature is invalid.');
+    }
+
     const description = parseZapDescription(receipt);
     if (!description || description.kind !== 9734) {
         throw new Error('Receipt does not contain a valid zap request description.');
+    }
+
+    if (!verifyEvent(description)) {
+        throw new Error('Embedded zap request signature is invalid.');
     }
 
     const recipientTag = description.tags?.find((tag) => tag[0] === 'p')?.[1];
     const amountTag = description.tags?.find((tag) => tag[0] === 'amount')?.[1];
     const bolt11 = receipt.tags.find((tag) => tag[0] === 'bolt11')?.[1] || '';
     const playerPubkey = description.pubkey;
+    const zapConfig = await fetchGameZapConfig();
+
+    if (receipt.pubkey !== zapConfig.providerPubkey) {
+        throw new Error('Receipt was not signed by the game LNURL provider.');
+    }
 
     if (recipientTag !== getGamePubkey()) {
         throw new Error('Receipt is not addressed to the game wallet.');
@@ -201,6 +250,11 @@ export async function hasLossEventForReceipt(receiptId) {
     return events.some((event) => event.type === 'entry-loss' && event.receiptId === receiptId);
 }
 
+export async function hasClaimLockOrClaim(receiptId) {
+    const events = await listLedgerEvents();
+    return events.some((event) => (event.type === 'claim-lock' || event.type === 'jackpot-claim') && event.receiptId === receiptId);
+}
+
 export function verifyBossVictoryProof(victoryProof, playerPubkey, receiptId) {
     if (!victoryProof || typeof victoryProof !== 'object') {
         throw new Error('Missing boss victory proof event.');
@@ -235,6 +289,18 @@ export async function publishLossEvent(receiptId, playerPubkey) {
 
     try {
         const signedEvent = buildLedgerEvent('entry-loss', ENTRY_FEE_SATS, playerPubkey, receiptId);
+        await Promise.allSettled(pool.publish(SCORE_RELAYS, signedEvent));
+        return signedEvent.id;
+    } finally {
+        pool.close(SCORE_RELAYS);
+    }
+}
+
+export async function publishClaimLockEvent(receiptId, playerPubkey) {
+    const pool = createPool();
+
+    try {
+        const signedEvent = buildLedgerEvent('claim-lock', 0, playerPubkey, receiptId);
         await Promise.allSettled(pool.publish(SCORE_RELAYS, signedEvent));
         return signedEvent.id;
     } finally {

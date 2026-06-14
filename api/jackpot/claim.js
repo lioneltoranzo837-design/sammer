@@ -1,9 +1,11 @@
 import {
     computePotFromLedger,
     createWinnerInvoice,
+    hasClaimLockOrClaim,
     hasLossEventForReceipt,
     jsonResponse,
     listLedgerEvents,
+    publishClaimLockEvent,
     publishClaimEvent,
     readJsonBody,
     sendMethodNotAllowed,
@@ -29,7 +31,11 @@ export default async function handler(req, res) {
         if (await hasLossEventForReceipt(receiptId)) {
             throw new Error('This paid run already lost and cannot claim the jackpot.');
         }
+        if (await hasClaimLockOrClaim(receiptId)) {
+            throw new Error('This paid run already claimed or is currently claiming the jackpot.');
+        }
         verifyBossVictoryProof(victoryProof, winnerPubkey, receiptId);
+        await publishClaimLockEvent(receiptId, winnerPubkey);
 
         const events = await listLedgerEvents();
         const currentPotSats = computePotFromLedger(events);
