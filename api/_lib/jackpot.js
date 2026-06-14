@@ -1,6 +1,6 @@
 import { useWebSocketImplementation, SimplePool } from 'nostr-tools/pool';
-import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
-import { parseConnectionString, makeNwcRequestEvent } from 'nostr-tools/nip47';
+import { finalizeEvent, getPublicKey, verifyEvent } from 'nostr-tools/pure';
+import { nip47 } from 'nostr-tools';
 import { decrypt } from 'nostr-tools/nip04';
 import { getSatoshisAmountFromBolt11 } from 'nostr-tools/nip57';
 import WebSocket from 'ws';
@@ -36,7 +36,7 @@ function getGamePubkey() {
 }
 
 function getGameNwcConnection() {
-    return parseConnectionString(getRequiredEnv('SAMMER_GAME_NWC_URI'));
+    return nip47.parseConnectionString(getRequiredEnv('SAMMER_GAME_NWC_URI'));
 }
 
 function createPool() {
@@ -201,6 +201,35 @@ export async function hasLossEventForReceipt(receiptId) {
     return events.some((event) => event.type === 'entry-loss' && event.receiptId === receiptId);
 }
 
+export function verifyBossVictoryProof(victoryProof, playerPubkey, receiptId) {
+    if (!victoryProof || typeof victoryProof !== 'object') {
+        throw new Error('Missing boss victory proof event.');
+    }
+
+    if (!verifyEvent(victoryProof)) {
+        throw new Error('Boss victory proof signature is invalid.');
+    }
+
+    if (victoryProof.pubkey !== playerPubkey) {
+        throw new Error('Boss victory proof does not belong to the winner pubkey.');
+    }
+
+    if (victoryProof.kind !== 39001) {
+        throw new Error('Boss victory proof kind is invalid.');
+    }
+
+    const gameTag = victoryProof.tags.find((tag) => tag[0] === 'game')?.[1];
+    const resultTag = victoryProof.tags.find((tag) => tag[0] === 'result')?.[1];
+    const receiptTag = victoryProof.tags.find((tag) => tag[0] === 'receipt')?.[1];
+    const levelTag = victoryProof.tags.find((tag) => tag[0] === 'level')?.[1];
+
+    if (gameTag !== 'sammer' || resultTag !== 'boss-win' || receiptTag !== receiptId || levelTag !== '4') {
+        throw new Error('Boss victory proof tags are invalid.');
+    }
+
+    return true;
+}
+
 export async function publishLossEvent(receiptId, playerPubkey) {
     const pool = createPool();
 
@@ -217,7 +246,7 @@ export async function sendNwcPayInvoice(invoice) {
     const connection = getGameNwcConnection();
     const secretKey = hexToBytes(connection.secret);
     const clientPubkey = getPublicKey(secretKey);
-    const requestEvent = await makeNwcRequestEvent(connection.pubkey, secretKey, invoice);
+    const requestEvent = await nip47.makeNwcRequestEvent(connection.pubkey, secretKey, invoice);
     const pool = createPool();
 
     try {

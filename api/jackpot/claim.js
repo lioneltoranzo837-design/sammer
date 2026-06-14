@@ -1,6 +1,7 @@
 import {
     computePotFromLedger,
     createWinnerInvoice,
+    hasLossEventForReceipt,
     jsonResponse,
     listLedgerEvents,
     publishClaimEvent,
@@ -8,6 +9,8 @@ import {
     sendMethodNotAllowed,
     sendNwcPayInvoice,
     sendServerError,
+    verifyBossVictoryProof,
+    verifyEntryReceipt,
 } from '../_lib/jackpot.js';
 
 export default async function handler(req, res) {
@@ -17,10 +20,16 @@ export default async function handler(req, res) {
 
     try {
         const body = await readJsonBody(req);
-        const { winnerPubkey = '' } = body;
-        if (!winnerPubkey) {
-            throw new Error('winnerPubkey is required.');
+        const { winnerPubkey = '', receiptId = '', victoryProof = null } = body;
+        if (!winnerPubkey || !receiptId) {
+            throw new Error('winnerPubkey and receiptId are required.');
         }
+
+        await verifyEntryReceipt(receiptId, winnerPubkey);
+        if (await hasLossEventForReceipt(receiptId)) {
+            throw new Error('This paid run already lost and cannot claim the jackpot.');
+        }
+        verifyBossVictoryProof(victoryProof, winnerPubkey, receiptId);
 
         const events = await listLedgerEvents();
         const currentPotSats = computePotFromLedger(events);

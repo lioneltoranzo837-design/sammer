@@ -912,6 +912,25 @@ async function verifyEntryReceipt() {
     }
 }
 
+async function createBossVictoryProof() {
+    if (!playerNostrPubkey || !entryGateState.verifiedReceiptId) {
+        throw new Error('Missing verified paid run for boss victory proof.');
+    }
+
+    return signUnsignedNostrEvent({
+        kind: 39001,
+        created_at: Math.floor(Date.now() / 1000),
+        content: 'Sammer boss victory proof',
+        tags: [
+            ['game', 'sammer'],
+            ['result', 'boss-win'],
+            ['receipt', entryGateState.verifiedReceiptId],
+            ['level', '4'],
+        ],
+        pubkey: playerNostrPubkey,
+    });
+}
+
 async function attemptJackpotPayout(amountSats) {
     if (!playerNostrPubkey) {
         throw new Error('El ganador debe tener identidad Nostr conectada para cobrar el jackpot.');
@@ -921,10 +940,15 @@ async function attemptJackpotPayout(amountSats) {
         return { amountSats: 0, receiptId: '' };
     }
 
+    const victoryProof = await createBossVictoryProof();
     const response = await fetch('/api/jackpot/claim', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ winnerPubkey: playerNostrPubkey }),
+        body: JSON.stringify({
+            winnerPubkey: playerNostrPubkey,
+            receiptId: entryGateState.verifiedReceiptId,
+            victoryProof,
+        }),
     });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
