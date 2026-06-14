@@ -189,6 +189,92 @@ html, body {
     align-items: center;
 }
 
+.start-leaderboard-panel {
+    width: 100%;
+    margin-bottom: 24px;
+    padding: 16px 18px;
+    border: 1px solid rgba(0, 255, 65, 0.15);
+    background: linear-gradient(180deg, rgba(5, 16, 8, 0.92), rgba(4, 10, 6, 0.88));
+    box-shadow: inset 0 0 18px rgba(0, 255, 65, 0.06);
+    text-align: left;
+}
+
+.start-leaderboard-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+    margin-bottom: 12px;
+}
+
+.start-leaderboard-header h3 {
+    color: #00ff41;
+    font-size: 1rem;
+    letter-spacing: 2px;
+}
+
+.start-leaderboard-status {
+    color: #7eb78a;
+    font-size: 0.78rem;
+    letter-spacing: 1.4px;
+}
+
+.start-leaderboard-status[data-tone="error"] {
+    color: #ff8b8b;
+}
+
+.start-leaderboard-status[data-tone="success"] {
+    color: #b6ffbf;
+}
+
+.start-leaderboard-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.start-leaderboard-item,
+.start-leaderboard-empty {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr) 72px 92px;
+    gap: 10px;
+    align-items: center;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.32);
+    font-size: 0.82rem;
+}
+
+.start-leaderboard-empty {
+    display: block;
+    color: #8ea18f;
+    text-align: center;
+}
+
+.start-leaderboard-rank {
+    color: #ff6666;
+    font-weight: bold;
+    letter-spacing: 1px;
+}
+
+.start-leaderboard-player {
+    color: #e3efe5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.start-leaderboard-score {
+    color: #ffffff;
+    text-align: right;
+    font-weight: bold;
+}
+
+.start-leaderboard-level {
+    color: #99bf9f;
+    text-align: right;
+}
+
 .key {
     background-color: #333;
     border: 1px solid #555;

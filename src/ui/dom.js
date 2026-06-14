@@ -9,6 +9,9 @@ export const nostrConnectBtn = document.getElementById('nostr-connect-btn');
 export const nostrNsecInput = document.getElementById('nostr-nsec-input');
 export const nostrNsecBtn = document.getElementById('nostr-nsec-btn');
 export const nostrManualSection = document.getElementById('nostr-manual-section');
+export const startLeaderboardList = document.getElementById('start-leaderboard-list');
+export const startLeaderboardPanel = document.getElementById('start-leaderboard-panel');
+export const startLeaderboardStatus = document.getElementById('start-leaderboard-status');
 
 export const healthVal = document.getElementById('health-value');
 export const healthBar = document.getElementById('health-bar');

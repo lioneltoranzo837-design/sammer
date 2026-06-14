@@ -36,6 +36,8 @@ import {
 } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
+import { extractScoreboardEntries } from './nostr/scoreboardData.js';
+import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import {
     addBloodWallMessages,
     generateCeilingTexture,
@@ -74,7 +76,10 @@ import {
     nostrConnectBtn,
     nostrNsecInput,
     nostrNsecBtn,
-    nostrManualSection
+    nostrManualSection,
+    startLeaderboardList,
+    startLeaderboardPanel,
+    startLeaderboardStatus
 } from './ui/dom.js';
 
 const { THREE } = window;
@@ -112,6 +117,7 @@ const NOSTR_SCORE_RELAYS = [
     'wss://relay.nostr.band',
     'wss://nos.lol'
 ];
+const STARTUP_LEADERBOARD_LIMIT = 5;
 
 // Variables para el Minijuego de Cableado
 let wiringFixed = false;
@@ -364,6 +370,121 @@ function showManualSection() {
 function updateNostrButton() {
     const short = playerNostrPubkey ? playerNostrPubkey.substring(0, 8) + '...' : 'Not connected';
     nostrConnectBtn.textContent = short;
+}
+
+function setStartupLeaderboardStatus(message, tone) {
+    if (!startLeaderboardStatus) {
+        return;
+    }
+
+    startLeaderboardStatus.textContent = message;
+    startLeaderboardStatus.dataset.tone = tone;
+}
+
+function clearStartupLeaderboard() {
+    if (!startLeaderboardList) {
+        return;
+    }
+
+    startLeaderboardList.replaceChildren();
+}
+
+function formatStartupLeaderboardIdentity(playerPubkey) {
+    try {
+        if (typeof window.NostrTools?.nip19?.npubEncode === 'function' && /^[a-f0-9]{64}$/i.test(playerPubkey)) {
+            return shortenPlayerIdentity(window.NostrTools.nip19.npubEncode(playerPubkey));
+        }
+    } catch (error) {
+        console.error('Leaderboard identity format error:', error);
+    }
+
+    return shortenPlayerIdentity(playerPubkey);
+}
+
+function renderStartupLeaderboardRows(rows) {
+    if (!startLeaderboardList) {
+        return;
+    }
+
+    clearStartupLeaderboard();
+
+    if (rows.length === 0) {
+        const emptyItem = document.createElement('li');
+        emptyItem.className = 'start-leaderboard-empty';
+        emptyItem.textContent = 'SIN REGISTROS TODAVÍA';
+        startLeaderboardList.appendChild(emptyItem);
+        return;
+    }
+
+    rows.forEach((row) => {
+        const item = document.createElement('li');
+        item.className = 'start-leaderboard-item';
+
+        const rank = document.createElement('span');
+        rank.className = 'start-leaderboard-rank';
+        rank.textContent = row.rank;
+
+        const player = document.createElement('span');
+        player.className = 'start-leaderboard-player';
+        player.textContent = row.player;
+
+        const score = document.createElement('span');
+        score.className = 'start-leaderboard-score';
+        score.textContent = row.score;
+
+        const level = document.createElement('span');
+        level.className = 'start-leaderboard-level';
+        level.textContent = row.level;
+
+        item.append(rank, player, score, level);
+        startLeaderboardList.appendChild(item);
+    });
+}
+
+async function loadStartupLeaderboard() {
+    if (!startLeaderboardPanel) {
+        return;
+    }
+
+    if (typeof window.NostrTools?.SimplePool !== 'function') {
+        setStartupLeaderboardStatus('NOSTR TOOLS NO DISPONIBLE', 'error');
+        renderStartupLeaderboardRows([]);
+        return;
+    }
+
+    setStartupLeaderboardStatus('CONSULTANDO RELAYS...', 'loading');
+    clearStartupLeaderboard();
+
+    const pool = new window.NostrTools.SimplePool();
+
+    try {
+        const events = await pool.querySync(NOSTR_SCORE_RELAYS, {
+            kinds: [78],
+            '#p': [NOSTR_GAME_PUBKEY],
+            limit: STARTUP_LEADERBOARD_LIMIT * 4
+        });
+        const rows = buildStartupLeaderboardRows(
+            extractScoreboardEntries(events || []),
+            STARTUP_LEADERBOARD_LIMIT,
+            formatStartupLeaderboardIdentity
+        );
+
+        renderStartupLeaderboardRows(rows);
+
+        if (rows.length === 0) {
+            setStartupLeaderboardStatus('SIN SCORES PUBLICADOS AÚN', 'idle');
+        } else {
+            setStartupLeaderboardStatus(`TOP ${rows.length} OPERADORES EN NOSTR`, 'success');
+        }
+    } catch (error) {
+        console.error('Startup leaderboard error:', error);
+        renderStartupLeaderboardRows([]);
+        setStartupLeaderboardStatus('NO SE PUDO CARGAR EL SCOREBOARD', 'error');
+    } finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+    }
 }
 
 async function publishScore() {
@@ -3796,6 +3917,7 @@ function setupWiringCanvasEvents() {
 // --- BINDING DE CONTROLES ---
 function setupControls() {
     initNostrUI();
+    void loadStartupLeaderboard();
 
     startBtn.addEventListener('click', startGame);
     restartBtn.addEventListener('click', startGame);
