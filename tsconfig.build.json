@@ -4,13 +4,13 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "allowJs": true,
-    "checkJs": true,
-    "noEmit": true,
     "strict": true,
     "lib": ["ES2022", "DOM"],
     "skipLibCheck": true,
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    "rootDir": "ts-src",
+    "outDir": "src",
+    "declaration": false,
+    "sourceMap": false,
     "types": []
   },
   "include": [
