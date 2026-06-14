@@ -32,6 +32,7 @@ export const BOSS_SPEED_MULTIPLIER = 1.8;
 export const BOSS_RUSH_SPEED_MULTIPLIER = 3.6;
 export const BOSS_RUSH_DURATION = 3.0;
 export const BOSS_RUSH_INTERVAL = 15.0;
+export const GAME_PAYOUT_NWC_URI = '';
 
 // Configuración de Armamento
 export const WEAPONS = {
