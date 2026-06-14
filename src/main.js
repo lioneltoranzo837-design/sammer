@@ -36,6 +36,7 @@ import {
 } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
+import { canStartPaidRun, computeCurrentJackpot, createEntryGateState } from './nostr/paymentGate.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import {
@@ -77,6 +78,12 @@ import {
     nostrNsecInput,
     nostrNsecBtn,
     nostrManualSection,
+    entryGateInvoiceOutput,
+    entryGatePanel,
+    entryGatePayBtn,
+    entryGateStatus,
+    entryGateVerifyBtn,
+    jackpotValue,
     startLeaderboardList,
     startLeaderboardPanel,
     startLeaderboardStatus
@@ -117,6 +124,8 @@ const NOSTR_SCORE_RELAYS = [
     'wss://relay.nostr.band',
     'wss://nos.lol'
 ];
+const ENTRY_FEE_SATS = 100;
+const JACKPOT_LEDGER_KIND = 30078;
 const STARTUP_LEADERBOARD_LIMIT = 5;
 
 // Variables para el Minijuego de Cableado
@@ -125,6 +134,11 @@ let draggingWireIdx = -1;
 let mousePos = { x: 0, y: 0 };
 let leftSockets = [];
 let rightSockets = [];
+let entryGateState = createEntryGateState(ENTRY_FEE_SATS);
+let currentJackpotSats = 0;
+let pendingEntryZapRequest = null;
+let pendingEntryZapProviderPubkey = '';
+let pendingEntryZapSessionId = '';
 
 let isMouseDown = false;
 let autoFireTimer = 0;
@@ -370,6 +384,87 @@ function showManualSection() {
 function updateNostrButton() {
     const short = playerNostrPubkey ? playerNostrPubkey.substring(0, 8) + '...' : 'Not connected';
     nostrConnectBtn.textContent = short;
+    updateEntryGateUI();
+}
+
+function setJackpotValueDisplay(value) {
+    if (!jackpotValue) {
+        return;
+    }
+
+    jackpotValue.textContent = String(value);
+}
+
+function setEntryGateStatus(message, tone) {
+    if (!entryGateStatus) {
+        return;
+    }
+
+    entryGateStatus.textContent = message;
+    entryGateStatus.dataset.tone = tone;
+}
+
+function updateEntryGateUI() {
+    const startUnlocked = canStartPaidRun(entryGateState);
+
+    setJackpotValueDisplay(currentJackpotSats);
+
+    if (startBtn) startBtn.disabled = !startUnlocked;
+    if (restartBtn) restartBtn.disabled = !startUnlocked;
+    if (winBtn) winBtn.disabled = !startUnlocked;
+
+    if (entryGatePayBtn) {
+        entryGatePayBtn.disabled = !playerNostrPubkey || entryGateState.status === 'paying' || entryGateState.status === 'verifying';
+    }
+
+    if (entryGateVerifyBtn) {
+        entryGateVerifyBtn.disabled = !entryGateState.invoice || entryGateState.status === 'paying' || entryGateState.status === 'verifying';
+    }
+
+    if (entryGateInvoiceOutput) {
+        entryGateInvoiceOutput.value = entryGateState.invoice;
+        entryGateInvoiceOutput.hidden = !entryGateState.invoice;
+    }
+
+    if (!playerNostrPubkey) {
+        setEntryGateStatus('CONECTA NOSTR PARA GENERAR EL ZAP DE ENTRADA', 'idle');
+        return;
+    }
+
+    if (startUnlocked) {
+        setEntryGateStatus('ENTRADA VERIFICADA. OPERACIÓN DESBLOQUEADA.', 'success');
+        return;
+    }
+
+    if (entryGateState.status === 'invoice-ready') {
+        setEntryGateStatus('PAGA LA FACTURA Y LUEGO VERIFICA EL ZAP.', 'loading');
+        return;
+    }
+
+    if (entryGateState.status === 'paying') {
+        setEntryGateStatus('GENERANDO FACTURA ZAP DE 100 SATS...', 'loading');
+        return;
+    }
+
+    if (entryGateState.status === 'verifying') {
+        setEntryGateStatus('BUSCANDO RECIBO NOSTR DEL PAGO...', 'loading');
+        return;
+    }
+
+    if (entryGateState.status === 'error' && entryGateState.lastError) {
+        setEntryGateStatus(entryGateState.lastError, 'error');
+        return;
+    }
+
+    setEntryGateStatus('PAGA 100 SATS PARA DESBLOQUEAR LA OPERACIÓN', 'idle');
+}
+
+function resetEntryGateState() {
+    entryGateState = createEntryGateState(ENTRY_FEE_SATS);
+    pendingEntryZapRequest = null;
+    pendingEntryZapProviderPubkey = '';
+    pendingEntryZapSessionId = '';
+    updateEntryGateUI();
 }
 
 function setStartupLeaderboardStatus(message, tone) {
@@ -485,6 +580,312 @@ async function loadStartupLeaderboard() {
             pool.close(NOSTR_SCORE_RELAYS);
         }
     }
+}
+
+function parseLedgerAmount(event) {
+    const amount = Number.parseInt(event.tags.find((tag) => tag[0] === 'amount')?.[1] || '0', 10);
+    return Number.isFinite(amount) ? amount : 0;
+}
+
+function parseLedgerTimestamp(event) {
+    const taggedTimestamp = Number.parseInt(event.tags.find((tag) => tag[0] === 'timestamp')?.[1] || '0', 10);
+    if (Number.isFinite(taggedTimestamp) && taggedTimestamp > 0) {
+        return taggedTimestamp;
+    }
+
+    return event.created_at || 0;
+}
+
+function parseJackpotLedgerEvents(events) {
+    return (events || [])
+        .filter((event) => event.kind === JACKPOT_LEDGER_KIND)
+        .filter((event) => event.tags.some((tag) => tag[0] === 'ledger' && tag[1] === 'jackpot'))
+        .map((event) => ({
+            amountSats: parseLedgerAmount(event),
+            createdAt: parseLedgerTimestamp(event),
+            type: event.tags.find((tag) => tag[0] === 'type')?.[1] === 'jackpot-claim' ? 'jackpot-claim' : 'entry-loss'
+        }));
+}
+
+async function loadGameZapConfiguration() {
+    const pool = new window.NostrTools.SimplePool();
+
+    try {
+        const events = await pool.querySync(NOSTR_SCORE_RELAYS, {
+            authors: [NOSTR_GAME_PUBKEY],
+            kinds: [0],
+            limit: 1,
+        });
+        const profileEvent = (events || []).sort((left, right) => right.created_at - left.created_at)[0];
+
+        if (!profileEvent) {
+            throw new Error('El perfil Nostr del juego no publica metadata.');
+        }
+
+        const profile = JSON.parse(profileEvent.content || '{}');
+        if (!profile.lud16 || typeof profile.lud16 !== 'string' || !profile.lud16.includes('@')) {
+            throw new Error('El perfil del juego no publica un lud16 válido para zaps.');
+        }
+
+        const [name, domain] = profile.lud16.split('@');
+        const lnurlUrl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString();
+        const response = await fetch(lnurlUrl);
+        const lnurlData = await response.json();
+
+        if (!lnurlData?.allowsNostr || !lnurlData?.callback || !lnurlData?.nostrPubkey) {
+            throw new Error('El proveedor LNURL del juego no soporta zaps Nostr.');
+        }
+
+        return {
+            callback: lnurlData.callback,
+            providerPubkey: lnurlData.nostrPubkey,
+        };
+    } finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+    }
+}
+
+function signUnsignedNostrEvent(unsignedEvent) {
+    if (playerNostrPrivateKey) {
+        return Promise.resolve(window.NostrTools.finalizeEvent(unsignedEvent, playerNostrPrivateKey));
+    }
+
+    if (typeof window.nostr?.signEvent === 'function') {
+        return window.nostr.signEvent(unsignedEvent);
+    }
+
+    throw new Error('No hay firmador Nostr disponible para esta operación.');
+}
+
+function buildJackpotLedgerEvent(type, amountSats) {
+    const now = Math.floor(Date.now() / 1000);
+
+    return {
+        kind: JACKPOT_LEDGER_KIND,
+        content: JSON.stringify({
+            amountSats,
+            game: 'sammer',
+            receiptId: entryGateState.verifiedReceiptId,
+            sessionId: pendingEntryZapSessionId,
+            type,
+        }),
+        created_at: now,
+        tags: [
+            ['d', `sammer-jackpot-${type}-${now}`],
+            ['game', 'sammer'],
+            ['ledger', 'jackpot'],
+            ['type', type],
+            ['amount', String(amountSats)],
+            ['p', NOSTR_GAME_PUBKEY],
+            ['player', playerNostrPubkey || ''],
+            ['receipt', entryGateState.verifiedReceiptId],
+            ['timestamp', String(now)],
+        ],
+        pubkey: playerNostrPubkey,
+    };
+}
+
+async function publishJackpotLedgerEvent(type, amountSats) {
+    if (!playerNostrPubkey || !entryGateState.verifiedReceiptId) {
+        return;
+    }
+
+    const signedEvent = await signUnsignedNostrEvent(buildJackpotLedgerEvent(type, amountSats));
+    const pool = new window.NostrTools.SimplePool();
+
+    try {
+        const publishResults = await Promise.allSettled(pool.publish(NOSTR_SCORE_RELAYS, signedEvent));
+        const successfulPublishes = publishResults.filter((result) => result.status === 'fulfilled');
+        if (successfulPublishes.length === 0) {
+            throw new Error('No se pudo publicar el ledger del jackpot.');
+        }
+    } finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+    }
+}
+
+async function loadCurrentJackpot() {
+    if (typeof window.NostrTools?.SimplePool !== 'function' || !entryGatePanel) {
+        return;
+    }
+
+    const pool = new window.NostrTools.SimplePool();
+
+    try {
+        const events = await pool.querySync(NOSTR_SCORE_RELAYS, {
+            kinds: [JACKPOT_LEDGER_KIND],
+            '#p': [NOSTR_GAME_PUBKEY],
+            limit: 100,
+        });
+        const jackpotState = computeCurrentJackpot(parseJackpotLedgerEvents(events));
+        currentJackpotSats = jackpotState.currentPotSats;
+        updateEntryGateUI();
+    } catch (error) {
+        console.error('Jackpot ledger error:', error);
+    } finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+    }
+}
+
+async function requestEntryInvoice() {
+    if (!playerNostrPubkey) {
+        showFeedback('CONECTA NOSTR PRIMERO');
+        updateEntryGateUI();
+        return;
+    }
+
+    entryGateState.status = 'paying';
+    entryGateState.lastError = '';
+    entryGateState.invoice = '';
+    updateEntryGateUI();
+
+    try {
+        if (typeof window.NostrTools?.nip57?.makeZapRequest !== 'function') {
+            throw new Error('El bundle Nostr actual no soporta NIP-57.');
+        }
+
+        const zapConfig = await loadGameZapConfiguration();
+        const amountMillisats = ENTRY_FEE_SATS * 1000;
+        const zapRequest = window.NostrTools.nip57.makeZapRequest({
+            amount: amountMillisats,
+            comment: 'Sammer entry fee',
+            pubkey: NOSTR_GAME_PUBKEY,
+            relays: NOSTR_SCORE_RELAYS,
+        });
+        const signedZapRequest = await signUnsignedNostrEvent(zapRequest);
+        const response = await fetch(`${zapConfig.callback}?amount=${amountMillisats}&nostr=${encodeURIComponent(JSON.stringify(signedZapRequest))}`);
+        const invoiceData = await response.json();
+
+        if (!invoiceData?.pr || typeof invoiceData.pr !== 'string') {
+            throw new Error('El proveedor LNURL no devolvió una factura usable.');
+        }
+
+        pendingEntryZapRequest = signedZapRequest;
+        pendingEntryZapProviderPubkey = zapConfig.providerPubkey;
+        pendingEntryZapSessionId = `${playerNostrPubkey}-${Date.now()}`;
+        entryGateState.invoice = invoiceData.pr;
+        entryGateState.invoiceAmountSats = ENTRY_FEE_SATS;
+        entryGateState.status = 'invoice-ready';
+
+        if (window.webln) {
+            try {
+                await window.webln.enable();
+                await window.webln.sendPayment(invoiceData.pr);
+            } catch (error) {
+                console.error('WebLN payment error:', error);
+            }
+        }
+
+        showFeedback('FACTURA ZAP GENERADA');
+    } catch (error) {
+        console.error('Entry invoice error:', error);
+        entryGateState.status = 'error';
+        entryGateState.lastError = error.message || 'NO SE PUDO GENERAR LA FACTURA ZAP';
+    } finally {
+        updateEntryGateUI();
+    }
+}
+
+function parseZapDescription(receipt) {
+    const descriptionTag = receipt.tags.find((tag) => tag[0] === 'description')?.[1];
+
+    if (!descriptionTag) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(descriptionTag);
+    } catch {
+        return null;
+    }
+}
+
+function isMatchingEntryReceipt(receipt) {
+    if (!pendingEntryZapRequest || !pendingEntryZapProviderPubkey) {
+        return false;
+    }
+
+    if (receipt.pubkey !== pendingEntryZapProviderPubkey) {
+        return false;
+    }
+
+    if (typeof window.NostrTools?.nip57?.getSatoshisAmountFromBolt11 !== 'function') {
+        return false;
+    }
+
+    const description = parseZapDescription(receipt);
+    if (!description || description.kind !== 9734 || description.pubkey !== playerNostrPubkey) {
+        return false;
+    }
+
+    const recipientTag = description.tags?.find((tag) => tag[0] === 'p')?.[1];
+    const amountTag = description.tags?.find((tag) => tag[0] === 'amount')?.[1];
+    const invoiceTag = receipt.tags.find((tag) => tag[0] === 'bolt11')?.[1] || '';
+    const receiptAmount = window.NostrTools.nip57.getSatoshisAmountFromBolt11(invoiceTag);
+
+    return recipientTag === NOSTR_GAME_PUBKEY
+        && amountTag === String(ENTRY_FEE_SATS * 1000)
+        && receiptAmount === ENTRY_FEE_SATS;
+}
+
+async function verifyEntryReceipt() {
+    if (!entryGateState.invoice) {
+        entryGateState.status = 'error';
+        entryGateState.lastError = 'GENERA UNA FACTURA ZAP ANTES DE VERIFICAR.';
+        updateEntryGateUI();
+        return;
+    }
+
+    entryGateState.status = 'verifying';
+    entryGateState.lastError = '';
+    updateEntryGateUI();
+
+    const pool = new window.NostrTools.SimplePool();
+
+    try {
+        const receipts = await pool.querySync(NOSTR_SCORE_RELAYS, {
+            kinds: [9735],
+            '#p': [NOSTR_GAME_PUBKEY],
+            limit: 50,
+        });
+        const matchingReceipt = (receipts || [])
+            .sort((left, right) => right.created_at - left.created_at)
+            .find((receipt) => isMatchingEntryReceipt(receipt));
+
+        if (!matchingReceipt) {
+            throw new Error('Todavía no apareció un recibo zap válido en los relays.');
+        }
+
+        entryGateState.isPaid = true;
+        entryGateState.status = 'paid';
+        entryGateState.verifiedReceiptId = matchingReceipt.id;
+        showFeedback('ENTRADA VERIFICADA');
+    } catch (error) {
+        console.error('Verify entry receipt error:', error);
+        entryGateState.status = 'error';
+        entryGateState.lastError = error.message || 'NO SE PUDO VERIFICAR EL ZAP';
+    } finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+        updateEntryGateUI();
+    }
+}
+
+function handlePaidStart() {
+    if (!canStartPaidRun(entryGateState)) {
+        showFeedback('PAGA 100 SATS PARA INICIAR');
+        updateEntryGateUI();
+        return;
+    }
+
+    startGame();
 }
 
 async function publishScore() {
@@ -3456,6 +3857,14 @@ function triggerGameOver() {
     if (playerNostrPubkey) {
         publishScore().catch(error => console.error('Publish score error:', error));
     }
+
+    if (entryGateState.isPaid && entryGateState.verifiedReceiptId) {
+        publishJackpotLedgerEvent('entry-loss', ENTRY_FEE_SATS)
+            .then(() => loadCurrentJackpot())
+            .catch(error => console.error('Jackpot loss publish error:', error));
+    }
+
+    resetEntryGateState();
 }
 
 function triggerVictory() {
@@ -3476,9 +3885,17 @@ function triggerVictory() {
         if (titleEl) titleEl.innerText = "CAPÍTULO 1 COMPLETADO";
         if (subtitleEl) subtitleEl.innerText = "DERROTASTE AL INFERNAL IRONCLAD";
         if (msgEl) {
-            msgEl.innerHTML = "Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...";
+            msgEl.innerHTML = `Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.<br><br><strong>POZO RECLAMADO:</strong> ${currentJackpotSats} SATS.<br>Payout manual vía el operador del wallet receptor.<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
         }
         if (btnEl) btnEl.innerText = "VOLVER A JUGAR";
+
+        if (entryGateState.isPaid && entryGateState.verifiedReceiptId) {
+            publishJackpotLedgerEvent('jackpot-claim', currentJackpotSats)
+                .then(() => loadCurrentJackpot())
+                .catch(error => console.error('Jackpot claim publish error:', error));
+        }
+
+        resetEntryGateState();
         
         AudioSynth.playWinTune();
     } else {
@@ -3918,10 +4335,18 @@ function setupWiringCanvasEvents() {
 function setupControls() {
     initNostrUI();
     void loadStartupLeaderboard();
+    void loadCurrentJackpot();
+    updateEntryGateUI();
 
-    startBtn.addEventListener('click', startGame);
-    restartBtn.addEventListener('click', startGame);
-    winBtn.addEventListener('click', startGame);
+    startBtn.addEventListener('click', handlePaidStart);
+    restartBtn.addEventListener('click', handlePaidStart);
+    winBtn.addEventListener('click', handlePaidStart);
+    entryGatePayBtn?.addEventListener('click', () => {
+        void requestEntryInvoice();
+    });
+    entryGateVerifyBtn?.addEventListener('click', () => {
+        void verifyEntryReceipt();
+    });
     
     // Eventos de la tienda
     document.getElementById('buy-glock-btn').addEventListener('click', buyGlock);

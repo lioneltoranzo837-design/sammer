@@ -12,6 +12,12 @@ export const nostrManualSection = document.getElementById('nostr-manual-section'
 export const startLeaderboardList = document.getElementById('start-leaderboard-list');
 export const startLeaderboardPanel = document.getElementById('start-leaderboard-panel');
 export const startLeaderboardStatus = document.getElementById('start-leaderboard-status');
+export const entryGateInvoiceOutput = document.getElementById('entry-invoice-output');
+export const entryGatePanel = document.getElementById('entry-gate-panel');
+export const entryGatePayBtn = document.getElementById('entry-pay-btn');
+export const entryGateStatus = document.getElementById('entry-gate-status');
+export const entryGateVerifyBtn = document.getElementById('entry-verify-btn');
+export const jackpotValue = document.getElementById('jackpot-value');
 
 export const healthVal = document.getElementById('health-value');
 export const healthBar = document.getElementById('health-bar');
