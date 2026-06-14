@@ -39,6 +39,7 @@ import {
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, computeCurrentJackpot, createEntryGateState } from './nostr/paymentGate.js';
+import { resolveGamePayoutNwcUri } from './nostr/payoutConfig.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import {
@@ -682,7 +683,11 @@ function signUnsignedNostrEvent(unsignedEvent) {
 }
 
 function getGamePayoutSecret() {
-    const configuredUri = GAME_PAYOUT_NWC_URI.trim();
+    const configuredUri = resolveGamePayoutNwcUri(
+        GAME_PAYOUT_NWC_URI,
+        window.__SAMMER_CONFIG__?.gamePayoutNwcUri || '',
+        document.querySelector('meta[name="sammer-game-payout-nwc"]')?.getAttribute('content') || '',
+    );
     if (!configuredUri) {
         return null;
     }
@@ -696,7 +701,11 @@ function getGamePayoutSecret() {
 }
 
 function parseGamePayoutNwcUri() {
-    const configuredUri = GAME_PAYOUT_NWC_URI.trim();
+    const configuredUri = resolveGamePayoutNwcUri(
+        GAME_PAYOUT_NWC_URI,
+        window.__SAMMER_CONFIG__?.gamePayoutNwcUri || '',
+        document.querySelector('meta[name="sammer-game-payout-nwc"]')?.getAttribute('content') || '',
+    );
     if (!configuredUri) {
         throw new Error('La instancia no configuró un NWC para el payout del jackpot.');
     }

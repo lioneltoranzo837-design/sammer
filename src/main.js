@@ -4,6 +4,7 @@ import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WAL
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, computeCurrentJackpot, createEntryGateState } from './nostr/paymentGate.js';
+import { resolveGamePayoutNwcUri } from './nostr/payoutConfig.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import { addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture, generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture, generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture, generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture } from './rendering/textures.js';
@@ -499,7 +500,7 @@ function signUnsignedNostrEvent(unsignedEvent) {
     throw new Error('No hay firmador Nostr disponible para esta operación.');
 }
 function getGamePayoutSecret() {
-    const configuredUri = GAME_PAYOUT_NWC_URI.trim();
+    const configuredUri = resolveGamePayoutNwcUri(GAME_PAYOUT_NWC_URI, window.__SAMMER_CONFIG__?.gamePayoutNwcUri || '', document.querySelector('meta[name="sammer-game-payout-nwc"]')?.getAttribute('content') || '');
     if (!configuredUri) {
         return null;
     }
@@ -510,7 +511,7 @@ function getGamePayoutSecret() {
     return decodeURIComponent(secretMatch[1]);
 }
 function parseGamePayoutNwcUri() {
-    const configuredUri = GAME_PAYOUT_NWC_URI.trim();
+    const configuredUri = resolveGamePayoutNwcUri(GAME_PAYOUT_NWC_URI, window.__SAMMER_CONFIG__?.gamePayoutNwcUri || '', document.querySelector('meta[name="sammer-game-payout-nwc"]')?.getAttribute('content') || '');
     if (!configuredUri) {
         throw new Error('La instancia no configuró un NWC para el payout del jackpot.');
     }
