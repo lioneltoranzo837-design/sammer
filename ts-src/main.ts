@@ -389,6 +389,14 @@ function updateNostrButton() {
     updateEntryGateUI();
 }
 
+function isGamePayoutReady() {
+    try {
+        return Boolean(getGamePayoutPrivateKey()) && Boolean(window.webln);
+    } catch {
+        return false;
+    }
+}
+
 function setJackpotValueDisplay(value) {
     if (!jackpotValue) {
         return;
@@ -407,7 +415,8 @@ function setEntryGateStatus(message, tone) {
 }
 
 function updateEntryGateUI() {
-    const startUnlocked = canStartPaidRun(entryGateState);
+    const payoutReady = isGamePayoutReady();
+    const startUnlocked = canStartPaidRun(entryGateState) && payoutReady;
 
     setJackpotValueDisplay(currentJackpotSats);
 
@@ -428,6 +437,11 @@ function updateEntryGateUI() {
 
     if (!playerNostrPubkey) {
         setEntryGateStatus('CONECTA NOSTR PARA GENERAR EL ZAP DE ENTRADA', 'idle');
+        return;
+    }
+
+    if (!payoutReady) {
+        setEntryGateStatus('CONFIGURA EL SIGNER Y LA WALLET DEL JUEGO PARA HABILITAR EL JACKPOT.', 'error');
         return;
     }
 
@@ -834,24 +848,13 @@ async function loadCurrentJackpot() {
                 })
                 .filter(Boolean)
         );
-        const countedReceiptIds = new Set();
-        const validatedLossEvents = parseJackpotLedgerEvents(events).filter((event) => {
-            if (event.type !== 'entry-loss' || !event.receiptId || !event.pubkey || !event.playerPubkey) {
-                return false;
-            }
-
-            const payerPubkey = validReceiptPayers.get(event.receiptId);
-            if (!payerPubkey || countedReceiptIds.has(event.receiptId)) {
-                return false;
-            }
-
-            const isMatchingPayer = event.pubkey === payerPubkey && event.playerPubkey === payerPubkey;
-            if (isMatchingPayer) {
-                countedReceiptIds.add(event.receiptId);
-            }
-
-            return isMatchingPayer;
-        });
+        const paidEntryEvents = (receipts || [])
+            .filter((receipt) => validReceiptPayers.has(receipt.id))
+            .map((receipt) => ({
+                amountSats: ENTRY_FEE_SATS,
+                createdAt: receipt.created_at || 0,
+                type: 'entry-loss',
+            }));
         const validClaimReceipts = new Map(
             (receipts || [])
                 .map((receipt) => {
@@ -890,7 +893,7 @@ async function loadCurrentJackpot() {
                 && matchingClaim.winnerPubkey === event.playerPubkey
                 && matchingClaim.amountSats === event.amountSats;
         });
-        const jackpotState = computeCurrentJackpot([...validatedLossEvents, ...validatedClaimEvents]);
+        const jackpotState = computeCurrentJackpot([...paidEntryEvents, ...validatedClaimEvents]);
         currentJackpotSats = jackpotState.currentPotSats;
         updateEntryGateUI();
     } catch (error) {
@@ -4159,12 +4162,6 @@ function triggerGameOver() {
 
     if (playerNostrPubkey) {
         publishScore().catch(error => console.error('Publish score error:', error));
-    }
-
-    if (entryGateState.isPaid && entryGateState.verifiedReceiptId) {
-        publishJackpotLedgerEvent('entry-loss', ENTRY_FEE_SATS)
-            .then(() => loadCurrentJackpot())
-            .catch(error => console.error('Jackpot loss publish error:', error));
     }
 
     resetEntryGateState();
