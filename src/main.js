@@ -7,7 +7,7 @@ import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import { addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture, generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture, generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture, generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture } from './rendering/textures.js';
-import { ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg, healthBar, healthVal, menuOverlay, restartBtn, startBtn, victoryOverlay, winBtn, zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn, nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus, entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus } from './ui/dom.js';
+import { ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg, healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn, zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn, nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus, entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus } from './ui/dom.js';
 const { THREE } = window;
 // --- CONFIGURACIÓN DE THREE.JS ---
 let scene, camera, renderer;
@@ -3888,6 +3888,7 @@ function setupControls() {
     void loadStartupLeaderboard();
     void loadCurrentJackpot();
     updateEntryGateUI();
+    freeStartBtn.addEventListener('click', startGame);
     startBtn.addEventListener('click', handlePaidStart);
     restartBtn.addEventListener('click', handlePaidStart);
     winBtn.addEventListener('click', handlePaidStart);

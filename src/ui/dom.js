@@ -4,6 +4,7 @@ function getElementById(id) {
 export const menuOverlay = getElementById('menu-overlay');
 export const deathOverlay = getElementById('death-overlay');
 export const victoryOverlay = getElementById('victory-overlay');
+export const freeStartBtn = getElementById('free-start-btn');
 export const startBtn = getElementById('start-btn');
 export const restartBtn = getElementById('restart-btn');
 export const winBtn = getElementById('win-btn');
