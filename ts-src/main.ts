@@ -33,13 +33,11 @@ import {
     BOSS_RUSH_SPEED_MULTIPLIER,
     BOSS_RUSH_DURATION,
     BOSS_RUSH_INTERVAL,
-    GAME_PAYOUT_NWC_URI,
     getMapForLevel
 } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, computeCurrentJackpot, createEntryGateState } from './nostr/paymentGate.js';
-import { resolveGamePayoutNwcUri } from './nostr/payoutConfig.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import {
@@ -139,6 +137,7 @@ let leftSockets = [];
 let rightSockets = [];
 let entryGateState = createEntryGateState(ENTRY_FEE_SATS);
 let currentJackpotSats = 0;
+let jackpotBackendConfigured = false;
 let pendingEntryZapRequest = null;
 let pendingEntryZapProviderPubkey = '';
 let pendingEntryZapSessionId = '';
@@ -391,11 +390,7 @@ function updateNostrButton() {
 }
 
 function isGamePayoutReady() {
-    try {
-        return Boolean(getGamePayoutSecret());
-    } catch {
-        return false;
-    }
+    return jackpotBackendConfigured;
 }
 
 function setJackpotValueDisplay(value) {
@@ -682,102 +677,6 @@ function signUnsignedNostrEvent(unsignedEvent) {
     throw new Error('No hay firmador Nostr disponible para esta operación.');
 }
 
-function getGamePayoutSecret() {
-    const configuredUri = resolveGamePayoutNwcUri(
-        GAME_PAYOUT_NWC_URI,
-        window.__SAMMER_CONFIG__?.gamePayoutNwcUri || '',
-        document.querySelector('meta[name="sammer-game-payout-nwc"]')?.getAttribute('content') || '',
-    );
-    if (!configuredUri) {
-        return null;
-    }
-
-    const secretMatch = configuredUri.match(/[?&]secret=([^&]+)/);
-    if (!secretMatch?.[1]) {
-        throw new Error('La configuración NWC del payout no tiene secret.');
-    }
-
-    return decodeURIComponent(secretMatch[1]);
-}
-
-function parseGamePayoutNwcUri() {
-    const configuredUri = resolveGamePayoutNwcUri(
-        GAME_PAYOUT_NWC_URI,
-        window.__SAMMER_CONFIG__?.gamePayoutNwcUri || '',
-        document.querySelector('meta[name="sammer-game-payout-nwc"]')?.getAttribute('content') || '',
-    );
-    if (!configuredUri) {
-        throw new Error('La instancia no configuró un NWC para el payout del jackpot.');
-    }
-
-    const walletPubkeyMatch = configuredUri.match(/^nostr\+walletconnect:\/\/([^?]+)/);
-    const relayMatch = configuredUri.match(/[?&]relay=([^&]+)/);
-    const secret = getGamePayoutSecret();
-
-    if (!walletPubkeyMatch?.[1] || !relayMatch?.[1] || !secret) {
-        throw new Error('La configuración NWC del payout está incompleta.');
-    }
-
-    return {
-        relay: decodeURIComponent(relayMatch[1]),
-        secret,
-        walletPubkey: walletPubkeyMatch[1],
-    };
-}
-
-function signGamePayoutEvent(unsignedEvent) {
-    const payoutSecret = getGamePayoutSecret();
-    if (!payoutSecret) {
-        throw new Error('Falta configurar el NWC del juego para pagar el jackpot.');
-    }
-
-    return window.NostrTools.finalizeEvent(unsignedEvent, payoutSecret);
-}
-
-async function sendGameNwcRequest(method, params) {
-    const { relay, secret, walletPubkey } = parseGamePayoutNwcUri();
-    const requesterPubkey = window.NostrTools.getPublicKey(secret);
-    const content = await window.NostrTools.nip04.encrypt(secret, walletPubkey, JSON.stringify({ method, params }));
-    const unsignedEvent = {
-        kind: 23194,
-        created_at: Math.floor(Date.now() / 1000),
-        content,
-        tags: [['p', walletPubkey]],
-        pubkey: requesterPubkey,
-    };
-    const signedEvent = window.NostrTools.finalizeEvent(unsignedEvent, secret);
-    const pool = new window.NostrTools.SimplePool();
-
-    try {
-        await Promise.allSettled(pool.publish([relay], signedEvent));
-        const responses = await pool.querySync([relay], {
-            kinds: [23195],
-            authors: [walletPubkey],
-            '#p': [requesterPubkey],
-            limit: 10,
-        });
-        const matchingResponse = (responses || [])
-            .sort((left, right) => right.created_at - left.created_at)
-            .find((response) => response.tags.some((tag) => tag[0] === 'e' && tag[1] === signedEvent.id));
-
-        if (!matchingResponse) {
-            throw new Error('La wallet NWC no devolvió respuesta al payout.');
-        }
-
-        const decryptedContent = await window.NostrTools.nip04.decrypt(secret, walletPubkey, matchingResponse.content);
-        const parsed = JSON.parse(decryptedContent);
-        if (parsed.error) {
-            throw new Error(parsed.error.message || 'La wallet NWC rechazó el payout.');
-        }
-
-        return parsed.result;
-    } finally {
-        if (typeof pool.close === 'function') {
-            pool.close([relay]);
-        }
-    }
-}
-
 function buildJackpotLedgerEvent(type, amountSats) {
     const now = Math.floor(Date.now() / 1000);
 
@@ -806,181 +705,26 @@ function buildJackpotLedgerEvent(type, amountSats) {
     };
 }
 
-function buildJackpotClaimLedgerEvent(amountSats, payoutReceiptId, winnerPubkey) {
-    const now = Math.floor(Date.now() / 1000);
-
-    return {
-        kind: JACKPOT_LEDGER_KIND,
-        content: JSON.stringify({
-            amountSats,
-            game: 'sammer',
-            receiptId: payoutReceiptId,
-            type: 'jackpot-claim',
-            winnerPubkey,
-        }),
-        created_at: now,
-        tags: [
-            ['d', `sammer-jackpot-jackpot-claim-${now}`],
-            ['game', 'sammer'],
-            ['ledger', 'jackpot'],
-            ['type', 'jackpot-claim'],
-            ['amount', String(amountSats)],
-            ['p', NOSTR_GAME_PUBKEY],
-            ['player', winnerPubkey],
-            ['receipt', payoutReceiptId],
-            ['timestamp', String(now)],
-        ],
-        pubkey: NOSTR_GAME_PUBKEY,
-    };
-}
-
-async function publishJackpotLedgerEvent(type, amountSats) {
-    if (!playerNostrPubkey || !entryGateState.verifiedReceiptId) {
-        return;
-    }
-
-    const signedEvent = await signUnsignedNostrEvent(buildJackpotLedgerEvent(type, amountSats));
-    const pool = new window.NostrTools.SimplePool();
-
-    try {
-        const publishResults = await Promise.allSettled(pool.publish(NOSTR_SCORE_RELAYS, signedEvent));
-        const successfulPublishes = publishResults.filter((result) => result.status === 'fulfilled');
-        if (successfulPublishes.length === 0) {
-            throw new Error('No se pudo publicar el ledger del jackpot.');
-        }
-    } finally {
-        if (typeof pool.close === 'function') {
-            pool.close(NOSTR_SCORE_RELAYS);
-        }
-    }
-}
-
-async function publishJackpotClaimLedgerEvent(amountSats, payoutReceiptId, winnerPubkey) {
-    const signedEvent = signGamePayoutEvent(buildJackpotClaimLedgerEvent(amountSats, payoutReceiptId, winnerPubkey));
-    const pool = new window.NostrTools.SimplePool();
-
-    try {
-        const publishResults = await Promise.allSettled(pool.publish(NOSTR_SCORE_RELAYS, signedEvent));
-        const successfulPublishes = publishResults.filter((result) => result.status === 'fulfilled');
-        if (successfulPublishes.length === 0) {
-            throw new Error('No se pudo publicar el claim del jackpot.');
-        }
-    } finally {
-        if (typeof pool.close === 'function') {
-            pool.close(NOSTR_SCORE_RELAYS);
-        }
-    }
-}
-
 async function loadCurrentJackpot() {
-    if (typeof window.NostrTools?.SimplePool !== 'function' || !entryGatePanel) {
+    if (!entryGatePanel) {
         return;
     }
 
-    const pool = new window.NostrTools.SimplePool();
-
     try {
-        const zapConfig = await loadGameZapConfiguration();
-        const [events, receipts] = await Promise.all([
-            pool.querySync(NOSTR_SCORE_RELAYS, {
-                kinds: [JACKPOT_LEDGER_KIND],
-                '#p': [NOSTR_GAME_PUBKEY],
-                limit: 100,
-            }),
-            pool.querySync(NOSTR_SCORE_RELAYS, {
-                kinds: [9735],
-                limit: 200,
-            })
-        ]);
-        const validReceiptPayers = new Map(
-            (receipts || [])
-                .filter((receipt) => receipt.pubkey === zapConfig.providerPubkey)
-                .map((receipt) => {
-                    const description = parseZapDescription(receipt);
-                    if (!description || description.kind !== 9734) {
-                        return null;
-                    }
+        const response = await fetch('/api/jackpot/status');
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || 'No se pudo cargar el estado del jackpot.');
+        }
 
-                    const recipientTag = description.tags?.find((tag) => tag[0] === 'p')?.[1];
-                    const amountTag = description.tags?.find((tag) => tag[0] === 'amount')?.[1];
-                    const bolt11 = receipt.tags.find((tag) => tag[0] === 'bolt11')?.[1] || '';
-
-                    if (recipientTag !== NOSTR_GAME_PUBKEY
-                        || amountTag !== String(ENTRY_FEE_SATS * 1000)
-                        || typeof window.NostrTools?.nip57?.getSatoshisAmountFromBolt11 !== 'function'
-                        || window.NostrTools.nip57.getSatoshisAmountFromBolt11(bolt11) !== ENTRY_FEE_SATS) {
-                        return null;
-                    }
-
-                    return [receipt.id, description.pubkey];
-                })
-                .filter(Boolean)
-        );
-        const validClaimReceipts = new Map(
-            (receipts || [])
-                .map((receipt) => {
-                    const description = parseZapDescription(receipt);
-                    if (!description || description.kind !== 9734 || description.pubkey !== NOSTR_GAME_PUBKEY) {
-                        return null;
-                    }
-
-                    const recipientTag = description.tags?.find((tag) => tag[0] === 'p')?.[1];
-                    const amountTag = description.tags?.find((tag) => tag[0] === 'amount')?.[1];
-                    const bolt11 = receipt.tags.find((tag) => tag[0] === 'bolt11')?.[1] || '';
-
-                    if (!recipientTag
-                        || !amountTag
-                        || typeof window.NostrTools?.nip57?.getSatoshisAmountFromBolt11 !== 'function') {
-                        return null;
-                    }
-
-                    const receiptAmount = window.NostrTools.nip57.getSatoshisAmountFromBolt11(bolt11);
-                    const requestedAmount = Number.parseInt(amountTag, 10) / 1000;
-                    if (!Number.isFinite(requestedAmount) || receiptAmount !== requestedAmount) {
-                        return null;
-                    }
-
-                    return [receipt.id, { amountSats: receiptAmount, winnerPubkey: recipientTag }];
-                })
-                .filter(Boolean)
-        );
-        const validatedClaimEvents = parseJackpotLedgerEvents(events).filter((event) => {
-            if (event.type !== 'jackpot-claim' || event.pubkey !== NOSTR_GAME_PUBKEY || !event.playerPubkey || !event.receiptId) {
-                return false;
-            }
-
-            const matchingClaim = validClaimReceipts.get(event.receiptId);
-            return Boolean(matchingClaim)
-                && matchingClaim.winnerPubkey === event.playerPubkey
-                && matchingClaim.amountSats === event.amountSats;
-        });
-        const countedReceiptIds = new Set();
-        const validatedLossEvents = parseJackpotLedgerEvents(events).filter((event) => {
-            if (event.type !== 'entry-loss' || !event.receiptId || !event.pubkey || !event.playerPubkey) {
-                return false;
-            }
-
-            const payerPubkey = validReceiptPayers.get(event.receiptId);
-            if (!payerPubkey || countedReceiptIds.has(event.receiptId)) {
-                return false;
-            }
-
-            const isMatchingPayer = event.pubkey === payerPubkey && event.playerPubkey === payerPubkey;
-            if (isMatchingPayer) {
-                countedReceiptIds.add(event.receiptId);
-            }
-
-            return isMatchingPayer;
-        });
-        const jackpotState = computeCurrentJackpot([...validatedLossEvents, ...validatedClaimEvents]);
-        currentJackpotSats = jackpotState.currentPotSats;
+        jackpotBackendConfigured = Boolean(payload.configured);
+        currentJackpotSats = Number.isFinite(payload.currentPotSats) ? payload.currentPotSats : 0;
         updateEntryGateUI();
     } catch (error) {
         console.error('Jackpot ledger error:', error);
-    } finally {
-        if (typeof pool.close === 'function') {
-            pool.close(NOSTR_SCORE_RELAYS);
-        }
+        jackpotBackendConfigured = false;
+        currentJackpotSats = 0;
+        updateEntryGateUI();
     }
 }
 
@@ -1144,6 +888,17 @@ async function verifyEntryReceipt() {
         entryGateState.isPaid = true;
         entryGateState.status = 'paid';
         entryGateState.verifiedReceiptId = matchingReceipt.id;
+        const verifyResponse = await fetch('/api/jackpot/verify-zap', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ playerPubkey: playerNostrPubkey, receiptId: matchingReceipt.id }),
+        });
+        const verifyPayload = await verifyResponse.json();
+        if (!verifyResponse.ok || !verifyPayload.ok) {
+            throw new Error(verifyPayload.error || 'El backend no pudo verificar el zap de entrada.');
+        }
+
+        await loadCurrentJackpot();
         showFeedback('ENTRADA VERIFICADA');
     } catch (error) {
         console.error('Verify entry receipt error:', error);
@@ -1166,62 +921,22 @@ async function attemptJackpotPayout(amountSats) {
         return { amountSats: 0, receiptId: '' };
     }
 
-    if (typeof window.NostrTools?.nip57?.makeZapRequest !== 'function') {
-        throw new Error('El bundle Nostr actual no soporta NIP-57 para payout.');
+    const response = await fetch('/api/jackpot/claim', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ winnerPubkey: playerNostrPubkey }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || 'El backend no pudo ejecutar el payout del jackpot.');
     }
 
-    const winnerZapConfig = await loadZapConfigurationForPubkey(playerNostrPubkey);
-    const amountMillisats = amountSats * 1000;
-    const signedZapRequest = signGamePayoutEvent(window.NostrTools.nip57.makeZapRequest({
-        amount: amountMillisats,
-        comment: 'Sammer jackpot payout',
-        pubkey: playerNostrPubkey,
-        relays: NOSTR_SCORE_RELAYS,
-    }));
-    const response = await fetch(`${winnerZapConfig.callback}?amount=${amountMillisats}&nostr=${encodeURIComponent(JSON.stringify(signedZapRequest))}`);
-    const invoiceData = await response.json();
+    await loadCurrentJackpot();
 
-    if (!invoiceData?.pr || typeof invoiceData.pr !== 'string') {
-        throw new Error('No se pudo generar la factura del ganador para el payout zap.');
-    }
-
-    await sendGameNwcRequest('pay_invoice', { invoice: invoiceData.pr });
-
-    const pool = new window.NostrTools.SimplePool();
-
-    try {
-        const receipts = await pool.querySync(NOSTR_SCORE_RELAYS, {
-            kinds: [9735],
-            '#p': [playerNostrPubkey],
-            limit: 50,
-        });
-        const payoutReceipt = (receipts || [])
-            .sort((left, right) => right.created_at - left.created_at)
-            .find((receipt) => isMatchingPayoutReceipt(
-                receipt,
-                signedZapRequest,
-                invoiceData.pr,
-                playerNostrPubkey,
-                winnerZapConfig.providerPubkey,
-                amountSats,
-            ));
-
-        if (!payoutReceipt) {
-            throw new Error('No apareció el recibo zap del payout en los relays.');
-        }
-
-        await publishJackpotClaimLedgerEvent(amountSats, payoutReceipt.id, playerNostrPubkey);
-        await loadCurrentJackpot();
-
-        return {
-            amountSats,
-            receiptId: payoutReceipt.id,
-        };
-    } finally {
-        if (typeof pool.close === 'function') {
-            pool.close(NOSTR_SCORE_RELAYS);
-        }
-    }
+    return {
+        amountSats: payload.currentPotSats || amountSats,
+        receiptId: payload.claimEventId || '',
+    };
 }
 
 async function finalizeBossJackpotVictory(victoryMessageElement) {
@@ -4239,8 +3954,18 @@ function triggerGameOver() {
     }
 
     if (entryGateState.isPaid && entryGateState.verifiedReceiptId) {
-        publishJackpotLedgerEvent('entry-loss', ENTRY_FEE_SATS)
-            .then(() => loadCurrentJackpot())
+        fetch('/api/jackpot/report-loss', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ playerPubkey: playerNostrPubkey, receiptId: entryGateState.verifiedReceiptId }),
+        })
+            .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
+            .then(({ ok, payload }) => {
+                if (!ok || !payload.ok) {
+                    throw new Error(payload.error || 'El backend no pudo registrar la derrota.');
+                }
+                return loadCurrentJackpot();
+            })
             .catch(error => console.error('Jackpot loss publish error:', error));
     }
 

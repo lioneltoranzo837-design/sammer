@@ -1,0 +1,13 @@
+import { computePotFromLedger, jsonResponse, listLedgerEvents } from '../_lib/jackpot.js';
+
+export default async function handler(_req, res) {
+    try {
+        const events = await listLedgerEvents();
+        return jsonResponse(res, 200, {
+            configured: Boolean(process.env.SAMMER_GAME_NWC_URI && process.env.SAMMER_SERVER_SIGNER_NSEC_HEX && process.env.SAMMER_GAME_PUBKEY),
+            currentPotSats: computePotFromLedger(events),
+        });
+    } catch (error) {
+        return jsonResponse(res, 500, { error: error.message || 'Failed to load jackpot status.' });
+    }
+}
