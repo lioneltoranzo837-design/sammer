@@ -1,3 +1,4 @@
+// @ts-check
 export const menuOverlay = document.getElementById('menu-overlay');
 export const deathOverlay = document.getElementById('death-overlay');
 export const victoryOverlay = document.getElementById('victory-overlay');

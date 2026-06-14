@@ -1,3 +1,4 @@
+// @ts-check
 // --- CONFIGURACIÓN Y CONSTANTES DEL JUEGO ---
 export const GRID_SIZE = 4;
 export const WALL_HEIGHT = 4;
@@ -151,6 +152,9 @@ export const MAP4_BOSS = [
 
 export const MAP = MAP1; // Retrocompatibilidad
 
+/**
+ * @param {number} level
+ */
 export function getMapForLevel(level) {
     if (level === 2) return MAP2;
     if (level === 3) return MAP3;
