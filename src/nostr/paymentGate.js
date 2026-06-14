@@ -18,6 +18,7 @@ export function computeCurrentJackpot(events) {
     let lastClaimAt = 0;
     sortedEvents.forEach((event) => {
         if (event.type === 'jackpot-claim') {
+            currentPotSats = 0;
             lastClaimAt = event.createdAt;
             return;
         }

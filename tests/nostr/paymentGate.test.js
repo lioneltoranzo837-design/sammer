@@ -22,7 +22,7 @@ test('verified entry gate unlocks the run', () => {
     assert.equal(canStartPaidRun(state), true);
 });
 
-test('current jackpot reports accumulated validated loss events', () => {
+test('current jackpot resets after a validated claim', () => {
     const jackpot = computeCurrentJackpot([
         { type: 'entry-loss', amountSats: 100, createdAt: 10 },
         { type: 'entry-loss', amountSats: 100, createdAt: 20 },
@@ -32,7 +32,7 @@ test('current jackpot reports accumulated validated loss events', () => {
     ]);
 
     assert.deepEqual(jackpot, {
-        currentPotSats: 400,
+        currentPotSats: 200,
         lastClaimAt: 30,
     });
 });

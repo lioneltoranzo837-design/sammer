@@ -38,6 +38,7 @@ export function computeCurrentJackpot(events: JackpotLedgerEvent[]): { currentPo
 
     sortedEvents.forEach((event) => {
         if (event.type === 'jackpot-claim') {
+            currentPotSats = 0;
             lastClaimAt = event.createdAt;
             return;
         }

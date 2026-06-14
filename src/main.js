@@ -125,6 +125,7 @@ const NOSTR_SCORE_RELAYS = [
     'wss://nos.lol'
 ];
 const ENTRY_FEE_SATS = 100;
+const GAME_PAYOUT_NSEC_STORAGE_KEY = 'sammerGamePayoutNsec';
 const JACKPOT_LEDGER_KIND = 30078;
 const STARTUP_LEADERBOARD_LIMIT = 5;
 
@@ -608,12 +609,12 @@ function parseJackpotLedgerEvents(events) {
         }));
 }
 
-async function loadGameZapConfiguration() {
+async function loadZapConfigurationForPubkey(targetPubkey) {
     const pool = new window.NostrTools.SimplePool();
 
     try {
         const events = await pool.querySync(NOSTR_SCORE_RELAYS, {
-            authors: [NOSTR_GAME_PUBKEY],
+            authors: [targetPubkey],
             kinds: [0],
             limit: 1,
         });
@@ -639,6 +640,7 @@ async function loadGameZapConfiguration() {
 
         return {
             callback: lnurlData.callback,
+            profileEvent,
             providerPubkey: lnurlData.nostrPubkey,
         };
     } finally {
@@ -646,6 +648,10 @@ async function loadGameZapConfiguration() {
             pool.close(NOSTR_SCORE_RELAYS);
         }
     }
+}
+
+async function loadGameZapConfiguration() {
+    return loadZapConfigurationForPubkey(NOSTR_GAME_PUBKEY);
 }
 
 function signUnsignedNostrEvent(unsignedEvent) {
@@ -658,6 +664,35 @@ function signUnsignedNostrEvent(unsignedEvent) {
     }
 
     throw new Error('No hay firmador Nostr disponible para esta operación.');
+}
+
+function getGamePayoutPrivateKey() {
+    const configuredNsec = window.localStorage.getItem(GAME_PAYOUT_NSEC_STORAGE_KEY)?.trim();
+    if (!configuredNsec) {
+        return null;
+    }
+
+    const decoded = window.NostrTools.nip19.decode(configuredNsec);
+    if (decoded.type !== 'nsec') {
+        throw new Error('La clave de payout del juego no es un nsec válido.');
+    }
+
+    const payoutPrivateKey = decoded.data;
+    const payoutPubkey = window.NostrTools.getPublicKey(payoutPrivateKey);
+    if (payoutPubkey !== NOSTR_GAME_PUBKEY) {
+        throw new Error('La clave de payout no coincide con el pubkey Nostr del juego.');
+    }
+
+    return payoutPrivateKey;
+}
+
+function signGamePayoutEvent(unsignedEvent) {
+    const payoutPrivateKey = getGamePayoutPrivateKey();
+    if (!payoutPrivateKey) {
+        throw new Error('Falta configurar el nsec del juego en localStorage para pagar el jackpot.');
+    }
+
+    return window.NostrTools.finalizeEvent(unsignedEvent, payoutPrivateKey);
 }
 
 function buildJackpotLedgerEvent(type, amountSats) {
@@ -688,6 +723,34 @@ function buildJackpotLedgerEvent(type, amountSats) {
     };
 }
 
+function buildJackpotClaimLedgerEvent(amountSats, payoutReceiptId, winnerPubkey) {
+    const now = Math.floor(Date.now() / 1000);
+
+    return {
+        kind: JACKPOT_LEDGER_KIND,
+        content: JSON.stringify({
+            amountSats,
+            game: 'sammer',
+            receiptId: payoutReceiptId,
+            type: 'jackpot-claim',
+            winnerPubkey,
+        }),
+        created_at: now,
+        tags: [
+            ['d', `sammer-jackpot-jackpot-claim-${now}`],
+            ['game', 'sammer'],
+            ['ledger', 'jackpot'],
+            ['type', 'jackpot-claim'],
+            ['amount', String(amountSats)],
+            ['p', NOSTR_GAME_PUBKEY],
+            ['player', winnerPubkey],
+            ['receipt', payoutReceiptId],
+            ['timestamp', String(now)],
+        ],
+        pubkey: NOSTR_GAME_PUBKEY,
+    };
+}
+
 async function publishJackpotLedgerEvent(type, amountSats) {
     if (!playerNostrPubkey || !entryGateState.verifiedReceiptId) {
         return;
@@ -701,6 +764,23 @@ async function publishJackpotLedgerEvent(type, amountSats) {
         const successfulPublishes = publishResults.filter((result) => result.status === 'fulfilled');
         if (successfulPublishes.length === 0) {
             throw new Error('No se pudo publicar el ledger del jackpot.');
+        }
+    } finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+    }
+}
+
+async function publishJackpotClaimLedgerEvent(amountSats, payoutReceiptId, winnerPubkey) {
+    const signedEvent = signGamePayoutEvent(buildJackpotClaimLedgerEvent(amountSats, payoutReceiptId, winnerPubkey));
+    const pool = new window.NostrTools.SimplePool();
+
+    try {
+        const publishResults = await Promise.allSettled(pool.publish(NOSTR_SCORE_RELAYS, signedEvent));
+        const successfulPublishes = publishResults.filter((result) => result.status === 'fulfilled');
+        if (successfulPublishes.length === 0) {
+            throw new Error('No se pudo publicar el claim del jackpot.');
         }
     } finally {
         if (typeof pool.close === 'function') {
@@ -726,8 +806,7 @@ async function loadCurrentJackpot() {
             }),
             pool.querySync(NOSTR_SCORE_RELAYS, {
                 kinds: [9735],
-                '#p': [NOSTR_GAME_PUBKEY],
-                limit: 100,
+                limit: 200,
             })
         ]);
         const validReceiptPayers = new Map(
@@ -772,7 +851,45 @@ async function loadCurrentJackpot() {
 
             return isMatchingPayer;
         });
-        const jackpotState = computeCurrentJackpot(validatedLossEvents);
+        const validClaimReceipts = new Map(
+            (receipts || [])
+                .map((receipt) => {
+                    const description = parseZapDescription(receipt);
+                    if (!description || description.kind !== 9734 || description.pubkey !== NOSTR_GAME_PUBKEY) {
+                        return null;
+                    }
+
+                    const recipientTag = description.tags?.find((tag) => tag[0] === 'p')?.[1];
+                    const amountTag = description.tags?.find((tag) => tag[0] === 'amount')?.[1];
+                    const bolt11 = receipt.tags.find((tag) => tag[0] === 'bolt11')?.[1] || '';
+
+                    if (!recipientTag
+                        || !amountTag
+                        || typeof window.NostrTools?.nip57?.getSatoshisAmountFromBolt11 !== 'function') {
+                        return null;
+                    }
+
+                    const receiptAmount = window.NostrTools.nip57.getSatoshisAmountFromBolt11(bolt11);
+                    const requestedAmount = Number.parseInt(amountTag, 10) / 1000;
+                    if (!Number.isFinite(requestedAmount) || receiptAmount !== requestedAmount) {
+                        return null;
+                    }
+
+                    return [receipt.id, { amountSats: receiptAmount, winnerPubkey: recipientTag }];
+                })
+                .filter(Boolean)
+        );
+        const validatedClaimEvents = parseJackpotLedgerEvents(events).filter((event) => {
+            if (event.type !== 'jackpot-claim' || event.pubkey !== NOSTR_GAME_PUBKEY || !event.playerPubkey || !event.receiptId) {
+                return false;
+            }
+
+            const matchingClaim = validClaimReceipts.get(event.receiptId);
+            return Boolean(matchingClaim)
+                && matchingClaim.winnerPubkey === event.playerPubkey
+                && matchingClaim.amountSats === event.amountSats;
+        });
+        const jackpotState = computeCurrentJackpot([...validatedLossEvents, ...validatedClaimEvents]);
         currentJackpotSats = jackpotState.currentPotSats;
         updateEntryGateUI();
     } catch (error) {
@@ -887,6 +1004,32 @@ function isMatchingEntryReceipt(receipt) {
         && receiptAmount === ENTRY_FEE_SATS;
 }
 
+function isMatchingPayoutReceipt(receipt, signedZapRequest, invoice, winnerPubkey, providerPubkey, amountSats) {
+    if (receipt.pubkey !== providerPubkey) {
+        return false;
+    }
+
+    if (typeof window.NostrTools?.nip57?.getSatoshisAmountFromBolt11 !== 'function') {
+        return false;
+    }
+
+    const description = parseZapDescription(receipt);
+    if (!description || description.kind !== 9734 || description.pubkey !== NOSTR_GAME_PUBKEY) {
+        return false;
+    }
+
+    const recipientTag = description.tags?.find((tag) => tag[0] === 'p')?.[1];
+    const amountTag = description.tags?.find((tag) => tag[0] === 'amount')?.[1];
+    const invoiceTag = receipt.tags.find((tag) => tag[0] === 'bolt11')?.[1] || '';
+    const receiptAmount = window.NostrTools.nip57.getSatoshisAmountFromBolt11(invoiceTag);
+
+    return recipientTag === winnerPubkey
+        && amountTag === String(amountSats * 1000)
+        && invoiceTag === invoice
+        && description.id === signedZapRequest.id
+        && receiptAmount === amountSats;
+}
+
 async function verifyEntryReceipt() {
     if (!entryGateState.invoice) {
         entryGateState.status = 'error';
@@ -927,6 +1070,106 @@ async function verifyEntryReceipt() {
         if (typeof pool.close === 'function') {
             pool.close(NOSTR_SCORE_RELAYS);
         }
+        updateEntryGateUI();
+    }
+}
+
+async function attemptJackpotPayout(amountSats) {
+    if (!playerNostrPubkey) {
+        throw new Error('El ganador debe tener identidad Nostr conectada para cobrar el jackpot.');
+    }
+
+    if (amountSats <= 0) {
+        return { amountSats: 0, receiptId: '' };
+    }
+
+    if (typeof window.NostrTools?.nip57?.makeZapRequest !== 'function') {
+        throw new Error('El bundle Nostr actual no soporta NIP-57 para payout.');
+    }
+
+    if (!window.webln) {
+        throw new Error('Falta una wallet WebLN del operador para enviar el payout del jackpot.');
+    }
+
+    const winnerZapConfig = await loadZapConfigurationForPubkey(playerNostrPubkey);
+    const amountMillisats = amountSats * 1000;
+    const signedZapRequest = signGamePayoutEvent(window.NostrTools.nip57.makeZapRequest({
+        amount: amountMillisats,
+        comment: 'Sammer jackpot payout',
+        pubkey: playerNostrPubkey,
+        relays: NOSTR_SCORE_RELAYS,
+    }));
+    const response = await fetch(`${winnerZapConfig.callback}?amount=${amountMillisats}&nostr=${encodeURIComponent(JSON.stringify(signedZapRequest))}`);
+    const invoiceData = await response.json();
+
+    if (!invoiceData?.pr || typeof invoiceData.pr !== 'string') {
+        throw new Error('No se pudo generar la factura del ganador para el payout zap.');
+    }
+
+    await window.webln.enable();
+    await window.webln.sendPayment(invoiceData.pr);
+
+    const pool = new window.NostrTools.SimplePool();
+
+    try {
+        const receipts = await pool.querySync(NOSTR_SCORE_RELAYS, {
+            kinds: [9735],
+            '#p': [playerNostrPubkey],
+            limit: 50,
+        });
+        const payoutReceipt = (receipts || [])
+            .sort((left, right) => right.created_at - left.created_at)
+            .find((receipt) => isMatchingPayoutReceipt(
+                receipt,
+                signedZapRequest,
+                invoiceData.pr,
+                playerNostrPubkey,
+                winnerZapConfig.providerPubkey,
+                amountSats,
+            ));
+
+        if (!payoutReceipt) {
+            throw new Error('No apareció el recibo zap del payout en los relays.');
+        }
+
+        await publishJackpotClaimLedgerEvent(amountSats, payoutReceipt.id, playerNostrPubkey);
+        await loadCurrentJackpot();
+
+        return {
+            amountSats,
+            receiptId: payoutReceipt.id,
+        };
+    } finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+    }
+}
+
+async function finalizeBossJackpotVictory(victoryMessageElement) {
+    const baseMessage = 'Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.';
+
+    try {
+        if (entryGateState.isPaid && entryGateState.verifiedReceiptId && currentJackpotSats > 0) {
+            const payoutResult = await attemptJackpotPayout(currentJackpotSats);
+            if (victoryMessageElement) {
+                victoryMessageElement.innerHTML = `${baseMessage}<br><br><strong>ZAP ENVIADO:</strong> ${payoutResult.amountSats} SATS al ganador.<br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
+            }
+            showFeedback(`JACKPOT ENVIADO: ${payoutResult.amountSats} SATS`);
+            return;
+        }
+
+        if (victoryMessageElement) {
+            victoryMessageElement.innerHTML = `${baseMessage}<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
+        }
+    } catch (error) {
+        console.error('Jackpot payout error:', error);
+        if (victoryMessageElement) {
+            victoryMessageElement.innerHTML = `${baseMessage}<br><br><strong>PAYOUT PENDIENTE:</strong> ${currentJackpotSats} SATS. ${error.message}<br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
+        }
+        showFeedback('NO SE PUDO ENVIAR EL JACKPOT');
+    } finally {
+        resetEntryGateState();
         updateEntryGateUI();
     }
 }
@@ -3944,19 +4187,12 @@ function triggerVictory() {
         if (titleEl) titleEl.innerText = "CAPÍTULO 1 COMPLETADO";
         if (subtitleEl) subtitleEl.innerText = "DERROTASTE AL INFERNAL IRONCLAD";
         if (msgEl) {
-            msgEl.innerHTML = `Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.<br><br><strong>RECLAMO REGISTRADO:</strong> ${currentJackpotSats} SATS reportados.<br>Payout manual vía el operador del wallet receptor.<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
+            msgEl.innerHTML = 'Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.<br><br><strong>PROCESANDO JACKPOT...</strong>';
         }
         if (btnEl) btnEl.innerText = "VOLVER A JUGAR";
-
-        if (entryGateState.isPaid && entryGateState.verifiedReceiptId) {
-            publishJackpotLedgerEvent('jackpot-claim', currentJackpotSats)
-                .then(() => loadCurrentJackpot())
-                .catch(error => console.error('Jackpot claim publish error:', error));
-        }
-
-        resetEntryGateState();
         
         AudioSynth.playWinTune();
+        void finalizeBossJackpotVictory(msgEl);
     } else {
         // Ir a la tienda / refugio
         gameState = 'SHOP';
