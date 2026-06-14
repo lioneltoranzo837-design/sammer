@@ -410,8 +410,6 @@ function updateEntryGateUI() {
     setJackpotValueDisplay(currentJackpotSats);
 
     if (startBtn) startBtn.disabled = !startUnlocked;
-    if (restartBtn) restartBtn.disabled = !startUnlocked;
-    if (winBtn) winBtn.disabled = !startUnlocked;
 
     if (entryGatePayBtn) {
         entryGatePayBtn.disabled = !playerNostrPubkey || entryGateState.status === 'paying' || entryGateState.status === 'verifying';
@@ -556,7 +554,7 @@ async function loadStartupLeaderboard() {
         const events = await pool.querySync(NOSTR_SCORE_RELAYS, {
             kinds: [78],
             '#p': [NOSTR_GAME_PUBKEY],
-            limit: STARTUP_LEADERBOARD_LIMIT * 4
+            limit: 200
         });
         const rows = buildStartupLeaderboardRows(
             extractScoreboardEntries(events || []),
@@ -569,7 +567,7 @@ async function loadStartupLeaderboard() {
         if (rows.length === 0) {
             setStartupLeaderboardStatus('SIN SCORES PUBLICADOS AÚN', 'idle');
         } else {
-            setStartupLeaderboardStatus(`TOP ${rows.length} OPERADORES EN NOSTR`, 'success');
+            setStartupLeaderboardStatus(`MEJORES ${rows.length} SCORES REPORTADOS`, 'success');
         }
     } catch (error) {
         console.error('Startup leaderboard error:', error);
@@ -603,6 +601,9 @@ function parseJackpotLedgerEvents(events) {
         .map((event) => ({
             amountSats: parseLedgerAmount(event),
             createdAt: parseLedgerTimestamp(event),
+            playerPubkey: event.tags.find((tag) => tag[0] === 'player')?.[1] || '',
+            pubkey: event.pubkey,
+            receiptId: event.tags.find((tag) => tag[0] === 'receipt')?.[1] || '',
             type: event.tags.find((tag) => tag[0] === 'type')?.[1] === 'jackpot-claim' ? 'jackpot-claim' : 'entry-loss'
         }));
 }
@@ -716,12 +717,62 @@ async function loadCurrentJackpot() {
     const pool = new window.NostrTools.SimplePool();
 
     try {
-        const events = await pool.querySync(NOSTR_SCORE_RELAYS, {
-            kinds: [JACKPOT_LEDGER_KIND],
-            '#p': [NOSTR_GAME_PUBKEY],
-            limit: 100,
+        const zapConfig = await loadGameZapConfiguration();
+        const [events, receipts] = await Promise.all([
+            pool.querySync(NOSTR_SCORE_RELAYS, {
+                kinds: [JACKPOT_LEDGER_KIND],
+                '#p': [NOSTR_GAME_PUBKEY],
+                limit: 100,
+            }),
+            pool.querySync(NOSTR_SCORE_RELAYS, {
+                kinds: [9735],
+                '#p': [NOSTR_GAME_PUBKEY],
+                limit: 100,
+            })
+        ]);
+        const validReceiptPayers = new Map(
+            (receipts || [])
+                .filter((receipt) => receipt.pubkey === zapConfig.providerPubkey)
+                .map((receipt) => {
+                    const description = parseZapDescription(receipt);
+                    if (!description || description.kind !== 9734) {
+                        return null;
+                    }
+
+                    const recipientTag = description.tags?.find((tag) => tag[0] === 'p')?.[1];
+                    const amountTag = description.tags?.find((tag) => tag[0] === 'amount')?.[1];
+                    const bolt11 = receipt.tags.find((tag) => tag[0] === 'bolt11')?.[1] || '';
+
+                    if (recipientTag !== NOSTR_GAME_PUBKEY
+                        || amountTag !== String(ENTRY_FEE_SATS * 1000)
+                        || typeof window.NostrTools?.nip57?.getSatoshisAmountFromBolt11 !== 'function'
+                        || window.NostrTools.nip57.getSatoshisAmountFromBolt11(bolt11) !== ENTRY_FEE_SATS) {
+                        return null;
+                    }
+
+                    return [receipt.id, description.pubkey];
+                })
+                .filter(Boolean)
+        );
+        const countedReceiptIds = new Set();
+        const validatedLossEvents = parseJackpotLedgerEvents(events).filter((event) => {
+            if (event.type !== 'entry-loss' || !event.receiptId || !event.pubkey || !event.playerPubkey) {
+                return false;
+            }
+
+            const payerPubkey = validReceiptPayers.get(event.receiptId);
+            if (!payerPubkey || countedReceiptIds.has(event.receiptId)) {
+                return false;
+            }
+
+            const isMatchingPayer = event.pubkey === payerPubkey && event.playerPubkey === payerPubkey;
+            if (isMatchingPayer) {
+                countedReceiptIds.add(event.receiptId);
+            }
+
+            return isMatchingPayer;
         });
-        const jackpotState = computeCurrentJackpot(parseJackpotLedgerEvents(events));
+        const jackpotState = computeCurrentJackpot(validatedLossEvents);
         currentJackpotSats = jackpotState.currentPotSats;
         updateEntryGateUI();
     } catch (error) {
@@ -831,6 +882,8 @@ function isMatchingEntryReceipt(receipt) {
 
     return recipientTag === NOSTR_GAME_PUBKEY
         && amountTag === String(ENTRY_FEE_SATS * 1000)
+        && invoiceTag === entryGateState.invoice
+        && description.id === pendingEntryZapRequest.id
         && receiptAmount === ENTRY_FEE_SATS;
 }
 
@@ -880,6 +933,12 @@ async function verifyEntryReceipt() {
 
 function handlePaidStart() {
     if (!canStartPaidRun(entryGateState)) {
+        if (gameState === 'GAMEOVER' || gameState === 'VICTORY') {
+            deathOverlay.classList.remove('active');
+            victoryOverlay.classList.remove('active');
+            menuOverlay.classList.add('active');
+        }
+
         showFeedback('PAGA 100 SATS PARA INICIAR');
         updateEntryGateUI();
         return;
@@ -3885,7 +3944,7 @@ function triggerVictory() {
         if (titleEl) titleEl.innerText = "CAPÍTULO 1 COMPLETADO";
         if (subtitleEl) subtitleEl.innerText = "DERROTASTE AL INFERNAL IRONCLAD";
         if (msgEl) {
-            msgEl.innerHTML = `Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.<br><br><strong>POZO RECLAMADO:</strong> ${currentJackpotSats} SATS.<br>Payout manual vía el operador del wallet receptor.<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
+            msgEl.innerHTML = `Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.<br><br><strong>RECLAMO REGISTRADO:</strong> ${currentJackpotSats} SATS reportados.<br>Payout manual vía el operador del wallet receptor.<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
         }
         if (btnEl) btnEl.innerText = "VOLVER A JUGAR";
 
