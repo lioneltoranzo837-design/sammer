@@ -3,19 +3,16 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "allowJs": true,
     "strict": false,
     "noImplicitAny": false,
-    "lib": ["ES2022", "DOM"],
+    "allowJs": true,
     "skipLibCheck": true,
-    "rootDir": "ts-src",
-    "outDir": "src",
-    "declaration": false,
-    "sourceMap": false,
+    "lib": ["ES2022", "DOM"],
     "types": []
   },
   "include": [
-    "ts-src/**/*.ts",
-    "ts-src/**/*.d.ts"
+    "ts-src/main.ts",
+    "ts-src/rendering/**/*.ts",
+    "ts-src/types/runtime-*.d.ts"
   ]
 }

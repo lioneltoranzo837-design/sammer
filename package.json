@@ -5,7 +5,9 @@
   "scripts": {
     "build:ts": "tsc -p tsconfig.build.json",
     "test": "node --test",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "npm run typecheck:strict && npm run typecheck:runtime",
+    "typecheck:runtime": "tsc -p tsconfig.runtime.json --noEmit",
+    "typecheck:strict": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "typescript": "6.0.3"
