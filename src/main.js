@@ -2,12 +2,54 @@
 import { AudioSynth } from './audio/SoundSynth.js';
 import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, getMapForLevel } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
+<<<<<<< Updated upstream
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import { addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture, generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture, generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture, generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture } from './rendering/textures.js';
 import { ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg, healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn, zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn, nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus, entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus } from './ui/dom.js';
+=======
+import {
+    addBloodWallMessages,
+    generateCeilingTexture,
+    generateFloorTexture,
+    generateWallTexture,
+    generateZombieFaceTexture,
+    generateJungleWallTexture,
+    generateJungleFloorTexture,
+    generateJungleCeilingTexture,
+    generateMountainWallTexture,
+    generateMountainFloorTexture,
+    generateMountainCeilingTexture,
+    generateInfernalWallTexture,
+    generateInfernalFloorTexture,
+    generateInfernalCeilingTexture,
+    createNormalMapFromCanvas,
+    createRoughnessMapFromCanvas
+} from './rendering/textures.js';
+import {
+    ammoClipEl,
+    ammoReserveEl,
+    armorBar,
+    armorVal,
+    crosshair,
+    damageFlash,
+    deathOverlay,
+    feedbackMsg,
+    healthBar,
+    healthVal,
+    menuOverlay,
+    restartBtn,
+    startBtn,
+    victoryOverlay,
+    winBtn,
+    zombieCountEl,
+    bossHud,
+    bossHealthFill
+} from './ui/dom.js';
+
+>>>>>>> Stashed changes
 const { THREE } = window;
 // --- CONFIGURACIÓN DE THREE.JS ---
 let scene, camera, renderer;
@@ -78,6 +120,12 @@ let gunRecoilActive = false;
 let gunRecoilTimer = 0;
 let muzzleFlashSprite;
 let muzzleLight;
+<<<<<<< Updated upstream
+=======
+let playerFlashlight;
+let dustParticles;
+
+>>>>>>> Stashed changes
 // Estado del juego
 let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER, VICTORY
 // --- INICIALIZACIÓN DE LA ESCENA ---
@@ -102,12 +150,13 @@ async function initEngine() {
     renderer.outputEncoding = THREE.sRGBEncoding; // Color encoding correcto
     document.getElementById('game-container').appendChild(renderer.domElement);
     // Luz ambiental base muy tenue
-    const ambientLight = new THREE.AmbientLight(0x0a0a14, 0.5);
+    const ambientLight = new THREE.AmbientLight(0x0a0a14, 0.15);
     scene.add(ambientLight);
     // Luz hemisférica para iluminación natural de relleno (cambia por bioma)
-    hemisphereLight = new THREE.HemisphereLight(0x111122, 0x080810, 0.3);
+    hemisphereLight = new THREE.HemisphereLight(0x111122, 0x080810, 0.1);
     scene.add(hemisphereLight);
     // Linterna acoplada a la cámara del jugador (SpotLight) - Potente y amplio rango
+<<<<<<< Updated upstream
     const flashlight = new THREE.SpotLight(0xfff9e6, 3.2, 45, Math.PI / 3.8, 0.55, 0.9);
     flashlight.castShadow = true;
     flashlight.shadow.mapSize.width = 2048; // Sombras de alta resolución
@@ -117,10 +166,23 @@ async function initEngine() {
     flashlight.shadow.bias = -0.0005;
     flashlight.shadow.radius = 2; // Sombras suavizadas
     camera.add(flashlight);
+=======
+    playerFlashlight = new THREE.SpotLight(0xfff9e6, 5.0, 40, Math.PI / 4.5, 0.8, 1.5);
+    playerFlashlight.castShadow = true;
+    playerFlashlight.shadow.mapSize.width = 2048; // Sombras de alta resolución
+    playerFlashlight.shadow.mapSize.height = 2048;
+    playerFlashlight.shadow.camera.near = 0.5;
+    playerFlashlight.shadow.camera.far = 45;
+    playerFlashlight.shadow.bias = -0.0005;
+    playerFlashlight.shadow.radius = 2; // Sombras suavizadas
+    camera.add(playerFlashlight);
+    
+>>>>>>> Stashed changes
     // Objetivo de la linterna (apunta al frente de la cámara)
     const flashTarget = new THREE.Object3D();
     flashTarget.position.set(0, 0, -1);
     camera.add(flashTarget);
+<<<<<<< Updated upstream
     flashlight.target = flashTarget;
     // Carga de Texturas procedimentales
     wallMaterialStandard = new THREE.MeshStandardMaterial({ map: generateWallTexture(0), roughness: 0.75, metalness: 0.25 });
@@ -129,6 +191,89 @@ async function initEngine() {
     doorMaterial = new THREE.MeshStandardMaterial({ map: generateWallTexture(3), roughness: 0.6, metalness: 0.4 });
     floorMaterial = new THREE.MeshStandardMaterial({ map: generateFloorTexture(), roughness: 0.9, metalness: 0.1 });
     ceilingMaterial = new THREE.MeshStandardMaterial({ map: generateCeilingTexture(), roughness: 0.8, metalness: 0.2 });
+=======
+    playerFlashlight.target = flashTarget;
+    playerFlashlight.visible = false;
+    
+    // --- POLVO ATMOSFÉRICO ---
+    const particleCount = 2500;
+    const dustGeometry = new THREE.BufferGeometry();
+    const dustPositions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount * 3; i++) {
+        dustPositions[i] = (Math.random() - 0.5) * 50;
+    }
+    dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+    
+    const dustCanvas = document.createElement('canvas');
+    dustCanvas.width = 16;
+    dustCanvas.height = 16;
+    const dCtx = dustCanvas.getContext('2d');
+    const dGrad = dCtx.createRadialGradient(8, 8, 0, 8, 8, 8);
+    dGrad.addColorStop(0, 'rgba(255,255,255,0.4)');
+    dGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    dCtx.fillStyle = dGrad;
+    dCtx.fillRect(0,0,16,16);
+    const dustTex = new THREE.CanvasTexture(dustCanvas);
+
+    const dustMaterial = new THREE.PointsMaterial({
+        color: 0xcccccc,
+        size: 0.15,
+        map: dustTex,
+        transparent: true,
+        opacity: 0.4,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+    });
+    dustParticles = new THREE.Points(dustGeometry, dustMaterial);
+    scene.add(dustParticles);
+    
+    // Carga de Texturas procedimentales
+    const texWall0 = generateWallTexture(0);
+    const texWall1 = generateWallTexture(1);
+    const texWall2 = generateWallTexture(2);
+    const texWall3 = generateWallTexture(3);
+    const texFloor = generateFloorTexture();
+    const texCeiling = generateCeilingTexture();
+    
+    wallMaterialStandard = new THREE.MeshStandardMaterial({ 
+        map: texWall0, 
+        normalMap: createNormalMapFromCanvas(texWall0, 3.0),
+        roughnessMap: createRoughnessMapFromCanvas(texWall0, 1.2, 0.1),
+        metalness: 0.3 
+    });
+    wallMaterialHazard = new THREE.MeshStandardMaterial({ 
+        map: texWall1, 
+        normalMap: createNormalMapFromCanvas(texWall1, 2.5),
+        roughnessMap: createRoughnessMapFromCanvas(texWall1, 1.0, 0.2),
+        metalness: 0.3 
+    });
+    wallMaterialBlood = new THREE.MeshStandardMaterial({ 
+        map: texWall2, 
+        normalMap: createNormalMapFromCanvas(texWall2, 3.0),
+        roughnessMap: createRoughnessMapFromCanvas(texWall2, 2.0, -0.2), 
+        metalness: 0.2 
+    });
+    doorMaterial = new THREE.MeshStandardMaterial({ 
+        map: texWall3, 
+        normalMap: createNormalMapFromCanvas(texWall3, 1.5),
+        roughnessMap: createRoughnessMapFromCanvas(texWall3, 1.0, 0.0),
+        metalness: 0.5 
+    });
+    
+    floorMaterial = new THREE.MeshStandardMaterial({ 
+        map: texFloor, 
+        normalMap: createNormalMapFromCanvas(texFloor, 2.5),
+        roughnessMap: createRoughnessMapFromCanvas(texFloor, 1.5, -0.1), 
+        metalness: 0.1 
+    });
+    ceilingMaterial = new THREE.MeshStandardMaterial({ 
+        map: texCeiling, 
+        normalMap: createNormalMapFromCanvas(texCeiling, 1.0),
+        roughnessMap: createRoughnessMapFromCanvas(texCeiling, 0.8, 0.3),
+        metalness: 0.2 
+    });
+    
+>>>>>>> Stashed changes
     zombieFaceTexture = generateZombieFaceTexture();
     // Carga del modelo de zombie GLB original en segundo plano
     try {
@@ -1239,8 +1384,14 @@ function createFacilityDecoration(px, pz) {
         strip.position.y = 0.45;
         strip.rotation.y = crate.rotation.y;
         group.add(strip);
+<<<<<<< Updated upstream
     }
     else {
+=======
+    } else if (type === 2) {
+        // Los tubos voladores han sido eliminados a petición del usuario.
+    } else {
+>>>>>>> Stashed changes
         // Cable colgante del techo
         const cableCount = 2 + Math.floor(Math.random() * 3);
         for (let c = 0; c < cableCount; c++) {
@@ -2865,6 +3016,97 @@ function spawnSparkSpatter(pos) {
         particles.push(new Particle(pos, 0xffd700, 0.03 + Math.random() * 0.03, 0.02));
     }
 }
+<<<<<<< Updated upstream
+=======
+
+let sharedBulletMaterial = null;
+
+function spawnBulletDecal(pos, normal) {
+    if (!sharedBulletMaterial) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grad.addColorStop(0, 'rgba(0, 0, 0, 1.0)');
+        grad.addColorStop(0.3, 'rgba(15, 15, 15, 0.9)');
+        grad.addColorStop(0.7, 'rgba(30, 30, 30, 0.5)');
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 64, 64);
+        const tex = new THREE.CanvasTexture(canvas);
+        
+        sharedBulletMaterial = new THREE.MeshBasicMaterial({
+            map: tex,
+            transparent: true,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -4,
+            polygonOffsetUnits: -4
+        });
+    }
+
+    const size = 0.15 + Math.random() * 0.1;
+    const geometry = new THREE.PlaneGeometry(size, size);
+    
+    const decal = new THREE.Mesh(geometry, sharedBulletMaterial);
+    decal.position.copy(pos);
+    
+    // Usar lookAt para orientar con la normal
+    const dummyTarget = pos.clone().add(normal);
+    decal.lookAt(dummyTarget);
+    decal.rotation.z = Math.random() * Math.PI * 2;
+    
+    scene.add(decal);
+}
+
+let sharedBloodMaterial = null;
+
+function spawnBloodFloorDecal(pos) {
+    if (!sharedBloodMaterial) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 128;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        
+        for (let i = 0; i < 20; i++) {
+            const x = 64 + (Math.random() - 0.5) * 60;
+            const y = 64 + (Math.random() - 0.5) * 60;
+            const r = 5 + Math.random() * 25;
+            const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+            grad.addColorStop(0, 'rgba(90, 0, 0, 0.95)');
+            grad.addColorStop(1, 'rgba(50, 0, 0, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        const tex = new THREE.CanvasTexture(canvas);
+        
+        sharedBloodMaterial = new THREE.MeshStandardMaterial({
+            map: tex,
+            transparent: true,
+            roughness: 0.1, 
+            metalness: 0.2,
+            depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -4,
+            polygonOffsetUnits: -4
+        });
+    }
+
+    const size = 1.5 + Math.random() * 1.5;
+    const geometry = new THREE.PlaneGeometry(size, size);
+    
+    const decal = new THREE.Mesh(geometry, sharedBloodMaterial);
+    decal.position.set(pos.x, -1.98, pos.z);
+    decal.rotation.x = -Math.PI / 2;
+    decal.rotation.z = Math.random() * Math.PI * 2;
+    
+    scene.add(decal);
+}
+
+>>>>>>> Stashed changes
 // --- COLISIONES JUGADOR ---
 function checkCollisions(newX, newZ) {
     let resolvedX = newX;
@@ -3017,6 +3259,17 @@ function showFeedback(text) {
         feedbackMsg.classList.remove('active');
     }, 2500);
 }
+<<<<<<< Updated upstream
+=======
+
+function toggleFlashlight() {
+    if (playerFlashlight) {
+        playerFlashlight.visible = !playerFlashlight.visible;
+        showFeedback(playerFlashlight.visible ? "LINTERNA: ENCENDIDA" : "LINTERNA: APAGADA");
+    }
+}
+
+>>>>>>> Stashed changes
 // --- ACCIÓN: INTERACTUAR ---
 function tryOpenDoor() {
     // 1. Evaluar si estamos frente a una compuerta neumática normal
@@ -3286,12 +3539,17 @@ function shoot() {
             }
             bossEnemy.damage(dmg, isHeadshot);
             spawnBloodSpatter(hitPoint);
+<<<<<<< Updated upstream
         }
         else if (hitSpider) {
             hitSpider.damage(activeWep.damage);
             spawnBloodSpatter(hitPoint);
         }
         else if (hitZombie) {
+=======
+            spawnBloodFloorDecal(hitPoint);
+        } else if (hitZombie) {
+>>>>>>> Stashed changes
             let dmg = activeWep.damage;
             if (isHeadshot) {
                 dmg = dmg * 3; // Triple daño por headshot
@@ -3299,9 +3557,18 @@ function shoot() {
             }
             hitZombie.damage(dmg);
             spawnBloodSpatter(hitPoint);
+<<<<<<< Updated upstream
         }
         else {
+=======
+            spawnBloodFloorDecal(hitPoint);
+        } else {
+>>>>>>> Stashed changes
             spawnSparkSpatter(hitPoint);
+            if (intersects[0].face) {
+                const normal = intersects[0].face.normal.clone().transformDirection(hitObj.matrixWorld);
+                spawnBulletDecal(hitPoint, normal);
+            }
         }
     }
     crosshair.classList.add('firing');
@@ -3925,6 +4192,7 @@ function setupControls() {
         const k = e.key.toUpperCase();
         keyboard[k] = true;
         if (gameState === 'PLAYING') {
+<<<<<<< Updated upstream
             if (k === 'R')
                 reload();
             if (k === 'E')
@@ -3935,6 +4203,15 @@ function setupControls() {
                 switchWeapon('glock');
             if (k === '3')
                 switchWeapon('m4');
+=======
+            if (k === 'R') reload();
+            if (k === 'F') toggleFlashlight();
+            if (k === 'E') tryOpenDoor();
+            if (k === '1') switchWeapon('shotgun');
+            if (k === '2') switchWeapon('glock');
+            if (k === '3') switchWeapon('m4');
+            
+>>>>>>> Stashed changes
             // Cheat code para saltar nivel
             if (k === 'K') {
                 if (currentLevel < 4) {
@@ -4225,6 +4502,16 @@ function animate() {
             p.mesh.material.opacity = p.mesh.material.opacity * 0.99 +
                 (0.15 + 0.2 * Math.abs(Math.sin(elapsedTime * p.speed * 0.3 + p.phase))) * 0.01;
         });
+<<<<<<< Updated upstream
+=======
+        
+        if (typeof dustParticles !== 'undefined' && dustParticles) {
+            dustParticles.position.copy(camera.position);
+            dustParticles.rotation.y += deltaTime * 0.03;
+            dustParticles.rotation.x += deltaTime * 0.01;
+        }
+        
+>>>>>>> Stashed changes
         // Efecto bobbing de caminar
         const walkSpeed = player.velocity.length();
         if (walkSpeed > 0.01) {
