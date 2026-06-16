@@ -82,15 +82,11 @@ export function generateWallTexture(type = 0) {
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
-<<<<<<< Updated upstream
-    // ---- TYPE 0: Industrial metal panels ----
-=======
 
     // Helper for seeded random in textures
     const _sr = _seededRand(1337 + type);
 
     // ---- TYPE 0: Futuristic aged-metal industrial (2050 but corroded) ----
->>>>>>> Stashed changes
     if (type === 0 || type === 1 || type === 2) {
         // Base gradient: dark corroded metal with blue-steel tint
         const baseGrad = ctx.createLinearGradient(0, 0, 0, S);
@@ -100,20 +96,6 @@ export function generateWallTexture(type = 0) {
         baseGrad.addColorStop(1, '#0e1216');
         ctx.fillStyle = baseGrad;
         ctx.fillRect(0, 0, S, S);
-<<<<<<< Updated upstream
-        // Multi-octave noise for metal grain (Fast approximation)
-        for (let i = 0; i < 6000; i++) {
-            const x = Math.random() * S;
-            const y = Math.random() * S;
-            const sz = 1 + Math.random() * 4;
-            const c = 20 + Math.random() * 30;
-            ctx.fillStyle = `rgba(${c},${c},${c},0.1)`;
-            ctx.fillRect(x, y, sz, sz);
-        }
-        // Panel grid: 2x2 panels
-        const panelInset = 12;
-        const halfS = S / 2;
-=======
 
         // === BRUSHED METAL GRAIN ===
         ctx.globalAlpha = 0.05;
@@ -128,7 +110,6 @@ export function generateWallTexture(type = 0) {
         _fillNoise(ctx, S, S, 25, 28, 35, 0.02, 0.05, 40000, 0.5, 2.5);
 
         // === ASYMMETRIC PANEL GRID ===
->>>>>>> Stashed changes
         const panels = [
             { x: 0, y: 0, w: 400, h: 800, seed: 1 },
             { x: 0, y: 800, w: 400, h: 600, seed: 2, vent: true },
@@ -141,17 +122,6 @@ export function generateWallTexture(type = 0) {
             { x: 1400, y: 700, w: 648, h: 500, seed: 9 },
             { x: 1400, y: 1200, w: 648, h: 848, seed: 10 }
         ];
-<<<<<<< Updated upstream
-        // Deep grooves between panels
-        ctx.fillStyle = '#0a0c0f';
-        ctx.fillRect(halfS - 6, 0, 12, S);
-        ctx.fillRect(0, halfS - 6, S, 12);
-        // Inner panel bevels (3D effect)
-        panels.forEach(([px, py, pw, ph]) => {
-            // Top-left highlight
-            ctx.strokeStyle = 'rgba(80,85,95,0.45)';
-            ctx.lineWidth = 3;
-=======
 
         const panelGap = 16;
         ctx.fillStyle = '#030406';
@@ -199,7 +169,6 @@ export function generateWallTexture(type = 0) {
 
             const bevelW = 6;
             ctx.fillStyle = 'rgba(90,100,115,0.4)';
->>>>>>> Stashed changes
             ctx.beginPath();
             ctx.moveTo(px, py + ph); ctx.lineTo(px, py); ctx.lineTo(px + pw, py);
             ctx.lineTo(px + pw - bevelW, py + bevelW); ctx.lineTo(px + bevelW, py + bevelW); ctx.lineTo(px + bevelW, py + ph - bevelW);
@@ -266,73 +235,6 @@ export function generateWallTexture(type = 0) {
                 ctx.restore();
             }
         });
-<<<<<<< Updated upstream
-        // Rivets along panel edges
-        const rivetPositions = [];
-        const rStep = 100;
-        for (let ry = panelInset + 30; ry < S - panelInset; ry += rStep) {
-            rivetPositions.push([panelInset + 20, ry]);
-            rivetPositions.push([halfS - panelInset - 14, ry]);
-            rivetPositions.push([halfS + panelInset + 20, ry]);
-            rivetPositions.push([S - panelInset - 14, ry]);
-        }
-        for (let rx = panelInset + 30; rx < S - panelInset; rx += rStep) {
-            rivetPositions.push([rx, panelInset + 20]);
-            rivetPositions.push([rx, halfS - panelInset - 14]);
-            rivetPositions.push([rx, halfS + panelInset + 20]);
-            rivetPositions.push([rx, S - panelInset - 14]);
-        }
-        rivetPositions.forEach(([rx, ry]) => _drawRivet(ctx, rx, ry, 7));
-        // Horizontal pipe conduit across upper third
-        const pipeY = 180;
-        const pipeH = 36;
-        const pipeGrad = ctx.createLinearGradient(0, pipeY, 0, pipeY + pipeH);
-        pipeGrad.addColorStop(0, '#4a4e56');
-        pipeGrad.addColorStop(0.3, '#606570');
-        pipeGrad.addColorStop(0.5, '#555960');
-        pipeGrad.addColorStop(0.7, '#3a3e44');
-        pipeGrad.addColorStop(1, '#22252a');
-        ctx.fillStyle = pipeGrad;
-        ctx.fillRect(0, pipeY, S, pipeH);
-        // Pipe brackets
-        for (let bx = 80; bx < S; bx += 250) {
-            ctx.fillStyle = '#2a2d32';
-            ctx.fillRect(bx, pipeY - 8, 30, pipeH + 16);
-            ctx.strokeStyle = '#1a1c20';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(bx, pipeY - 8, 30, pipeH + 16);
-            _drawRivet(ctx, bx + 15, pipeY - 4, 4);
-            _drawRivet(ctx, bx + 15, pipeY + pipeH + 4, 4);
-        }
-        // Pipe highlight
-        ctx.strokeStyle = 'rgba(120,125,135,0.25)';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(0, pipeY + 6);
-        ctx.lineTo(S, pipeY + 6);
-        ctx.stroke();
-        // Small ventilation grille in bottom-right panel
-        const ventX = halfS + 100, ventY = halfS + 120, ventW = 200, ventH = 120;
-        ctx.fillStyle = '#0e1014';
-        ctx.fillRect(ventX, ventY, ventW, ventH);
-        ctx.strokeStyle = '#2a2d32';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(ventX, ventY, ventW, ventH);
-        for (let vy = ventY + 12; vy < ventY + ventH - 8; vy += 14) {
-            const slg = ctx.createLinearGradient(0, vy, 0, vy + 8);
-            slg.addColorStop(0, '#1e2126');
-            slg.addColorStop(0.5, '#0a0c0f');
-            slg.addColorStop(1, '#151719');
-            ctx.fillStyle = slg;
-            ctx.fillRect(ventX + 8, vy, ventW - 16, 8);
-        }
-        // Vent screws
-        _drawRivet(ctx, ventX + 10, ventY + 10, 5);
-        _drawRivet(ctx, ventX + ventW - 10, ventY + 10, 5);
-        _drawRivet(ctx, ventX + 10, ventY + ventH - 10, 5);
-        _drawRivet(ctx, ventX + ventW - 10, ventY + ventH - 10, 5);
-        // Rust streaks
-=======
 
         // === EXPOSED BRICK PATCHES (highly detailed) ===
         const brickPatches = [
@@ -475,7 +377,6 @@ export function generateWallTexture(type = 0) {
         });
 
         // === HEAVY RUST AND GRIME ===
->>>>>>> Stashed changes
         ctx.globalCompositeOperation = 'multiply';
         for (let rs = 0; rs < 40; rs++) {
             const rx = _sr() * S;
@@ -503,16 +404,6 @@ export function generateWallTexture(type = 0) {
             ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI*2); ctx.fill();
         }
         ctx.globalCompositeOperation = 'source-over';
-<<<<<<< Updated upstream
-        // Scratch marks
-        ctx.strokeStyle = 'rgba(60,64,72,0.3)';
-        ctx.lineWidth = 1;
-        for (let sc = 0; sc < 12; sc++) {
-            const sx = Math.random() * S;
-            const sy = Math.random() * S;
-            const sl = 20 + Math.random() * 60;
-            const sa = Math.random() * Math.PI;
-=======
 
         // === SCRATCHES ===
         ctx.strokeStyle = 'rgba(180,190,200,0.15)';
@@ -522,37 +413,11 @@ export function generateWallTexture(type = 0) {
             const sl = 20 + _sr() * 150;
             const sa = _sr() * Math.PI * 2;
             ctx.lineWidth = 0.5 + _sr() * 2;
->>>>>>> Stashed changes
             ctx.beginPath();
             ctx.moveTo(sx, sy);
             ctx.lineTo(sx + Math.cos(sa) * sl, sy + Math.sin(sa) * sl);
             ctx.stroke();
         }
-<<<<<<< Updated upstream
-        // Industrial stencil markings in upper-left panel
-        ctx.save();
-        ctx.font = 'bold 28px monospace';
-        ctx.fillStyle = 'rgba(80,85,90,0.25)';
-        ctx.fillText('SEC-7B', 60, 100);
-        ctx.font = '18px monospace';
-        ctx.fillText('DANGER - HIGH VOLTAGE', 50, 460);
-        ctx.restore();
-        // Corrosion spots
-        for (let cs = 0; cs < 6; cs++) {
-            const cx = Math.random() * S;
-            const cy = Math.random() * S;
-            const cr = 8 + Math.random() * 18;
-            const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr);
-            cg.addColorStop(0, 'rgba(70,50,25,0.2)');
-            cg.addColorStop(0.6, 'rgba(50,35,15,0.1)');
-            cg.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = cg;
-            ctx.beginPath();
-            ctx.arc(cx, cy, cr, 0, Math.PI * 2);
-            ctx.fill();
-        }
-=======
->>>>>>> Stashed changes
     }
     if (type === 1) {
         // Hazard stripe band with detail
@@ -1084,24 +949,6 @@ export function generateFloorTexture() {
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
-<<<<<<< Updated upstream
-    // Base concrete color
-    ctx.fillStyle = '#1c1e22';
-    ctx.fillRect(0, 0, S, S);
-    // FBM concrete noise (Fast approximation)
-    for (let i = 0; i < 4000; i++) {
-        const x = Math.random() * S;
-        const y = Math.random() * S;
-        const sz = 1 + Math.random() * 3;
-        const c = 30 + Math.random() * 30;
-        ctx.fillStyle = `rgba(${c},${c},${c},0.15)`;
-        ctx.fillRect(x, y, sz, sz);
-    }
-    // Tile grid lines (4x4 grid)
-    const tileSize = S / 4;
-    ctx.strokeStyle = '#0e1014';
-    ctx.lineWidth = 4;
-=======
 
     // Seeded random for deterministic placement of special features
     const _sr = _seededRand(90417);
@@ -1670,7 +1517,6 @@ export function generateFloorTexture() {
     // =============================================
     ctx.strokeStyle = '#050608';
     ctx.lineWidth = 3;
->>>>>>> Stashed changes
     for (let gx = 0; gx <= S; gx += tileSize) {
         ctx.beginPath();
         ctx.moveTo(gx, 0);
@@ -1698,14 +1544,10 @@ export function generateFloorTexture() {
         ctx.lineTo(S, gy + 1.5);
         ctx.stroke();
     }
-<<<<<<< Updated upstream
-    // Grime in corners of tiles
-=======
 
     // =============================================
     // PASS 4: Dirt/dust accumulation in corners
     // =============================================
->>>>>>> Stashed changes
     for (let tx = 0; tx < 4; tx++) {
         for (let ty = 0; ty < 4; ty++) {
             const corners = [
@@ -1742,47 +1584,6 @@ export function generateFloorTexture() {
             }
         }
     }
-<<<<<<< Updated upstream
-    // Dirty water puddle
-    const pudX = 280, pudY = 320;
-    const pudGrad = ctx.createRadialGradient(pudX, pudY, 0, pudX, pudY, 55);
-    pudGrad.addColorStop(0, 'rgba(18,22,30,0.5)');
-    pudGrad.addColorStop(0.5, 'rgba(15,18,25,0.35)');
-    pudGrad.addColorStop(0.8, 'rgba(12,14,18,0.15)');
-    pudGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = pudGrad;
-    ctx.beginPath();
-    ctx.ellipse(pudX, pudY, 55, 35, 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    // Puddle reflection highlight
-    ctx.fillStyle = 'rgba(40,50,70,0.15)';
-    ctx.beginPath();
-    ctx.ellipse(pudX - 10, pudY - 8, 18, 8, 0.2, 0, Math.PI * 2);
-    ctx.fill();
-    // Drainage grate
-    const grateX = 80, grateY = 100, grateW = 50, grateH = 50;
-    ctx.fillStyle = '#0a0c0e';
-    ctx.fillRect(grateX, grateY, grateW, grateH);
-    ctx.strokeStyle = '#2a2d33';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(grateX, grateY, grateW, grateH);
-    for (let gs = grateX + 8; gs < grateX + grateW - 4; gs += 8) {
-        ctx.fillStyle = '#1a1c20';
-        ctx.fillRect(gs, grateY + 4, 3, grateH - 8);
-    }
-    for (let gs = grateY + 8; gs < grateY + grateH - 4; gs += 8) {
-        ctx.fillStyle = '#1a1c20';
-        ctx.fillRect(grateX + 4, gs, grateW - 8, 2);
-    }
-    // Scuff marks
-    ctx.strokeStyle = 'rgba(30,33,38,0.4)';
-    ctx.lineWidth = 2;
-    for (let sm = 0; sm < 8; sm++) {
-        const sx = Math.random() * S;
-        const sy = Math.random() * S;
-        const sa = Math.random() * Math.PI * 2;
-        const sl = 15 + Math.random() * 40;
-=======
 
     // =============================================
     // PASS 5: Global details
@@ -1886,7 +1687,6 @@ export function generateFloorTexture() {
         const sl = 15 + _sr() * 60;
         ctx.strokeStyle = `rgba(18,20,24,${0.12 + _sr() * 0.18})`;
         ctx.lineWidth = 1 + _sr() * 2.5;
->>>>>>> Stashed changes
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.bezierCurveTo(
@@ -1896,28 +1696,10 @@ export function generateFloorTexture() {
         );
         ctx.stroke();
     }
-<<<<<<< Updated upstream
-    // Cracks
-    ctx.strokeStyle = 'rgba(5,7,10,0.5)';
-    ctx.lineWidth = 1.5;
-    for (let c = 0; c < 5; c++) {
-        ctx.beginPath();
-        let cx = Math.random() * S;
-        let cy = Math.random() * S;
-        ctx.moveTo(cx, cy);
-        for (let j = 0; j < 4; j++) {
-            cx += (Math.random() - 0.5) * 50;
-            cy += (Math.random() - 0.5) * 50;
-            ctx.lineTo(cx, cy);
-        }
-        ctx.stroke();
-    }
-=======
 
     // --- Final overall dust layer ---
     _fillNoise(ctx, S, S, 20, 18, 14, 0.01, 0.03, 3000, 0.5, 2);
 
->>>>>>> Stashed changes
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -1929,93 +1711,12 @@ export function generateCeilingTexture() {
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
-<<<<<<< Updated upstream
-=======
 
     const _sr = _seededRand(445566);
 
->>>>>>> Stashed changes
     // Dark base
     ctx.fillStyle = '#050608';
     ctx.fillRect(0, 0, S, S);
-<<<<<<< Updated upstream
-    // FBM for surface texture (Fast approximation)
-    for (let i = 0; i < 3000; i++) {
-        const x = Math.random() * S;
-        const y = Math.random() * S;
-        const sz = 1 + Math.random() * 3;
-        const c = 20 + Math.random() * 20;
-        ctx.fillStyle = `rgba(${c},${c},${c},0.1)`;
-        ctx.fillRect(x, y, sz, sz);
-    }
-    // Ceiling panel grid
-    ctx.strokeStyle = '#1a1c22';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(0, 0, S, S);
-    ctx.strokeRect(0, 0, S / 2, S / 2);
-    ctx.strokeRect(S / 2, 0, S / 2, S / 2);
-    ctx.strokeRect(0, S / 2, S / 2, S / 2);
-    ctx.strokeRect(S / 2, S / 2, S / 2, S / 2);
-    // Large horizontal pipe
-    const pipe1Y = 100, pipe1H = 45;
-    const pGrad1 = ctx.createLinearGradient(0, pipe1Y, 0, pipe1Y + pipe1H);
-    pGrad1.addColorStop(0, '#22252a');
-    pGrad1.addColorStop(0.2, '#3a3e46');
-    pGrad1.addColorStop(0.5, '#45484f');
-    pGrad1.addColorStop(0.8, '#2e3238');
-    pGrad1.addColorStop(1, '#1a1c20');
-    ctx.fillStyle = pGrad1;
-    ctx.fillRect(0, pipe1Y, S, pipe1H);
-    // Pipe joints
-    for (let pj = 60; pj < S; pj += 200) {
-        ctx.fillStyle = '#2a2d33';
-        ctx.fillRect(pj, pipe1Y - 5, 20, pipe1H + 10);
-        ctx.strokeStyle = '#1a1c20';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(pj, pipe1Y - 5, 20, pipe1H + 10);
-    }
-    // Smaller pipe perpendicular
-    const pipe2X = 350, pipe2W = 28;
-    const pGrad2 = ctx.createLinearGradient(pipe2X, 0, pipe2X + pipe2W, 0);
-    pGrad2.addColorStop(0, '#1e2126');
-    pGrad2.addColorStop(0.3, '#32363e');
-    pGrad2.addColorStop(0.5, '#3a3e46');
-    pGrad2.addColorStop(0.7, '#2a2d33');
-    pGrad2.addColorStop(1, '#181a1e');
-    ctx.fillStyle = pGrad2;
-    ctx.fillRect(pipe2X, 0, pipe2W, S);
-    // Cable tray (open mesh running along)
-    const ctY = 300, ctH = 30;
-    ctx.fillStyle = '#151719';
-    ctx.fillRect(0, ctY, S, ctH);
-    // Cable mesh pattern
-    for (let cx = 5; cx < S; cx += 15) {
-        ctx.strokeStyle = '#25282e';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(cx, ctY);
-        ctx.lineTo(cx, ctY + ctH);
-        ctx.stroke();
-    }
-    for (let cy = ctY + 5; cy < ctY + ctH; cy += 10) {
-        ctx.strokeStyle = '#25282e';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, cy);
-        ctx.lineTo(S, cy);
-        ctx.stroke();
-    }
-    // Cables inside
-    const cableColors = ['#2a1515', '#15152a', '#152a15', '#2a2a15'];
-    cableColors.forEach((cc, i) => {
-        ctx.strokeStyle = cc;
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        let cy = ctY + 8 + i * 6;
-        ctx.moveTo(0, cy);
-        for (let cx = 0; cx < S; cx += 30) {
-            ctx.lineTo(cx, cy + Math.sin(cx * 0.03 + i) * 3);
-=======
 
     // Noise base
     _fillNoise(ctx, S, S, 15, 17, 20, 0.05, 0.15, 20000, 1, 3);
@@ -2159,49 +1860,8 @@ export function generateCeilingTexture() {
                     ctx.fill();
                 }
             }
->>>>>>> Stashed changes
         }
     });
-<<<<<<< Updated upstream
-    // Fluorescent light fixture (off/dim)
-    const lightX = S / 2 - 80, lightY = S / 2 - 15, lightW = 160, lightH = 30;
-    ctx.fillStyle = '#1e2025';
-    ctx.fillRect(lightX - 5, lightY - 5, lightW + 10, lightH + 10);
-    ctx.strokeStyle = '#2a2d33';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(lightX - 5, lightY - 5, lightW + 10, lightH + 10);
-    // Tube
-    const tubeGrad = ctx.createLinearGradient(0, lightY, 0, lightY + lightH);
-    tubeGrad.addColorStop(0, '#252830');
-    tubeGrad.addColorStop(0.3, '#2e3240');
-    tubeGrad.addColorStop(0.5, '#303545');
-    tubeGrad.addColorStop(0.7, '#2e3240');
-    tubeGrad.addColorStop(1, '#222530');
-    ctx.fillStyle = tubeGrad;
-    ctx.fillRect(lightX, lightY, lightW, lightH);
-    // Very faint glow
-    const glowGrad = ctx.createRadialGradient(lightX + lightW / 2, lightY + lightH / 2, 0, lightX + lightW / 2, lightY + lightH / 2, 100);
-    glowGrad.addColorStop(0, 'rgba(60,70,100,0.08)');
-    glowGrad.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glowGrad;
-    ctx.fillRect(lightX - 50, lightY - 50, lightW + 100, lightH + 100);
-    // Ventilation duct (lower area)
-    const ventX = 20, ventY = 420, ventW = 180, ventH = 60;
-    ctx.fillStyle = '#151719';
-    ctx.fillRect(ventX, ventY, ventW, ventH);
-    ctx.strokeStyle = '#22252a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(ventX, ventY, ventW, ventH);
-    // Vent slats
-    for (let vs = ventY + 8; vs < ventY + ventH - 5; vs += 10) {
-        const vsGrad = ctx.createLinearGradient(0, vs, 0, vs + 6);
-        vsGrad.addColorStop(0, '#1e2025');
-        vsGrad.addColorStop(0.5, '#0c0e12');
-        vsGrad.addColorStop(1, '#151719');
-        ctx.fillStyle = vsGrad;
-        ctx.fillRect(ventX + 8, vs, ventW - 16, 6);
-    }
-=======
 
     // === HANGING CABLES ===
     for(let c=0; c<15; c++) {
@@ -2280,7 +1940,6 @@ export function generateCeilingTexture() {
         }
     });
 
->>>>>>> Stashed changes
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -3262,3 +2921,4 @@ export function createRoughnessMapFromCanvas(baseTexture, contrast = 1.2, bright
     texture.wrapT = THREE.RepeatWrapping;
     return texture;
 }
+

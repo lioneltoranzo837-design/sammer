@@ -2,57 +2,27 @@
 import { AudioSynth } from './audio/SoundSynth.js';
 import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, getMapForLevel } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
-<<<<<<< Updated upstream
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
-import { addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture, generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture, generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture, generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture } from './rendering/textures.js';
-import { ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg, healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn, zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn, nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus, entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus } from './ui/dom.js';
-=======
-import {
-    addBloodWallMessages,
-    generateCeilingTexture,
-    generateFloorTexture,
-    generateWallTexture,
-    generateZombieFaceTexture,
-    generateJungleWallTexture,
-    generateJungleFloorTexture,
-    generateJungleCeilingTexture,
-    generateMountainWallTexture,
-    generateMountainFloorTexture,
-    generateMountainCeilingTexture,
-    generateInfernalWallTexture,
-    generateInfernalFloorTexture,
-    generateInfernalCeilingTexture,
-    createNormalMapFromCanvas,
-    createRoughnessMapFromCanvas
-} from './rendering/textures.js';
-import {
-    ammoClipEl,
-    ammoReserveEl,
-    armorBar,
-    armorVal,
-    crosshair,
-    damageFlash,
-    deathOverlay,
-    feedbackMsg,
-    healthBar,
-    healthVal,
-    menuOverlay,
-    restartBtn,
-    startBtn,
-    victoryOverlay,
-    winBtn,
-    zombieCountEl,
-    bossHud,
-    bossHealthFill
+import { 
+    addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture, 
+    generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture, 
+    generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture, 
+    generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture,
+    createNormalMapFromCanvas, createRoughnessMapFromCanvas
+} from './rendering/textures.js?v=2';
+import { 
+    ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg, 
+    healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn, 
+    zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn, 
+    nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus, 
+    entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus 
 } from './ui/dom.js';
-
->>>>>>> Stashed changes
 const { THREE } = window;
 // --- CONFIGURACIÓN DE THREE.JS ---
-let scene, camera, renderer;
+let scene, camera, renderer, composer;
 let clock;
 let player = createInitialPlayer();
 window.player = player;
@@ -120,12 +90,9 @@ let gunRecoilActive = false;
 let gunRecoilTimer = 0;
 let muzzleFlashSprite;
 let muzzleLight;
-<<<<<<< Updated upstream
-=======
 let playerFlashlight;
 let dustParticles;
 
->>>>>>> Stashed changes
 // Estado del juego
 let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER, VICTORY
 // --- INICIALIZACIÓN DE LA ESCENA ---
@@ -149,6 +116,31 @@ async function initEngine() {
     renderer.toneMappingExposure = 1.1;
     renderer.outputEncoding = THREE.sRGBEncoding; // Color encoding correcto
     document.getElementById('game-container').appendChild(renderer.domElement);
+    
+    // --- POST-PROCESSING ---
+    const renderScene = new THREE.RenderPass(scene, camera);
+    
+    // UnrealBloomPass para luces intensas (disparos, linterna, fuego)
+    const bloomPass = new THREE.UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight - 110),
+        1.2,  // Fuerza (strength)
+        0.8,  // Radio (radius)
+        0.6   // Umbral (threshold)
+    );
+    
+    // FilmPass para grano de película y scanlines de terror
+    const filmPass = new THREE.FilmPass(
+        0.5,   // Intensidad de ruido
+        0.25,  // Intensidad de scanlines
+        648,   // Cantidad de scanlines
+        false  // Grayscale
+    );
+    filmPass.renderToScreen = true;
+
+    composer = new THREE.EffectComposer(renderer);
+    composer.addPass(renderScene);
+    composer.addPass(bloomPass);
+    composer.addPass(filmPass);
     // Luz ambiental base muy tenue
     const ambientLight = new THREE.AmbientLight(0x0a0a14, 0.15);
     scene.add(ambientLight);
@@ -156,17 +148,6 @@ async function initEngine() {
     hemisphereLight = new THREE.HemisphereLight(0x111122, 0x080810, 0.1);
     scene.add(hemisphereLight);
     // Linterna acoplada a la cámara del jugador (SpotLight) - Potente y amplio rango
-<<<<<<< Updated upstream
-    const flashlight = new THREE.SpotLight(0xfff9e6, 3.2, 45, Math.PI / 3.8, 0.55, 0.9);
-    flashlight.castShadow = true;
-    flashlight.shadow.mapSize.width = 2048; // Sombras de alta resolución
-    flashlight.shadow.mapSize.height = 2048;
-    flashlight.shadow.camera.near = 0.5;
-    flashlight.shadow.camera.far = 45;
-    flashlight.shadow.bias = -0.0005;
-    flashlight.shadow.radius = 2; // Sombras suavizadas
-    camera.add(flashlight);
-=======
     playerFlashlight = new THREE.SpotLight(0xfff9e6, 5.0, 40, Math.PI / 4.5, 0.8, 1.5);
     playerFlashlight.castShadow = true;
     playerFlashlight.shadow.mapSize.width = 2048; // Sombras de alta resolución
@@ -177,21 +158,10 @@ async function initEngine() {
     playerFlashlight.shadow.radius = 2; // Sombras suavizadas
     camera.add(playerFlashlight);
     
->>>>>>> Stashed changes
     // Objetivo de la linterna (apunta al frente de la cámara)
     const flashTarget = new THREE.Object3D();
     flashTarget.position.set(0, 0, -1);
     camera.add(flashTarget);
-<<<<<<< Updated upstream
-    flashlight.target = flashTarget;
-    // Carga de Texturas procedimentales
-    wallMaterialStandard = new THREE.MeshStandardMaterial({ map: generateWallTexture(0), roughness: 0.75, metalness: 0.25 });
-    wallMaterialHazard = new THREE.MeshStandardMaterial({ map: generateWallTexture(1), roughness: 0.75, metalness: 0.25 });
-    wallMaterialBlood = new THREE.MeshStandardMaterial({ map: generateWallTexture(2), roughness: 0.75, metalness: 0.25 });
-    doorMaterial = new THREE.MeshStandardMaterial({ map: generateWallTexture(3), roughness: 0.6, metalness: 0.4 });
-    floorMaterial = new THREE.MeshStandardMaterial({ map: generateFloorTexture(), roughness: 0.9, metalness: 0.1 });
-    ceilingMaterial = new THREE.MeshStandardMaterial({ map: generateCeilingTexture(), roughness: 0.8, metalness: 0.2 });
-=======
     playerFlashlight.target = flashTarget;
     playerFlashlight.visible = false;
     
@@ -273,7 +243,6 @@ async function initEngine() {
         metalness: 0.2 
     });
     
->>>>>>> Stashed changes
     zombieFaceTexture = generateZombieFaceTexture();
     // Carga del modelo de zombie GLB original en segundo plano
     try {
@@ -1384,14 +1353,9 @@ function createFacilityDecoration(px, pz) {
         strip.position.y = 0.45;
         strip.rotation.y = crate.rotation.y;
         group.add(strip);
-<<<<<<< Updated upstream
-    }
-    else {
-=======
     } else if (type === 2) {
         // Los tubos voladores han sido eliminados a petición del usuario.
     } else {
->>>>>>> Stashed changes
         // Cable colgante del techo
         const cableCount = 2 + Math.floor(Math.random() * 3);
         for (let c = 0; c < cableCount; c++) {
@@ -3016,9 +2980,6 @@ function spawnSparkSpatter(pos) {
         particles.push(new Particle(pos, 0xffd700, 0.03 + Math.random() * 0.03, 0.02));
     }
 }
-<<<<<<< Updated upstream
-=======
-
 let sharedBulletMaterial = null;
 
 function spawnBulletDecal(pos, normal) {
@@ -3105,8 +3066,6 @@ function spawnBloodFloorDecal(pos) {
     
     scene.add(decal);
 }
-
->>>>>>> Stashed changes
 // --- COLISIONES JUGADOR ---
 function checkCollisions(newX, newZ) {
     let resolvedX = newX;
@@ -3259,17 +3218,12 @@ function showFeedback(text) {
         feedbackMsg.classList.remove('active');
     }, 2500);
 }
-<<<<<<< Updated upstream
-=======
-
 function toggleFlashlight() {
     if (playerFlashlight) {
         playerFlashlight.visible = !playerFlashlight.visible;
         showFeedback(playerFlashlight.visible ? "LINTERNA: ENCENDIDA" : "LINTERNA: APAGADA");
     }
 }
-
->>>>>>> Stashed changes
 // --- ACCIÓN: INTERACTUAR ---
 function tryOpenDoor() {
     // 1. Evaluar si estamos frente a una compuerta neumática normal
@@ -3539,17 +3493,13 @@ function shoot() {
             }
             bossEnemy.damage(dmg, isHeadshot);
             spawnBloodSpatter(hitPoint);
-<<<<<<< Updated upstream
         }
         else if (hitSpider) {
             hitSpider.damage(activeWep.damage);
             spawnBloodSpatter(hitPoint);
+            spawnBloodFloorDecal(hitPoint);
         }
         else if (hitZombie) {
-=======
-            spawnBloodFloorDecal(hitPoint);
-        } else if (hitZombie) {
->>>>>>> Stashed changes
             let dmg = activeWep.damage;
             if (isHeadshot) {
                 dmg = dmg * 3; // Triple daño por headshot
@@ -3557,13 +3507,9 @@ function shoot() {
             }
             hitZombie.damage(dmg);
             spawnBloodSpatter(hitPoint);
-<<<<<<< Updated upstream
+            spawnBloodFloorDecal(hitPoint);
         }
         else {
-=======
-            spawnBloodFloorDecal(hitPoint);
-        } else {
->>>>>>> Stashed changes
             spawnSparkSpatter(hitPoint);
             if (intersects[0].face) {
                 const normal = intersects[0].face.normal.clone().transformDirection(hitObj.matrixWorld);
@@ -4192,26 +4138,12 @@ function setupControls() {
         const k = e.key.toUpperCase();
         keyboard[k] = true;
         if (gameState === 'PLAYING') {
-<<<<<<< Updated upstream
-            if (k === 'R')
-                reload();
-            if (k === 'E')
-                tryOpenDoor();
-            if (k === '1')
-                switchWeapon('shotgun');
-            if (k === '2')
-                switchWeapon('glock');
-            if (k === '3')
-                switchWeapon('m4');
-=======
             if (k === 'R') reload();
             if (k === 'F') toggleFlashlight();
             if (k === 'E') tryOpenDoor();
             if (k === '1') switchWeapon('shotgun');
             if (k === '2') switchWeapon('glock');
             if (k === '3') switchWeapon('m4');
-            
->>>>>>> Stashed changes
             // Cheat code para saltar nivel
             if (k === 'K') {
                 if (currentLevel < 4) {
@@ -4254,6 +4186,7 @@ function onWindowResize() {
     camera.aspect = window.innerWidth / (window.innerHeight - 110);
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight - 110);
+    composer.setSize(window.innerWidth, window.innerHeight - 110);
 }
 // --- BIOMONITOR ECG PROCEDIMENTAL EN TIEMPO REAL ---
 const bioCanvas = document.getElementById('biomonitor-canvas');
@@ -4502,16 +4435,11 @@ function animate() {
             p.mesh.material.opacity = p.mesh.material.opacity * 0.99 +
                 (0.15 + 0.2 * Math.abs(Math.sin(elapsedTime * p.speed * 0.3 + p.phase))) * 0.01;
         });
-<<<<<<< Updated upstream
-=======
-        
         if (typeof dustParticles !== 'undefined' && dustParticles) {
             dustParticles.position.copy(camera.position);
             dustParticles.rotation.y += deltaTime * 0.03;
             dustParticles.rotation.x += deltaTime * 0.01;
         }
-        
->>>>>>> Stashed changes
         // Efecto bobbing de caminar
         const walkSpeed = player.velocity.length();
         if (walkSpeed > 0.01) {
@@ -4557,7 +4485,8 @@ function animate() {
             particles.splice(i, 1);
         }
     }
-    renderer.render(scene, camera);
+    // Renderizar escena usando EffectComposer en lugar del renderer normal
+    composer.render(deltaTime);
 }
 function updatePlayerMovement(deltaTime) {
     player.velocity.set(0, 0, 0);
