@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, getMapForLevel } from './config/gameConfig.js';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, getMapForLevel } from './config/gameConfig.js?v=3';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
@@ -11,7 +11,8 @@ import {
     generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture, 
     generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture, 
     generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture,
-    createNormalMapFromCanvas, createRoughnessMapFromCanvas
+    createNormalMapFromCanvas, createRoughnessMapFromCanvas,
+    generateBarkTexture, generateLeafTexture
 } from './rendering/textures.js?v=2';
 import { 
     ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg, 
@@ -39,6 +40,11 @@ let ambientParticles = []; // Partículas ambientales flotantes (polvo/esporas/n
 let hemisphereLight = null; // Luz hemisférica ambiental por bioma
 let decorations = []; // Objetos decorativos 3D ambientales
 let fuseBoxConsole = null; // Estructura 3D del generador final
+let barkMaterial = null;
+let leafMaterial = null;
+let sunLight = null;
+let sunMesh = null;
+let grassMaterial = null;
 // Variables de Progresión y Nuevas Armas
 let currentLevel = 1;
 let activeMap = MAP;
@@ -962,72 +968,203 @@ function buildMap3D() {
             const posX = x * GRID_SIZE;
             const posZ = z * GRID_SIZE;
             // Suelo y techo para todas las celdas vacías/puertas
-            if (type !== 1) {
+            if (type !== 1 || currentLevel === 2) {
                 // Suelo
                 const floorGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
-                const floorMesh = new THREE.Mesh(floorGeo, floorMaterial);
+                let currentFloorMat = floorMaterial;
+                if (currentLevel === 2) {
+                    if (!grassMaterial) {
+                        grassMaterial = new THREE.ShaderMaterial({
+                            uniforms: {
+                                time: { value: 0.0 },
+                                baseColor: { value: new THREE.Color(0x162c11) },
+                                waveColor: { value: new THREE.Color(0x28471c) }
+                            },
+                            vertexShader: `
+                                varying vec2 vUv;
+                                void main() {
+                                    vUv = uv;
+                                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                                }
+                            `,
+                            fragmentShader: `
+                                uniform float time;
+                                uniform vec3 baseColor;
+                                uniform vec3 waveColor;
+                                varying vec2 vUv;
+                                void main() {
+                                    float noise = sin(vUv.x * 20.0 + time*1.5) * cos(vUv.y * 20.0 + time * 1.2);
+                                    vec3 col = mix(baseColor, waveColor, noise * 0.5 + 0.5);
+                                    gl_FragColor = vec4(col, 1.0);
+                                }
+                            `
+                        });
+                    }
+                    currentFloorMat = grassMaterial;
+                }
+                const floorMesh = new THREE.Mesh(floorGeo, currentFloorMat);
                 floorMesh.name = "map_floor";
                 floorMesh.rotation.x = -Math.PI / 2;
                 floorMesh.position.set(posX, 0, posZ);
                 floorMesh.receiveShadow = true;
                 scene.add(floorMesh);
-                // Techo
-                const ceilGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
-                const ceilMesh = new THREE.Mesh(ceilGeo, ceilingMaterial);
-                ceilMesh.name = "map_ceiling";
-                ceilMesh.rotation.x = Math.PI / 2;
-                ceilMesh.position.set(posX, WALL_HEIGHT, posZ);
-                ceilMesh.receiveShadow = true;
-                scene.add(ceilMesh);
+                // Techo (excepto en la jungla)
+                if (currentLevel !== 2) {
+                    const ceilGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
+                    const ceilMesh = new THREE.Mesh(ceilGeo, ceilingMaterial);
+                    ceilMesh.name = "map_ceiling";
+                    ceilMesh.rotation.x = Math.PI / 2;
+                    ceilMesh.position.set(posX, WALL_HEIGHT, posZ);
+                    ceilMesh.receiveShadow = true;
+                    scene.add(ceilMesh);
+                }
             }
             // Paredes
             if (type === 1) {
-                // Alternar texturas de las paredes (estándar, peligro, con sangre)
-                let mat = wallMaterialStandard;
-                const rVal = Math.random();
-                if (rVal < 0.15) {
-                    mat = wallMaterialHazard;
+                let collisionMesh = null;
+                
+                if (currentLevel === 2) {
+                    // Generar múltiples árboles si estamos en los bordes para crear un bosque denso que tape el fondo
+                    const isEdge = (x === 0 || x === activeMap[0].length - 1 || z === 0 || z === activeMap.length - 1);
+                    const numTrees = isEdge ? 4 : 1;
+                    
+                    for (let t = 0; t < numTrees; t++) {
+                        const tPosX = (t === 0) ? posX : posX + (Math.random() - 0.5) * GRID_SIZE * 0.9;
+                        const tPosZ = (t === 0) ? posZ : posZ + (Math.random() - 0.5) * GRID_SIZE * 0.9;
+
+                        // --- ÁRBOL 3D PROCEDURAL ---
+                        const treeGroup = new THREE.Group();
+                        treeGroup.name = "map_tree";
+                        treeGroup.position.set(tPosX, 0, tPosZ);
+                        
+                        if (!barkMaterial) {
+                            const barkTex = generateBarkTexture();
+                            const barkNorm = createNormalMapFromCanvas(barkTex, 2.0);
+                            const barkRough = createRoughnessMapFromCanvas(barkTex, 1.5, 0.1);
+                            barkMaterial = new THREE.MeshStandardMaterial({
+                                map: barkTex,
+                                normalMap: barkNorm,
+                                roughnessMap: barkRough
+                            });
+                            
+                            const leafTex = generateLeafTexture();
+                            const leafNorm = createNormalMapFromCanvas(leafTex, 1.0);
+                            const leafRough = createRoughnessMapFromCanvas(leafTex, 0.8, 0.2);
+                            leafMaterial = new THREE.MeshStandardMaterial({
+                                map: leafTex,
+                                normalMap: leafNorm,
+                                roughnessMap: leafRough
+                            });
+                        }
+                        
+                        // Tronco
+                        const trunkRadius = 0.3 + Math.random() * 0.4;
+                        const trunkHeight = WALL_HEIGHT + 1 + Math.random() * 4;
+                        const trunkGeo = new THREE.CylinderGeometry(trunkRadius * 0.6, trunkRadius, trunkHeight, 8);
+                        
+                        const trunk = new THREE.Mesh(trunkGeo, barkMaterial);
+                        trunk.position.y = trunkHeight / 2;
+                        trunk.castShadow = true;
+                        trunk.receiveShadow = true;
+                        treeGroup.add(trunk);
+                        
+                        // Follaje (Esferas interceptadas)
+                        const leafCount = 3 + Math.floor(Math.random() * 4);
+                        for (let i = 0; i < leafCount; i++) {
+                            const leafSize = 2.0 + Math.random() * 2.5;
+                            const leafGeo = new THREE.DodecahedronGeometry(leafSize, 1);
+                            const leaf = new THREE.Mesh(leafGeo, leafMaterial);
+                            
+                            leaf.position.y = trunkHeight - 1.0 + Math.random() * 2.5;
+                            leaf.position.x = (Math.random() - 0.5) * 2.5;
+                            leaf.position.z = (Math.random() - 0.5) * 2.5;
+                            
+                            leaf.castShadow = true;
+                            leaf.receiveShadow = true;
+                            treeGroup.add(leaf);
+                        }
+                        
+                        scene.add(treeGroup);
+                    }
+                    collisionMesh = null; // Árboles manejados manualmente
+                } else {
+                    // --- PARED ESTÁNDAR ---
+                    let mat = wallMaterialStandard;
+                    const rVal = Math.random();
+                    if (rVal < 0.15) {
+                        mat = wallMaterialHazard;
+                    }
+                    else if (rVal < 0.3) {
+                        mat = wallMaterialBlood;
+                    }
+                    const wall = new THREE.Mesh(wallGeo, mat);
+                    wall.name = "map_wall";
+                    wall.position.set(posX, WALL_HEIGHT / 2, posZ);
+                    wall.castShadow = true;
+                    wall.receiveShadow = true;
+                    scene.add(wall);
+                    collisionMesh = wall;
                 }
-                else if (rVal < 0.3) {
-                    mat = wallMaterialBlood;
-                }
-                const wall = new THREE.Mesh(wallGeo, mat);
-                wall.name = "map_wall";
-                wall.position.set(posX, WALL_HEIGHT / 2, posZ);
-                wall.castShadow = true;
-                wall.receiveShadow = true;
-                scene.add(wall);
+                
                 // Guardar colisionadores
-                colliders.push({
-                    mesh: wall,
-                    minX: posX - GRID_SIZE / 2,
-                    maxX: posX + GRID_SIZE / 2,
-                    minZ: posZ - GRID_SIZE / 2,
-                    maxZ: posZ + GRID_SIZE / 2
-                });
+                if (currentLevel === 2) {
+                    colliders.push({
+                        isTree: true,
+                        posX: posX,
+                        posZ: posZ
+                    });
+                } else {
+                    colliders.push({
+                        mesh: collisionMesh,
+                        minX: posX - GRID_SIZE / 2,
+                        maxX: posX + GRID_SIZE / 2,
+                        minZ: posZ - GRID_SIZE / 2,
+                        maxZ: posZ + GRID_SIZE / 2
+                    });
+                }
             }
             else if (type === 2) {
-                // Puerta de Salida
-                const doorGeo = new THREE.BoxGeometry(GRID_SIZE, WALL_HEIGHT, 0.4);
-                const door = new THREE.Mesh(doorGeo, doorMaterial);
-                door.name = "map_wall";
-                door.position.set(posX, WALL_HEIGHT / 2, posZ);
-                door.castShadow = true;
-                door.receiveShadow = true;
-                scene.add(door);
-                colliders.push({
-                    mesh: door,
-                    isExit: true,
-                    minX: posX - GRID_SIZE / 2,
-                    maxX: posX + GRID_SIZE / 2,
-                    minZ: posZ - 0.2,
-                    maxZ: posZ + 0.2
-                });
-                // Construir la consola del generador al lado
-                buildFuseBox3D(posX, posZ);
+                if (currentLevel === 2) {
+                    const exitGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
+                    const exitMat = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.3 });
+                    const exitMesh = new THREE.Mesh(exitGeo, exitMat);
+                    exitMesh.position.set(posX, 0.1, posZ);
+                    exitMesh.rotation.x = -Math.PI / 2;
+                    scene.add(exitMesh);
+
+                    const exitLight = new THREE.PointLight(0x00ff00, 2, 20);
+                    exitLight.position.set(posX, 3, posZ);
+                    scene.add(exitLight);
+
+                    colliders.push({
+                        mesh: exitMesh,
+                        isExit: true,
+                        unlocked: true,
+                        minX: posX - GRID_SIZE / 2,
+                        maxX: posX + GRID_SIZE / 2,
+                        minZ: posZ - GRID_SIZE / 2,
+                        maxZ: posZ + GRID_SIZE / 2
+                    });
+                } else {
+                    const doorGeo = new THREE.BoxGeometry(GRID_SIZE, WALL_HEIGHT, 0.4);
+                    const door = new THREE.Mesh(doorGeo, doorMaterial);
+                    door.name = "map_wall";
+                    door.position.set(posX, WALL_HEIGHT / 2, posZ);
+                    door.castShadow = true;
+                    door.receiveShadow = true;
+                    scene.add(door);
+                    colliders.push({
+                        mesh: door,
+                        isExit: true,
+                        minX: posX - GRID_SIZE / 2,
+                        maxX: posX + GRID_SIZE / 2,
+                        minZ: posZ - 0.2,
+                        maxZ: posZ + 0.2
+                    });
+                    buildFuseBox3D(posX, posZ);
+                }
             }
             else if (type === 3) {
-                // Puerta Normal Interactiva (Se abre con E)
                 let spanZ = false;
                 if (z > 0 && z < activeMap.length - 1) {
                     const cellAbove = activeMap[z - 1][x];
@@ -1050,7 +1187,7 @@ function buildMap3D() {
                     mesh: door,
                     isInteractive: true,
                     isOpen: false,
-                    state: 'CLOSED', // CLOSED, OPENING, OPEN
+                    state: 'CLOSED',
                     gridX: x,
                     gridZ: z,
                     spanZ: spanZ,
@@ -1062,16 +1199,14 @@ function buildMap3D() {
                 colliders.push(doorCollider);
                 interactiveDoors.push(doorCollider);
             }
-            // Luces del techo intermitentes en algunas celdas aleatorias del pasillo
             if (type === 0 && Math.random() < 0.08 && z > 2 && x > 2) {
                 const isRed = Math.random() < 0.35;
                 const lightColor = isRed ? 0xff0000 : 0xffaa44;
                 const ceilingLight = new THREE.PointLight(lightColor, 1.2, 8, 1.5);
                 ceilingLight.position.set(posX, WALL_HEIGHT - 0.2, posZ);
-                ceilingLight.castShadow = false; // Desactivar sombras de luces puntuales para evitar exceder MAX_TEXTURE_IMAGE_UNITS y mejorar FPS
+                ceilingLight.castShadow = false;
                 ceilingLight.shadow.bias = -0.002;
                 scene.add(ceilingLight);
-                // Placa visual de la lámpara
                 const lampGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.05, 8);
                 const lampMat = new THREE.MeshBasicMaterial({ color: isRed ? 0x880000 : 0xe59400 });
                 const lamp = new THREE.Mesh(lampGeo, lampMat);
@@ -1090,13 +1225,11 @@ function buildMap3D() {
 }
 // --- LIMPIEZA DE MAPA Y AMBIENTACIÓN ---
 function clearCurrentMap() {
-    // 1. Quitar meshes del mapa de la escena
     const toRemove = [];
     scene.traverse((child) => {
-        if (child.name === "map_floor" || child.name === "map_ceiling" || child.name === "map_wall") {
+        if (child.name === "map_floor" || child.name === "map_ceiling" || child.name === "map_wall" || child.name === "map_tree") {
             toRemove.push(child);
         }
-        // Quitar calcomanías de sangre (planos que no son suelo/techo)
         if (child.isMesh && child.geometry && child.geometry.type === 'PlaneGeometry' && child.name !== 'map_floor' && child.name !== 'map_ceiling') {
             toRemove.push(child);
         }
@@ -1114,7 +1247,6 @@ function clearCurrentMap() {
             }
         }
     });
-    // 2. Quitar luces y lámparas del mapa
     lights.forEach(item => {
         scene.remove(item.light);
         scene.remove(item.lamp);
@@ -1124,7 +1256,6 @@ function clearCurrentMap() {
             item.lamp.material.dispose();
     });
     lights = [];
-    // 3. Quitar generador final de la escena
     if (fuseBoxConsole && fuseBoxConsole.group) {
         scene.remove(fuseBoxConsole.group);
         fuseBoxConsole.group.traverse(child => {
@@ -1141,7 +1272,6 @@ function clearCurrentMap() {
         });
         fuseBoxConsole = null;
     }
-    // 4. Limpiar arreglos de colisiones
     colliders = [];
     interactiveDoors = [];
 }
@@ -1153,22 +1283,37 @@ function updateLevelEnvironment() {
     let hemiSkyColor, hemiGroundColor, hemiIntensity;
     let toneExposure;
     if (currentLevel === 2) {
-        fogColor = 0x071a06;
-        fogDensity = 0.065;
+        fogColor = 0x2c3e38;
+        fogDensity = 0.02;
         wallTex = generateJungleWallTexture();
         wallHazardTex = generateJungleWallTexture();
         wallBloodTex = generateJungleWallTexture();
         floorTex = generateJungleFloorTexture();
         ceilingTex = generateJungleCeilingTexture();
-        hemiSkyColor = 0x1a3a1a;
-        hemiGroundColor = 0x0a1a06;
-        hemiIntensity = 0.4;
-        toneExposure = 1.0;
+        hemiSkyColor = 0x334433;
+        hemiGroundColor = 0x081008;
+        hemiIntensity = 0.45;
+        toneExposure = 0.9;
+        
+        if (!sunLight) {
+            sunLight = new THREE.DirectionalLight(0x778899, 0.5);
+            sunLight.position.set(60, 100, 60);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 1024;
+            sunLight.shadow.mapSize.height = 1024;
+            sunLight.shadow.camera.near = 10;
+            sunLight.shadow.camera.far = 300;
+            sunLight.shadow.camera.left = -60;
+            sunLight.shadow.camera.right = 60;
+            sunLight.shadow.camera.top = 60;
+            sunLight.shadow.camera.bottom = -60;
+            sunLight.shadow.bias = -0.001;
+            scene.add(sunLight);
+        }
     }
     else if (currentLevel === 3) {
-        // Bright snowy environment
         fogColor = 0xdbe5f0;
-        fogDensity = 0.025; // Less dense so the bright snow is visible
+        fogDensity = 0.025;
         wallTex = generateMountainWallTexture();
         wallHazardTex = generateMountainWallTexture();
         wallBloodTex = generateMountainWallTexture();
@@ -1180,9 +1325,8 @@ function updateLevelEnvironment() {
         toneExposure = 1.2;
     }
     else if (currentLevel === 4) {
-        // Infernal volcanic boss arena
         fogColor = 0x1a0505;
-        fogDensity = 0.02; // Baja densidad: arena amplia y abierta
+        fogDensity = 0.02;
         wallTex = generateInfernalWallTexture();
         wallHazardTex = generateInfernalWallTexture();
         wallBloodTex = generateInfernalWallTexture();
@@ -1206,41 +1350,64 @@ function updateLevelEnvironment() {
         hemiIntensity = 0.3;
         toneExposure = 1.1;
     }
-    // Cambiar niebla
+    
+    if (currentLevel !== 2 && sunLight) {
+        scene.remove(sunLight);
+        sunLight.dispose();
+        sunLight = null;
+    }
+    
     if (scene.fog) {
         scene.fog.color.setHex(fogColor);
         scene.fog.density = fogDensity;
     }
     renderer.setClearColor(fogColor);
     renderer.toneMappingExposure = toneExposure;
-    // Actualizar luz hemisférica por bioma
     if (hemisphereLight) {
         hemisphereLight.color.setHex(hemiSkyColor);
         hemisphereLight.groundColor.setHex(hemiGroundColor);
         hemisphereLight.intensity = hemiIntensity;
     }
-    // Cambiar texturas en materiales existentes
     if (wallMaterialStandard) {
         wallMaterialStandard.map = wallTex;
+        if (typeof createNormalMapFromCanvas !== 'undefined') {
+            wallMaterialStandard.normalMap = createNormalMapFromCanvas(wallTex, currentLevel === 2 ? 1.0 : 3.0);
+            wallMaterialStandard.roughnessMap = createRoughnessMapFromCanvas(wallTex, 1.2, 0.1);
+        }
         wallMaterialStandard.needsUpdate = true;
     }
     if (wallMaterialHazard) {
         wallMaterialHazard.map = wallHazardTex;
+        if (typeof createNormalMapFromCanvas !== 'undefined') {
+            wallMaterialHazard.normalMap = createNormalMapFromCanvas(wallHazardTex, currentLevel === 2 ? 1.0 : 2.5);
+            wallMaterialHazard.roughnessMap = createRoughnessMapFromCanvas(wallHazardTex, 1.0, 0.2);
+        }
         wallMaterialHazard.needsUpdate = true;
     }
     if (wallMaterialBlood) {
         wallMaterialBlood.map = wallBloodTex;
+        if (typeof createNormalMapFromCanvas !== 'undefined') {
+            wallMaterialBlood.normalMap = createNormalMapFromCanvas(wallBloodTex, currentLevel === 2 ? 1.0 : 3.0);
+            wallMaterialBlood.roughnessMap = createRoughnessMapFromCanvas(wallBloodTex, 2.0, -0.2);
+        }
         wallMaterialBlood.needsUpdate = true;
     }
     if (floorMaterial) {
         floorMaterial.map = floorTex;
+        if (typeof createNormalMapFromCanvas !== 'undefined') {
+            floorMaterial.normalMap = createNormalMapFromCanvas(floorTex, currentLevel === 2 ? 1.5 : 2.5);
+            floorMaterial.roughnessMap = createRoughnessMapFromCanvas(floorTex, currentLevel === 2 ? 1.8 : 1.5, currentLevel === 2 ? 0.2 : -0.1);
+        }
         floorMaterial.needsUpdate = true;
     }
     if (ceilingMaterial) {
         ceilingMaterial.map = ceilingTex;
+        if (typeof createNormalMapFromCanvas !== 'undefined') {
+            ceilingMaterial.normalMap = createNormalMapFromCanvas(ceilingTex, currentLevel === 2 ? 0.5 : 1.0);
+            ceilingMaterial.roughnessMap = createRoughnessMapFromCanvas(ceilingTex, 0.8, 0.3);
+        }
         ceilingMaterial.needsUpdate = true;
     }
-    // Limpiar y regenerar decoraciones y partículas ambientales
     clearDecorations();
     spawnLevelDecorations();
     clearAmbientParticles();
@@ -1274,10 +1441,9 @@ function spawnLevelDecorations() {
             if (map[z][x] !== 0)
                 continue;
             if (Math.random() > 0.12)
-                continue; // ~12% de celdas vacías reciben decoración
+                continue;
             const posX = x * GRID_SIZE;
             const posZ = z * GRID_SIZE;
-            // Verificar que no esté en el spawn o salida
             if (x < 3 && z < 3)
                 continue;
             if (x > 13 && z > 13)
@@ -1304,7 +1470,6 @@ function createFacilityDecoration(px, pz) {
     const group = new THREE.Group();
     const type = pickFacilityDecorationType(Math.random());
     if (type === 'barrel') {
-        // Barril tóxico
         const barrelGeo = new THREE.CylinderGeometry(0.35, 0.38, 1.0, 10);
         const barrelMat = new THREE.MeshStandardMaterial({
             color: 0x3a4a2e, roughness: 0.85, metalness: 0.3
@@ -1314,7 +1479,6 @@ function createFacilityDecoration(px, pz) {
         barrel.castShadow = true;
         barrel.receiveShadow = true;
         group.add(barrel);
-        // Franja de peligro
         const bandGeo = new THREE.CylinderGeometry(0.36, 0.39, 0.12, 10);
         const bandMat = new THREE.MeshStandardMaterial({
             color: 0xffaa00, roughness: 0.6, metalness: 0.2, emissive: 0x332200, emissiveIntensity: 0.2
@@ -1323,7 +1487,6 @@ function createFacilityDecoration(px, pz) {
         band.position.copy(barrel.position);
         band.position.y = 0.65;
         group.add(band);
-        // Goteo tóxico luminoso
         const dripGeo = new THREE.SphereGeometry(0.06, 6, 6);
         const dripMat = new THREE.MeshBasicMaterial({ color: 0x44ff22, transparent: true, opacity: 0.7 });
         const drip = new THREE.Mesh(dripGeo, dripMat);
@@ -1334,7 +1497,6 @@ function createFacilityDecoration(px, pz) {
         group.add(dripLight);
     }
     else if (type === 'crate') {
-        // Caja de suministros militar
         const crateGeo = new THREE.BoxGeometry(0.9, 0.6, 0.7);
         const crateMat = new THREE.MeshStandardMaterial({
             color: 0x2a2a1e, roughness: 0.9, metalness: 0.15
@@ -1345,7 +1507,6 @@ function createFacilityDecoration(px, pz) {
         crate.castShadow = true;
         crate.receiveShadow = true;
         group.add(crate);
-        // Refuerzos metálicos
         const stripGeo = new THREE.BoxGeometry(0.92, 0.04, 0.72);
         const stripMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.7, roughness: 0.5 });
         const strip = new THREE.Mesh(stripGeo, stripMat);
@@ -1354,9 +1515,7 @@ function createFacilityDecoration(px, pz) {
         strip.rotation.y = crate.rotation.y;
         group.add(strip);
     } else if (type === 2) {
-        // Los tubos voladores han sido eliminados a petición del usuario.
     } else {
-        // Cable colgante del techo
         const cableCount = 2 + Math.floor(Math.random() * 3);
         for (let c = 0; c < cableCount; c++) {
             const cableGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.2 + Math.random() * 1.5, 4);
@@ -1376,7 +1535,6 @@ function createJungleDecoration(px, pz) {
     const group = new THREE.Group();
     const type = Math.floor(Math.random() * 4);
     if (type === 0) {
-        // Arbusto frondoso
         const bushGeo = new THREE.SphereGeometry(0.5 + Math.random() * 0.3, 8, 6);
         const bushMat = new THREE.MeshStandardMaterial({
             color: 0x2a5a1e, roughness: 0.95, metalness: 0.0
@@ -1387,7 +1545,6 @@ function createJungleDecoration(px, pz) {
         bush.castShadow = true;
         bush.receiveShadow = true;
         group.add(bush);
-        // Hojas más claras por encima
         const topGeo = new THREE.SphereGeometry(0.3, 6, 6);
         const topMat = new THREE.MeshStandardMaterial({ color: 0x44882e, roughness: 0.9 });
         const top = new THREE.Mesh(topGeo, topMat);
@@ -1396,7 +1553,6 @@ function createJungleDecoration(px, pz) {
         group.add(top);
     }
     else if (type === 1) {
-        // Hongo bioluminiscente
         const stemGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.35, 6);
         const stemMat = new THREE.MeshStandardMaterial({ color: 0x8a7a6a, roughness: 0.95 });
         const stem = new THREE.Mesh(stemGeo, stemMat);
@@ -1418,7 +1574,6 @@ function createJungleDecoration(px, pz) {
         group.add(mushroomLight);
     }
     else if (type === 2) {
-        // Tronco caído
         const logGeo = new THREE.CylinderGeometry(0.18, 0.22, 2.0 + Math.random(), 8);
         const logMat = new THREE.MeshStandardMaterial({
             color: 0x3a2a18, roughness: 0.95, metalness: 0.0
@@ -1432,7 +1587,6 @@ function createJungleDecoration(px, pz) {
         group.add(log);
     }
     else {
-        // Lianas colgantes del techo
         const vineCount = 3 + Math.floor(Math.random() * 4);
         for (let v = 0; v < vineCount; v++) {
             const vineGeo = new THREE.CylinderGeometry(0.02, 0.015, 1.5 + Math.random() * 2.0, 4);
@@ -1450,7 +1604,6 @@ function createMountainDecoration(px, pz) {
     const group = new THREE.Group();
     const type = Math.floor(Math.random() * 4);
     if (type === 0) {
-        // Roca grande
         const rockGeo = new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.3, 1);
         const rockMat = new THREE.MeshStandardMaterial({
             color: 0x555560, roughness: 0.95, metalness: 0.1
@@ -1462,7 +1615,6 @@ function createMountainDecoration(px, pz) {
         rock.castShadow = true;
         rock.receiveShadow = true;
         group.add(rock);
-        // Escarcha encima
         const frostGeo = new THREE.SphereGeometry(0.3, 6, 6, 0, Math.PI * 2, 0, Math.PI / 3);
         const frostMat = new THREE.MeshStandardMaterial({
             color: 0xddeeff, roughness: 0.2, metalness: 0.1,
@@ -1474,7 +1626,6 @@ function createMountainDecoration(px, pz) {
         group.add(frost);
     }
     else if (type === 1) {
-        // Cristal de hielo luminoso
         const crystalGeo = new THREE.ConeGeometry(0.12, 0.6 + Math.random() * 0.4, 5);
         const crystalMat = new THREE.MeshStandardMaterial({
             color: 0x88ccff, emissive: 0x2255aa, emissiveIntensity: 0.4,
@@ -1492,19 +1643,17 @@ function createMountainDecoration(px, pz) {
         group.add(crystalLight);
     }
     else if (type === 2) {
-        // Estalactita colgando del techo
         const stalGeo = new THREE.ConeGeometry(0.08 + Math.random() * 0.06, 0.8 + Math.random() * 0.6, 6);
         const stalMat = new THREE.MeshStandardMaterial({
             color: 0x665555, roughness: 0.8, metalness: 0.15
         });
         const stalactite = new THREE.Mesh(stalGeo, stalMat);
         stalactite.position.set(px + (Math.random() - 0.5) * 1.5, WALL_HEIGHT - (0.4 + Math.random() * 0.3), pz + (Math.random() - 0.5) * 1.5);
-        stalactite.rotation.x = Math.PI; // Invertido, colgando
+        stalactite.rotation.x = Math.PI;
         stalactite.castShadow = true;
         group.add(stalactite);
     }
     else {
-        // Montículo de nieve
         const snowGeo = new THREE.SphereGeometry(0.5 + Math.random() * 0.3, 8, 6);
         const snowMat = new THREE.MeshStandardMaterial({
             color: 0xe8eff5, roughness: 0.6, metalness: 0.0
@@ -1528,7 +1677,7 @@ function clearAmbientParticles() {
 }
 function spawnAmbientParticles() {
     const map = getMapForLevel(currentLevel);
-    const count = 80; // Cantidad de partículas flotantes
+    const count = 80;
     let color, emissive, size, opacity;
     if (currentLevel === 2) {
         color = 0x44ff66;
@@ -1549,7 +1698,6 @@ function spawnAmbientParticles() {
         opacity = 0.35;
     }
     for (let i = 0; i < count; i++) {
-        // Elegir posición aleatoria dentro de celdas vacías
         let attempts = 0;
         while (attempts < 15) {
             attempts++;
@@ -1585,9 +1733,7 @@ function spawnAmbientParticles() {
 // --- CONSOLA GENERADORA FINAL (CAJA DE FUSIBLES) ---
 function buildFuseBox3D(posX, posZ) {
     const group = new THREE.Group();
-    // Posicionada ligeramente a un lado de la compuerta final
     group.position.set(posX - 1.5, 0, posZ - 1.5);
-    // Malla del pedestal principal
     const baseGeo = new THREE.BoxGeometry(0.8, 1.2, 0.6);
     const baseMat = new THREE.MeshStandardMaterial({ color: 0x22252a, roughness: 0.8, metalness: 0.4 });
     const base = new THREE.Mesh(baseGeo, baseMat);
@@ -1595,13 +1741,11 @@ function buildFuseBox3D(posX, posZ) {
     base.castShadow = true;
     base.receiveShadow = true;
     group.add(base);
-    // Panel inclinado del lector
     const panelGeo = new THREE.BoxGeometry(0.7, 0.3, 0.5);
     const panel = new THREE.Mesh(panelGeo, baseMat);
     panel.position.set(0, 1.25, 0.05);
-    panel.rotation.x = Math.PI / 6; // Inclinado para comodidad visual
+    panel.rotation.x = Math.PI / 6;
     group.add(panel);
-    // 3 ranuras para fusibles (cilindros oscuros)
     const slotGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8);
     const slotMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0c, roughness: 0.95 });
     for (let i = 0; i < 3; i++) {
@@ -1610,28 +1754,24 @@ function buildFuseBox3D(posX, posZ) {
         slot.rotation.x = Math.PI / 6;
         group.add(slot);
     }
-    // LED de estado en el frente del generador
     const ledGeo = new THREE.SphereGeometry(0.04, 8, 8);
-    const ledMat = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Comienza en rojo apagado
+    const ledMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
     const led = new THREE.Mesh(ledGeo, ledMat);
     led.position.set(0, 1.0, 0.31);
     group.add(led);
-    // Luz de estado del LED
     const ledLight = new THREE.PointLight(0xff0000, 0.6, 2.5);
     ledLight.position.set(0, 1.0, 0.35);
     group.add(ledLight);
-    // Cableado auxiliar para nivel 2+
     let wiringLed = null;
     let wiringLedLight = null;
     if (currentLevel >= 2) {
         const sidePanelGeo = new THREE.BoxGeometry(0.35, 0.7, 0.45);
         const sidePanelMat = new THREE.MeshStandardMaterial({ color: 0x33353b, roughness: 0.8, metalness: 0.3 });
         const sidePanel = new THREE.Mesh(sidePanelGeo, sidePanelMat);
-        sidePanel.position.set(0.55, 0.8, 0); // en el lado derecho
+        sidePanel.position.set(0.55, 0.8, 0);
         sidePanel.castShadow = true;
         sidePanel.receiveShadow = true;
         group.add(sidePanel);
-        // LED de estado del cableado
         const wLedGeo = new THREE.SphereGeometry(0.04, 8, 8);
         const wLedMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
         wiringLed = new THREE.Mesh(wLedGeo, wLedMat);
@@ -1654,16 +1794,14 @@ function buildFuseBox3D(posX, posZ) {
         minZ: group.position.z - 0.3,
         maxZ: group.position.z + 0.3
     };
-    // Añadir el generador a colisionadores para evitar atravesarlo
     colliders.push(fuseBoxConsole);
 }
 // --- GENERACIÓN Y GESTIÓN DE FUSIBLES ---
 function spawnFuses() {
-    // Limpiar anteriores
+    if (currentLevel === 2) return;
     fuses.forEach(f => {
         scene.remove(f.mesh);
         if (fuseBoxConsole && fuseBoxConsole.group) {
-            // Limpiar fusibles montados en consola si los hay
             try {
                 const fuseMesh = fuseBoxConsole.group.getObjectByName(`mounted_fuse_${fuses.indexOf(f)}`);
                 if (fuseMesh)
@@ -1683,11 +1821,9 @@ function spawnFuses() {
         attempts++;
         const z = Math.floor(Math.random() * activeMap.length);
         const x = Math.floor(Math.random() * activeMap[z].length);
-        // Debe ser vacío, no muy pegado a la consola de salida y no pegado al spawn
         if (activeMap[z][x] === 0) {
             if ((x < 3 && z < 3) || (x > 12 && z > 12))
                 continue;
-            // Comprobar colisión con fusibles ya posicionados
             const dup = fuses.some(f => f.gridX === x && f.gridZ === z);
             if (dup)
                 continue;
@@ -1695,7 +1831,6 @@ function spawnFuses() {
             const pz = z * GRID_SIZE;
             const fuseGroup = new THREE.Group();
             fuseGroup.position.set(px, 0.8, pz);
-            // Cuerpo transparente de cristal que brilla en azul
             const glassGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.4, 8);
             const glassMat = new THREE.MeshStandardMaterial({
                 color: 0x00bfff,
@@ -1707,7 +1842,6 @@ function spawnFuses() {
             });
             const glass = new THREE.Mesh(glassGeo, glassMat);
             fuseGroup.add(glass);
-            // Tapas metálicas de latón/cobre dorado
             const capGeo = new THREE.CylinderGeometry(0.14, 0.14, 0.08, 8);
             const capMat = new THREE.MeshStandardMaterial({ color: 0xe5a93b, roughness: 0.3, metalness: 0.85 });
             const topCap = new THREE.Mesh(capGeo, capMat);
@@ -1717,7 +1851,6 @@ function spawnFuses() {
             bottomCap.position.y = -0.22;
             fuseGroup.add(bottomCap);
             scene.add(fuseGroup);
-            // Pequeña luz de color cian para dar visibilidad
             const light = new THREE.PointLight(0x00d9ff, 1.5, 4);
             light.position.set(px, 0.8, pz);
             scene.add(light);
@@ -1736,9 +1869,15 @@ function spawnFuses() {
 function updateFuseHUD() {
     const fuseCountEl = document.getElementById('fuse-count');
     if (fuseCountEl) {
+        if (currentLevel === 2) {
+            fuseCountEl.style.display = 'none';
+            return;
+        } else {
+            fuseCountEl.style.display = 'block';
+        }
         fuseCountEl.innerText = `${fusesCollected}/3`;
         if (fusesCollected === 3) {
-            fuseCountEl.style.color = '#00ff41'; // Brillo verde al tenerlos todos
+            fuseCountEl.style.color = '#00ff41';
             fuseCountEl.style.textShadow = '0 0 12px rgba(0, 255, 65, 0.6)';
         }
         else {
@@ -1750,9 +1889,7 @@ function updateFuseHUD() {
 // --- CONSTRUCTOR DE ARMA ---
 function buildWeapon3D() {
     gunGroup = new THREE.Group();
-    // 1. SHOTGUN MESH GROUP
     shotgunMeshGroup = new THREE.Group();
-    // Barrilete izquierdo (Cilindro metálico detallado)
     const barrelGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.5, 16);
     const barrelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.2, metalness: 0.95 });
     const leftBarrel = new THREE.Mesh(barrelGeo, barrelMat);
@@ -1760,61 +1897,51 @@ function buildWeapon3D() {
     leftBarrel.position.set(-0.015, 0, -0.22);
     leftBarrel.castShadow = true;
     shotgunMeshGroup.add(leftBarrel);
-    // Barrilete derecho
     const rightBarrel = new THREE.Mesh(barrelGeo, barrelMat);
     rightBarrel.rotation.x = Math.PI / 2;
     rightBarrel.position.set(0.015, 0, -0.22);
     rightBarrel.castShadow = true;
     shotgunMeshGroup.add(rightBarrel);
-    // Costilla ventilada (Vented rib) entre cañones
     const ribGeo = new THREE.BoxGeometry(0.015, 0.008, 0.45);
     const ribMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.8 });
     const rib = new THREE.Mesh(ribGeo, ribMat);
     rib.position.set(0, 0.012, -0.22);
     shotgunMeshGroup.add(rib);
-    // Culata y soporte del cañón (Madera barnizada o polímero táctico)
     const stockGeo = new THREE.BoxGeometry(0.05, 0.05, 0.22);
     const stockMat = new THREE.MeshStandardMaterial({ color: 0x241108, roughness: 0.8, metalness: 0.1 });
     const stock = new THREE.Mesh(stockGeo, stockMat);
     stock.position.set(0, -0.035, 0.02);
     shotgunMeshGroup.add(stock);
-    // Empuñadura de recarga metálica inferior (Pump) texturizada
     const pumpGeo = new THREE.BoxGeometry(0.045, 0.035, 0.16);
     const pumpMat = new THREE.MeshStandardMaterial({ color: 0x101010, roughness: 0.9, bumpScale: 0.02 });
     const pump = new THREE.Mesh(pumpGeo, pumpMat);
     pump.position.set(0, -0.025, -0.16);
     shotgunMeshGroup.add(pump);
-    // Tubo de munición inferior
     const magTubeGeo = new THREE.CylinderGeometry(0.01, 0.01, 0.35, 12);
     const magTube = new THREE.Mesh(magTubeGeo, barrelMat);
     magTube.rotation.x = Math.PI / 2;
     magTube.position.set(0, -0.015, -0.22);
     shotgunMeshGroup.add(magTube);
     gunGroup.add(shotgunMeshGroup);
-    // 2. GLOCK MESH GROUP (Táctica con láser)
     glockMeshGroup = new THREE.Group();
-    glockMeshGroup.visible = false; // Oculta inicialmente
+    glockMeshGroup.visible = false;
     const glockSlideMat = new THREE.MeshStandardMaterial({ color: 0x1a1c1e, roughness: 0.4, metalness: 0.85 });
     const glockPolyMat = new THREE.MeshStandardMaterial({ color: 0x0f1011, roughness: 0.85, metalness: 0.2 });
-    // Empuñadura ergonómica
     const glockGripGeo = new THREE.BoxGeometry(0.026, 0.09, 0.038);
     const glockGrip = new THREE.Mesh(glockGripGeo, glockPolyMat);
     glockGrip.position.set(0, -0.05, -0.02);
     glockGrip.rotation.x = -Math.PI / 9;
     glockMeshGroup.add(glockGrip);
-    // Corredera detallada
     const glockSlideGeo = new THREE.BoxGeometry(0.029, 0.032, 0.165);
     const glockSlide = new THREE.Mesh(glockSlideGeo, glockSlideMat);
     glockSlide.position.set(0, 0, -0.08);
     glockMeshGroup.add(glockSlide);
-    // Punta del cañón (más oscuro)
     const glockTipGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.02, 12);
     const glockTipMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.95 });
     const glockTip = new THREE.Mesh(glockTipGeo, glockTipMat);
     glockTip.rotation.x = Math.PI / 2;
     glockTip.position.set(0, 0.004, -0.17);
     glockMeshGroup.add(glockTip);
-    // Miras de hierro (Iron Sights) con puntos brillantes
     const sightBackGeo = new THREE.BoxGeometry(0.015, 0.005, 0.008);
     const sightBack = new THREE.Mesh(sightBackGeo, glockSlideMat);
     sightBack.position.set(0, 0.018, -0.01);
@@ -1827,12 +1954,10 @@ function buildWeapon3D() {
     const sightDot = new THREE.Mesh(new THREE.SphereGeometry(0.0015, 4, 4), sightDotMat);
     sightDot.position.set(0, 0.018, -0.16);
     glockMeshGroup.add(sightDot);
-    // Guardamonte y gatillo
     const guardGeo = new THREE.BoxGeometry(0.012, 0.025, 0.035);
     const guard = new THREE.Mesh(guardGeo, glockPolyMat);
     guard.position.set(0, -0.035, -0.05);
     glockMeshGroup.add(guard);
-    // Módulo Láser bajo el cañón
     const laserModuleGeo = new THREE.BoxGeometry(0.02, 0.02, 0.04);
     const laserModule = new THREE.Mesh(laserModuleGeo, glockPolyMat);
     laserModule.position.set(0, -0.025, -0.13);
@@ -1843,57 +1968,47 @@ function buildWeapon3D() {
     laserLens.position.set(0, -0.025, -0.151);
     glockMeshGroup.add(laserLens);
     gunGroup.add(glockMeshGroup);
-    // 3. M4 CARBINE MESH GROUP (Totalmente Táctica)
     m4MeshGroup = new THREE.Group();
-    m4MeshGroup.visible = false; // Oculta inicialmente
+    m4MeshGroup.visible = false;
     const m4MetalMat = new THREE.MeshStandardMaterial({ color: 0x222325, roughness: 0.35, metalness: 0.9 });
     const m4PlasticMat = new THREE.MeshStandardMaterial({ color: 0x151617, roughness: 0.85, metalness: 0.15 });
-    // Recibidor superior e inferior detallado
     const m4RecGeo = new THREE.BoxGeometry(0.032, 0.058, 0.22);
     const m4Receiver = new THREE.Mesh(m4RecGeo, m4MetalMat);
     m4Receiver.position.set(0, -0.01, -0.1);
     m4MeshGroup.add(m4Receiver);
-    // Guardamanos picatinny (Rieles tácticos)
     const m4GuardGeo = new THREE.BoxGeometry(0.042, 0.042, 0.22);
     const m4Guard = new THREE.Mesh(m4GuardGeo, m4MetalMat);
     m4Guard.position.set(0, -0.01, -0.32);
     m4MeshGroup.add(m4Guard);
-    // Cañón externo
     const m4BarrelGeo = new THREE.CylinderGeometry(0.009, 0.009, 0.28, 12);
     const m4Barrel = new THREE.Mesh(m4BarrelGeo, m4MetalMat);
     m4Barrel.rotation.x = Math.PI / 2;
     m4Barrel.position.set(0, -0.01, -0.5);
     m4MeshGroup.add(m4Barrel);
-    // Bocacha apagallamas estilo birdcage
     const m4TipGeo = new THREE.CylinderGeometry(0.013, 0.013, 0.045, 12);
     const m4Tip = new THREE.Mesh(m4TipGeo, m4MetalMat);
     m4Tip.rotation.x = Math.PI / 2;
     m4Tip.position.set(0, -0.01, -0.6);
     m4MeshGroup.add(m4Tip);
-    // Empuñadura
     const m4GripGeo = new THREE.BoxGeometry(0.026, 0.08, 0.035);
     const m4Grip = new THREE.Mesh(m4GripGeo, m4PlasticMat);
     m4Grip.position.set(0, -0.075, -0.04);
     m4Grip.rotation.x = -Math.PI / 8;
     m4MeshGroup.add(m4Grip);
-    // Culata táctica ajustable
     const m4StockGeo = new THREE.BoxGeometry(0.03, 0.07, 0.16);
     const m4Stock = new THREE.Mesh(m4StockGeo, m4PlasticMat);
     m4Stock.position.set(0, -0.025, 0.08);
     m4MeshGroup.add(m4Stock);
-    // Tubo de culata metálico
     const m4BufferGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.06, 12);
     const m4Buffer = new THREE.Mesh(m4BufferGeo, m4MetalMat);
     m4Buffer.rotation.x = Math.PI / 2;
     m4Buffer.position.set(0, -0.01, 0.02);
     m4MeshGroup.add(m4Buffer);
-    // Cargador curvado
     const m4MagGeo = new THREE.BoxGeometry(0.025, 0.14, 0.055);
     const m4Mag = new THREE.Mesh(m4MagGeo, m4MetalMat);
     m4Mag.position.set(0, -0.11, -0.14);
     m4Mag.rotation.x = Math.PI / 16;
     m4MeshGroup.add(m4Mag);
-    // Mira holográfica EOTech realista
     const m4HoloGeo = new THREE.BoxGeometry(0.025, 0.035, 0.06);
     const m4Holo = new THREE.Mesh(m4HoloGeo, m4MetalMat);
     m4Holo.position.set(0, 0.035, -0.1);
@@ -1903,7 +2018,6 @@ function buildWeapon3D() {
     const m4HoloGlass = new THREE.Mesh(m4HoloGlassGeo, m4HoloGlassMat);
     m4HoloGlass.position.set(0, 0.035, -0.125);
     m4MeshGroup.add(m4HoloGlass);
-    // Linterna táctica lateral
     const lightBodyGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.08, 12);
     const lightBody = new THREE.Mesh(lightBodyGeo, m4MetalMat);
     lightBody.rotation.x = Math.PI / 2;
@@ -1915,17 +2029,14 @@ function buildWeapon3D() {
     lightLens.position.set(0.025, -0.01, -0.39);
     m4MeshGroup.add(lightLens);
     gunGroup.add(m4MeshGroup);
-    // Luz de fogonazo de disparo central
     muzzleLight = new THREE.PointLight(0xffaa00, 0, 8);
     muzzleLight.position.set(0, 0, -0.46);
     gunGroup.add(muzzleLight);
-    // Sprite de fogonazo
     const flashGeo = new THREE.SphereGeometry(0.08, 8, 8);
     const flashMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0 });
     muzzleFlashSprite = new THREE.Mesh(flashGeo, flashMat);
     muzzleFlashSprite.position.set(0, 0, -0.46);
     gunGroup.add(muzzleFlashSprite);
-    // Posicionar el arma en la esquina inferior derecha
     gunGroup.position.set(0.18, -0.20, -0.45);
     camera.add(gunGroup);
 }
@@ -1937,7 +2048,6 @@ function cloneRiggedModel(source) {
         const sourceLookup = new Map();
         const cloneLookup = new Map();
         const clone = source.clone();
-        // Mapear nodos originales a nodos clonados en paralelo
         function parallelTraverse(a, b) {
             sourceLookup.set(a, b);
             cloneLookup.set(b, a);
@@ -1946,7 +2056,6 @@ function cloneRiggedModel(source) {
             }
         }
         parallelTraverse(source, clone);
-        // Re-vincular esqueletos
         clone.traverse(node => {
             if (node.isSkinnedMesh) {
                 const sourceMesh = cloneLookup.get(node);
@@ -1954,7 +2063,6 @@ function cloneRiggedModel(source) {
                 node.skeleton = sourceMesh.skeleton.clone();
                 node.bindMatrix.copy(sourceMesh.bindMatrix);
                 node.bindMatrixInverse.copy(sourceMesh.bindMatrixInverse);
-                // Re-mapear los huesos del esqueleto clonado a los nodos clonados correspondientes
                 node.skeleton.bones = sourceBones.map(bone => sourceLookup.get(bone));
                 node.bind(node.skeleton, node.bindMatrix);
             }
@@ -1963,7 +2071,7 @@ function cloneRiggedModel(source) {
     }
     catch (err) {
         console.error("Error al clonar el modelo riggeado usando SkeletonUtils clone:", err);
-        return source.clone(); // Fallback si algo falla
+        return source.clone();
     }
 }
 // --- CONTRATACIÓN Y MOVIMIENTO DE ZOMBIS ---
@@ -1972,44 +2080,38 @@ class Zombie {
         this.group = new THREE.Group();
         this.group.position.set(x, 0, z);
         this.type = type;
-        this.state = 'ALIVE'; // ALIVE, DYING, DEAD
+        this.state = 'ALIVE';
         this.hurtTimer = 0;
         this.attackCooldownTimer = 0;
         this.walkCycle = Math.random() * 100;
-        // Atributos y colores según variante de zombi
         if (this.type === 'RUNNER') {
             this.maxHealth = 45;
             this.health = 45;
-            this.speedMultiplier = 1.65; // Corredor rápido
-            this.colorClothing = 0x5c1515; // Ropa oscura ensangrentada
-            this.colorSkin = 0x4a3636; // Piel necrosada
+            this.speedMultiplier = 1.65;
+            this.colorClothing = 0x5c1515;
+            this.colorSkin = 0x4a3636;
         }
         else if (this.type === 'SPITTER') {
             this.maxHealth = 80;
             this.health = 80;
-            this.speedMultiplier = 0.6; // Escupidor lento
-            this.colorClothing = 0x133815; // Ropa rasgada pantanosa
-            this.colorSkin = 0x5a754b; // Piel verde putrefacta
+            this.speedMultiplier = 0.6;
+            this.colorClothing = 0x133815;
+            this.colorSkin = 0x5a754b;
             this.spitCooldownTimer = 1000 + Math.random() * 1500;
         }
         else {
-            // NORMAL
             this.maxHealth = 100;
             this.health = 100;
             this.speedMultiplier = 1.0;
-            this.colorClothing = 0x2d2538; // Ropa oscura/púrpura
-            this.colorSkin = 0x3d4a36; // Piel verde grisácea
+            this.colorClothing = 0x2d2538;
+            this.colorSkin = 0x3d4a36;
         }
-        // Contenedor del cuerpo (para inclinar al zombie hacia adelante)
         this.bodyGroup = new THREE.Group();
         this.group.add(this.bodyGroup);
         if (cachedZombieModel) {
-            // Clonar el modelo 3D pre-escalado personalizado (el zombi robot original es estático)
             this.zombieMesh = cachedZombieModel.clone(true);
-            // Alinear la base del zombi al suelo usando el offset pre-calculado
             this.baseYOffset = zombieGLBBaseYOffset;
             this.zombieMesh.position.set(0, this.baseYOffset, 0);
-            // Clonar materiales para poder tintar independientemente y configurar sombras (soportando arrays de materiales)
             this.zombieMesh.traverse(child => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -2019,10 +2121,10 @@ class Zombie {
                             child.material = child.material.map(mat => {
                                 const clonedMat = mat.clone();
                                 if (this.type === 'RUNNER') {
-                                    clonedMat.color.setHex(0xff5555); // Tinte rojo para corredores
+                                    clonedMat.color.setHex(0xff5555);
                                 }
                                 else if (this.type === 'SPITTER') {
-                                    clonedMat.color.setHex(0x55ff55); // Tinte verde fuerte para escupidores
+                                    clonedMat.color.setHex(0x55ff55);
                                 }
                                 return clonedMat;
                             });
@@ -2030,25 +2132,22 @@ class Zombie {
                         else {
                             child.material = child.material.clone();
                             if (this.type === 'RUNNER') {
-                                child.material.color.setHex(0xff5555); // Tinte rojo para corredores
+                                child.material.color.setHex(0xff5555);
                             }
                             else if (this.type === 'SPITTER') {
-                                child.material.color.setHex(0x55ff55); // Tinte verde fuerte para escupidores
+                                child.material.color.setHex(0x55ff55);
                             }
                         }
                     }
                 }
             });
             this.group.add(this.zombieMesh);
-            // Ojos / luz puntual frontal según tipo
             const eyeColor = this.type === 'SPITTER' ? 0x39ff14 : (this.type === 'RUNNER' ? 0xff4400 : 0xffea00);
             this.eyeLight = new THREE.PointLight(eyeColor, 0.7, 4.0);
-            this.eyeLight.position.set(0, 1.5, 0.2); // Colocar cerca de la cabeza
+            this.eyeLight.position.set(0, 1.5, 0.2);
             this.group.add(this.eyeLight);
         }
         else {
-            // --- CÓDIGO PROCEDIMENTAL DE RESPALDO (VIEJO) ---
-            // Torso (Más alto y delgado)
             const torsoGeo = new THREE.BoxGeometry(0.65, 1.2, 0.35);
             const torsoMat = new THREE.MeshStandardMaterial({ color: this.colorClothing, roughness: 0.9, metalness: 0.1 });
             this.torso = new THREE.Mesh(torsoGeo, torsoMat);
@@ -2056,41 +2155,36 @@ class Zombie {
             this.torso.castShadow = true;
             this.torso.receiveShadow = true;
             this.bodyGroup.add(this.torso);
-            // Detalles de costillas / huesos expuestos en el pecho
             const ribGeo = new THREE.BoxGeometry(0.35, 0.4, 0.1);
             const ribMat = new THREE.MeshStandardMaterial({ color: 0x8a8578, roughness: 0.9 });
             this.ribcage = new THREE.Mesh(ribGeo, ribMat);
             this.ribcage.position.set(0, 0.7, 0.18);
             this.bodyGroup.add(this.ribcage);
-            // Manchas de sangre en el torso
             const bloodGeo = new THREE.BoxGeometry(0.5, 0.6, 0.05);
             const bloodMat = new THREE.MeshStandardMaterial({ color: 0x400000, roughness: 1.0 });
             this.blood = new THREE.Mesh(bloodGeo, bloodMat);
             this.blood.position.set(0.05, 0.5, 0.16);
             this.bodyGroup.add(this.blood);
-            // Cabeza (Caja con textura de cara procedimental)
             const headGeo = new THREE.BoxGeometry(0.45, 0.45, 0.45);
             this.headMaterials = [
                 new THREE.MeshStandardMaterial({ color: this.colorSkin }),
                 new THREE.MeshStandardMaterial({ color: this.colorSkin }),
                 new THREE.MeshStandardMaterial({ color: this.colorSkin }),
                 new THREE.MeshStandardMaterial({ color: this.colorSkin }),
-                new THREE.MeshStandardMaterial({ map: zombieFaceTexture, color: this.colorSkin }), // Frente
+                new THREE.MeshStandardMaterial({ map: zombieFaceTexture, color: this.colorSkin }),
                 new THREE.MeshStandardMaterial({ color: this.colorSkin })
             ];
             this.head = new THREE.Mesh(headGeo, this.headMaterials);
-            this.head.position.set(0, 1.4, 0.1); // Cabeza echada hacia adelante
-            this.head.rotation.x = -0.15; // Mirando ligeramente hacia abajo/adelante
+            this.head.position.set(0, 1.4, 0.1);
+            this.head.rotation.x = -0.15;
             this.head.castShadow = true;
             this.bodyGroup.add(this.head);
-            // Mandíbula caída y desencajada (Terrorífico)
             const jawGeo = new THREE.BoxGeometry(0.35, 0.25, 0.35);
             const jawMat = new THREE.MeshStandardMaterial({ color: this.colorSkin });
             this.jaw = new THREE.Mesh(jawGeo, jawMat);
             this.jaw.position.set(0, -0.28, 0.05);
-            this.jaw.rotation.x = 0.4; // Colgando
+            this.jaw.rotation.x = 0.4;
             this.head.add(this.jaw);
-            // Ojos emisivos brillantes (visibles en la oscuridad)
             const eyeColor = this.type === 'SPITTER' ? 0x39ff14 : (this.type === 'RUNNER' ? 0xffaa00 : 0xff2200);
             const eyeGeo = new THREE.SphereGeometry(0.05, 8, 8);
             const eyeMat = new THREE.MeshBasicMaterial({
@@ -2102,26 +2196,23 @@ class Zombie {
             this.rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
             this.rightEye.position.set(0.12, 0.05, 0.23);
             this.head.add(this.rightEye);
-            // Luz puntual tenue desde los ojos
             this.eyeLight = new THREE.PointLight(eyeColor, 0.6, 4.0);
             this.eyeLight.position.set(0, 0.05, 0.25);
             this.head.add(this.eyeLight);
-            // Brazos estirados irregularmente
             const armGeo = new THREE.BoxGeometry(0.16, 0.16, 0.8);
             const armMat = new THREE.MeshStandardMaterial({ color: this.colorSkin });
             this.leftArm = new THREE.Mesh(armGeo, armMat);
             this.leftArm.position.set(-0.45, 0.95, 0.4);
-            this.leftArm.rotation.y = 0.2; // Torcido
+            this.leftArm.rotation.y = 0.2;
             this.leftArm.rotation.x = 0.1;
             this.leftArm.castShadow = true;
             this.bodyGroup.add(this.leftArm);
             this.rightArm = new THREE.Mesh(armGeo, armMat);
-            this.rightArm.position.set(0.45, 1.05, 0.35); // Un brazo más alto que el otro
+            this.rightArm.position.set(0.45, 1.05, 0.35);
             this.rightArm.rotation.y = -0.15;
             this.rightArm.rotation.x = -0.2;
             this.rightArm.castShadow = true;
             this.bodyGroup.add(this.rightArm);
-            // Piernas (Huesudas)
             const legGeo = new THREE.BoxGeometry(0.2, 0.7, 0.2);
             const legMat = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.9 });
             this.leftLeg = new THREE.Mesh(legGeo, legMat);
@@ -2132,17 +2223,15 @@ class Zombie {
             this.rightLeg.position.set(0.2, 0.35, 0);
             this.rightLeg.castShadow = true;
             this.group.add(this.rightLeg);
-            // Inclinar todo el torso hacia adelante para que luzca acechante
-            this.bodyGroup.position.y = 0.7; // Levantar el pivote
-            this.torso.position.y -= 0.7; // Ajustar posición relativa
+            this.bodyGroup.position.y = 0.7;
+            this.torso.position.y -= 0.7;
             this.head.position.y -= 0.7;
             this.leftArm.position.y -= 0.7;
             this.rightArm.position.y -= 0.7;
             this.ribcage.position.y -= 0.7;
             this.blood.position.y -= 0.7;
-            this.bodyGroup.rotation.x = 0.15; // Inclinación
+            this.bodyGroup.rotation.x = 0.15;
         }
-        // Escalar zombis para que tengan un tamaño más amenazante
         this.group.scale.set(1.25, 1.35, 1.25);
         scene.add(this.group);
     }
@@ -2150,7 +2239,6 @@ class Zombie {
         if (this.state === 'DEAD')
             return;
         if (this.state === 'DYING') {
-            // Animación de caída al morir
             if (this.group.rotation.x > -Math.PI / 2) {
                 this.group.rotation.x -= deltaTime * 4;
                 this.group.position.y = Math.max(0.1, this.group.position.y - deltaTime * 2);
@@ -2161,51 +2249,43 @@ class Zombie {
             }
             return;
         }
-        // Recuperar color normal tras flash de daño
         if (this.hurtTimer > 0) {
             this.hurtTimer -= deltaTime;
             if (this.hurtTimer <= 0) {
                 this.setMaterialColor(null);
             }
         }
-        // Temporizador de ataque
         if (this.attackCooldownTimer > 0) {
             this.attackCooldownTimer -= deltaTime * 1000;
         }
-        // IA: Perseguir al jugador
         const dir = new THREE.Vector3().subVectors(playerPos, this.group.position);
         dir.y = 0;
         const dist = dir.length();
         dir.normalize();
         const angle = Math.atan2(dir.x, dir.z);
         this.group.rotation.y = angle;
-        // Gemidos aleatorios ocasionales
         if (Math.random() < 0.003 && dist < 22) {
             AudioSynth.playZombieGroan();
         }
-        // Ataque de ácido para Escupidores (Spitters)
         if (this.type === 'SPITTER' && dist < 12.0 && dist > 2.0 && this.state === 'ALIVE') {
             this.spitCooldownTimer -= deltaTime * 1000;
             if (this.spitCooldownTimer <= 0) {
                 this.spitAcid(dir);
-                this.spitCooldownTimer = 2000 + Math.random() * 2000; // cada 2-4 segundos
+                this.spitCooldownTimer = 2000 + Math.random() * 2000;
             }
         }
         if (dist > ZOMBIE_ATTACK_DIST) {
-            // Moverse hacia el jugador (escalando con la velocidad del nivel)
             const currentSpeed = ZOMBIE_SPEED * this.speedMultiplier * (1.0 + (currentLevel - 1) * 0.08);
             const nextX = this.group.position.x + dir.x * currentSpeed;
             const nextZ = this.group.position.z + dir.z * currentSpeed;
-            // Colisiones con paredes y compuertas cerradas
             const resolved = checkZombieWallCollisions(nextX, nextZ);
             this.group.position.x = resolved.x;
             this.group.position.z = resolved.z;
-            // Animación de caminata
             if (this.zombieMesh) {
                 this.walkCycle += deltaTime * 8 * this.speedMultiplier;
-                this.zombieMesh.rotation.z = Math.sin(this.walkCycle) * 0.08; // Tambaleo lateral
-                this.zombieMesh.rotation.x = 0.15 + Math.cos(this.walkCycle * 2) * 0.05; // Cabeceo
-                this.zombieMesh.position.y = this.baseYOffset + Math.abs(Math.sin(this.walkCycle * 2)) * 0.06; // Bote
+                this.zombieMesh.rotation.z = Math.sin(this.walkCycle) * 0.08;
+                this.zombieMesh.rotation.x = 0.15 + Math.cos(this.walkCycle * 2) * 0.05;
+                this.zombieMesh.position.y = this.baseYOffset + Math.abs(Math.sin(this.walkCycle * 2)) * 0.06;
             }
             else {
                 this.walkCycle += deltaTime * 8 * this.speedMultiplier;
@@ -2218,16 +2298,13 @@ class Zombie {
             }
         }
         else {
-            // Atacar!
             if (this.attackCooldownTimer <= 0 && player.health > 0) {
                 this.attack();
             }
         }
     }
     spitAcid(dir) {
-        // Sonido de escupitajo neumático procedimental
         AudioSynth.playMetallicClick(350, 0.15, 0.2);
-        // Spawnear proyectil verde en la posición de la cabeza
         const startPos = this.group.position.clone();
         startPos.y += 1.28;
         const projGeo = new THREE.SphereGeometry(0.12, 8, 8);
@@ -2237,7 +2314,6 @@ class Zombie {
         const projLight = new THREE.PointLight(0x39ff14, 1.5, 3);
         projMesh.add(projLight);
         scene.add(projMesh);
-        // Apuntar con pequeña imprecisión
         const targetPos = camera.position.clone();
         targetPos.x += (Math.random() - 0.5) * 0.4;
         targetPos.z += (Math.random() - 0.5) * 0.4;
@@ -2251,7 +2327,6 @@ class Zombie {
             isAcid: true,
             impactColor: 0x39ff14
         });
-        // Animación rápida de escupitajo
         if (this.zombieMesh) {
             const originalZ = this.zombieMesh.position.z;
             this.zombieMesh.position.z += 0.25;
@@ -2297,7 +2372,6 @@ class Zombie {
                                 mat.color.setHex(hexColor);
                             }
                             else {
-                                // Restaurar tinte basado en variante
                                 if (this.type === 'RUNNER') {
                                     mat.color.setHex(0xff5555);
                                 }
@@ -2305,7 +2379,7 @@ class Zombie {
                                     mat.color.setHex(0x55ff55);
                                 }
                                 else {
-                                    mat.color.setHex(0xffffff); // Sin tinte (original)
+                                    mat.color.setHex(0xffffff);
                                 }
                             }
                         }
@@ -2559,23 +2633,20 @@ class BossEnemy {
     constructor(x, z) {
         this.group = new THREE.Group();
         this.group.position.set(x, 0, z);
-        this.state = 'ALIVE'; // ALIVE, DYING, DEAD
+        this.state = 'ALIVE';
         this.health = BOSS_HEALTH;
         this.maxHealth = BOSS_HEALTH;
         this.hurtTimer = 0;
         this.attackCooldownTimer = 0;
         this.spitCooldownTimer = 3000 + Math.random() * 2000;
         this.walkCycle = 0;
-        // Sistema de rush (forma rápida)
-        this.rushTimer = BOSS_RUSH_INTERVAL; // Tiempo hasta próximo rush
+        this.rushTimer = BOSS_RUSH_INTERVAL;
         this.isRushing = false;
         this.rushDurationTimer = 0;
-        // Construir cuerpo del jefe
         if (cachedBossModel) {
             this.bossMesh = cachedBossModel.clone(true);
             this.baseYOffset = bossGLBBaseYOffset;
             this.bossMesh.position.set(0, this.baseYOffset, 0);
-            // Clonar materiales y configurar sombras
             this.bossMesh.traverse(child => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -2593,7 +2664,6 @@ class BossEnemy {
             this.group.add(this.bossMesh);
         }
         else {
-            // Modelo procedimental de respaldo (cubo gigante rojo)
             const bodyGeo = new THREE.BoxGeometry(2.5, 3.5, 2.0);
             const bodyMat = new THREE.MeshStandardMaterial({ color: 0x880000, roughness: 0.7, metalness: 0.5 });
             this.bossMesh = new THREE.Mesh(bodyGeo, bodyMat);
@@ -2601,7 +2671,6 @@ class BossEnemy {
             this.bossMesh.castShadow = true;
             this.baseYOffset = 0;
             this.group.add(this.bossMesh);
-            // Ojos
             const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
             const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
             const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
@@ -2611,29 +2680,24 @@ class BossEnemy {
             rightEye.position.set(0.4, 2.8, 1.05);
             this.group.add(rightEye);
         }
-        // Luz amenazante roja del jefe
         this.eyeLight = new THREE.PointLight(0xff2200, 2.0, 10.0);
         this.eyeLight.position.set(0, 3.0, 0.5);
         this.group.add(this.eyeLight);
-        // Aura de fuego inferior
         this.auraLight = new THREE.PointLight(0xff5500, 1.5, 8.0);
         this.auraLight.position.set(0, 0.5, 0);
         this.group.add(this.auraLight);
         scene.add(this.group);
-        // Mostrar barra de vida del jefe
         if (bossHud) {
             bossHud.classList.remove('hidden');
             bossHud.classList.remove('boss-low-health');
         }
         this.updateHealthBar();
-        // Rugido de entrada
         AudioSynth.playBossRoar();
     }
     updateHealthBar() {
         if (bossHealthFill) {
             const pct = Math.max(0, this.health / this.maxHealth) * 100;
             bossHealthFill.style.width = pct + '%';
-            // Pulso de poca vida
             if (bossHud) {
                 if (pct < 25) {
                     bossHud.classList.add('boss-low-health');
@@ -2649,31 +2713,26 @@ class BossEnemy {
             return;
         if (this.state === 'DYING') {
             if (this.group.rotation.x > -Math.PI / 2) {
-                this.group.rotation.x -= deltaTime * 2; // Caída lenta y dramática
+                this.group.rotation.x -= deltaTime * 2;
                 this.group.position.y = Math.max(0.1, this.group.position.y - deltaTime * 1.5);
             }
             else {
                 this.state = 'DEAD';
-                // Ocultar barra de vida
                 if (bossHud)
                     bossHud.classList.add('hidden');
-                // Victoria del nivel
                 setTimeout(() => triggerVictory(), 2000);
             }
             return;
         }
-        // Flash de daño
         if (this.hurtTimer > 0) {
             this.hurtTimer -= deltaTime;
             if (this.hurtTimer <= 0) {
                 this.setMaterialColor(null);
             }
         }
-        // Cooldown de ataque cuerpo a cuerpo
         if (this.attackCooldownTimer > 0) {
             this.attackCooldownTimer -= deltaTime * 1000;
         }
-        // Sistema de Rush
         this.rushTimer -= deltaTime;
         if (this.rushTimer <= 0 && !this.isRushing) {
             this.isRushing = true;
@@ -2688,18 +2747,15 @@ class BossEnemy {
                 this.isRushing = false;
             }
         }
-        // IA: Perseguir al jugador
         const dir = new THREE.Vector3().subVectors(playerPos, this.group.position);
         dir.y = 0;
         const dist = dir.length();
         dir.normalize();
         const angle = Math.atan2(dir.x, dir.z);
         this.group.rotation.y = angle;
-        // Rugidos ocasionales
         if (Math.random() < 0.005 && dist < 30) {
             AudioSynth.playBossRoar();
         }
-        // Ataque de bola de ácido verde
         if (dist >= BOSS_ACID_RANGE_MIN && dist <= BOSS_ACID_RANGE_MAX && this.state === 'ALIVE') {
             this.spitCooldownTimer -= deltaTime * 1000;
             if (this.spitCooldownTimer <= 0) {
@@ -2707,17 +2763,14 @@ class BossEnemy {
                 this.spitCooldownTimer = 3000 + Math.random() * 2000;
             }
         }
-        // Calcular velocidad actual
         const speedMult = this.isRushing ? BOSS_RUSH_SPEED_MULTIPLIER : BOSS_SPEED_MULTIPLIER;
         const currentSpeed = ZOMBIE_SPEED * speedMult;
         if (dist > BOSS_MELEE_RANGE) {
-            // Moverse hacia el jugador
             const nextX = this.group.position.x + dir.x * currentSpeed;
             const nextZ = this.group.position.z + dir.z * currentSpeed;
             const resolved = checkZombieWallCollisions(nextX, nextZ);
             this.group.position.x = resolved.x;
             this.group.position.z = resolved.z;
-            // Animación de caminata
             this.walkCycle += deltaTime * 6 * speedMult;
             if (this.bossMesh) {
                 this.bossMesh.rotation.z = Math.sin(this.walkCycle) * 0.06;
@@ -2726,12 +2779,10 @@ class BossEnemy {
             }
         }
         else {
-            // Ataque cuerpo a cuerpo
             if (this.attackCooldownTimer <= 0 && player.health > 0) {
                 this.meleeAttack();
             }
         }
-        // Pulso de aura de fuego
         if (this.auraLight) {
             this.auraLight.intensity = 1.5 + Math.sin(this.walkCycle * 3) * 0.5;
         }
@@ -2742,7 +2793,6 @@ class BossEnemy {
     meleeAttack() {
         this.attackCooldownTimer = 1500;
         AudioSynth.playBossImpact();
-        // Animación de golpe
         if (this.bossMesh) {
             const origZ = this.bossMesh.position.z;
             this.bossMesh.position.z += 0.5;
@@ -2757,8 +2807,7 @@ class BossEnemy {
     spitAcid(dir) {
         AudioSynth.playMetallicClick(250, 0.2, 0.3);
         const startPos = this.group.position.clone();
-        startPos.y += 2.5; // Más alto que un zombie normal
-        // Proyectil más grande
+        startPos.y += 2.5;
         const projGeo = new THREE.SphereGeometry(0.25, 10, 10);
         const projMat = new THREE.MeshBasicMaterial({ color: 0x39ff14 });
         const projMesh = new THREE.Mesh(projGeo, projMat);
@@ -2769,7 +2818,6 @@ class BossEnemy {
         const targetPos = camera.position.clone();
         targetPos.x += (Math.random() - 0.5) * 0.3;
         targetPos.z += (Math.random() - 0.5) * 0.3;
-        // Más rápido que un spitter normal
         const velocity = new THREE.Vector3().subVectors(targetPos, startPos).normalize().multiplyScalar(0.25);
         acidProjectiles.push({
             mesh: projMesh,
@@ -2784,7 +2832,6 @@ class BossEnemy {
     damage(amount, isHeadshot) {
         if (this.state !== 'ALIVE')
             return;
-        // Headshots hacen x2 para el jefe (no x3 como zombies normales)
         let finalDmg = amount;
         if (isHeadshot) {
             finalDmg = amount * 2;
@@ -2798,7 +2845,6 @@ class BossEnemy {
             this.state = 'DYING';
             AudioSynth.stopBossMusic();
             showFeedback("¡JEFE ELIMINADO! VICTORIA INMINENTE...");
-            // Explosión de partículas de fuego
             for (let i = 0; i < 30; i++) {
                 const sparkPos = this.group.position.clone();
                 sparkPos.y += Math.random() * 3;
@@ -2868,7 +2914,7 @@ function findSpiderSpawnCell(selectedCells) {
 }
 function spawnSpiders() {
     clearSpiders();
-    if (currentLevel === 4)
+    if (currentLevel === 4 || currentLevel === 2)
         return;
     const selectedCells = [];
     while (selectedCells.length < SPIDER_SPAWN_COUNT) {
@@ -2883,20 +2929,16 @@ function spawnSpiders() {
         spiders.push(new CeilingSpider(px, pz));
     });
 }
-// Spawnea zombis en posiciones vacías del mapa
 function spawnZombies() {
     zombies.forEach(z => scene.remove(z.group));
     zombies = [];
     clearSpiders();
-    // Limpiar jefe anterior si existe
     if (bossEnemy) {
         bossEnemy.dispose();
         bossEnemy = null;
     }
-    // Limpiar proyectiles de ácido viejos
     acidProjectiles.forEach(p => scene.remove(p.mesh));
     acidProjectiles = [];
-    // Nivel 4: Jefe final en vez de zombies normales
     if (currentLevel === 4) {
         const mapSize = activeMap.length;
         const centerX = Math.floor(mapSize / 2) * GRID_SIZE;
@@ -2907,7 +2949,6 @@ function spawnZombies() {
     }
     let spawned = 0;
     let attempts = 0;
-    // La cantidad de zombis escala con el nivel
     const zombiesToSpawn = 6 + currentLevel * 2;
     while (spawned < zombiesToSpawn && attempts < 200) {
         attempts++;
@@ -2918,7 +2959,6 @@ function spawnZombies() {
                 continue;
             const px = x * GRID_SIZE;
             const pz = z * GRID_SIZE;
-            // Elegir tipo según probabilidades: 50% Normal, 25% Runner, 25% Spitter
             let zType = 'NORMAL';
             const rand = Math.random();
             if (rand < 0.5) {
@@ -2944,7 +2984,6 @@ function zombiesRemainingCount() {
         showFeedback("SECTOR LIMPIO. ENCUENTRA LOS FUSIBLES Y ACTIVA EL GENERADOR");
     }
 }
-// --- SISTEMA DE PARTÍCULAS (SANGRE / CHISPAS / ELECTRICIDAD) ---
 class Particle {
     constructor(pos, color, scale, speedY) {
         this.geometry = new THREE.BoxGeometry(scale, scale, scale);
@@ -2954,7 +2993,7 @@ class Particle {
         scene.add(this.mesh);
         this.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.12, Math.random() * 0.06 + speedY, (Math.random() - 0.5) * 0.12);
         this.gravity = -0.005;
-        this.life = 1.0; // segundos
+        this.life = 1.0;
     }
     update(deltaTime) {
         this.velocity.y += this.gravity;
@@ -2981,7 +3020,6 @@ function spawnSparkSpatter(pos) {
     }
 }
 let sharedBulletMaterial = null;
-
 function spawnBulletDecal(pos, normal) {
     if (!sharedBulletMaterial) {
         const canvas = document.createElement('canvas');
@@ -2996,7 +3034,6 @@ function spawnBulletDecal(pos, normal) {
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, 64, 64);
         const tex = new THREE.CanvasTexture(canvas);
-        
         sharedBulletMaterial = new THREE.MeshBasicMaterial({
             map: tex,
             transparent: true,
@@ -3006,30 +3043,22 @@ function spawnBulletDecal(pos, normal) {
             polygonOffsetUnits: -4
         });
     }
-
     const size = 0.15 + Math.random() * 0.1;
     const geometry = new THREE.PlaneGeometry(size, size);
-    
     const decal = new THREE.Mesh(geometry, sharedBulletMaterial);
     decal.position.copy(pos);
-    
-    // Usar lookAt para orientar con la normal
     const dummyTarget = pos.clone().add(normal);
     decal.lookAt(dummyTarget);
     decal.rotation.z = Math.random() * Math.PI * 2;
-    
     scene.add(decal);
 }
-
 let sharedBloodMaterial = null;
-
 function spawnBloodFloorDecal(pos) {
     if (!sharedBloodMaterial) {
         const canvas = document.createElement('canvas');
         canvas.width = 128;
         canvas.height = 128;
         const ctx = canvas.getContext('2d');
-        
         for (let i = 0; i < 20; i++) {
             const x = 64 + (Math.random() - 0.5) * 60;
             const y = 64 + (Math.random() - 0.5) * 60;
@@ -3043,11 +3072,10 @@ function spawnBloodFloorDecal(pos) {
             ctx.fill();
         }
         const tex = new THREE.CanvasTexture(canvas);
-        
         sharedBloodMaterial = new THREE.MeshStandardMaterial({
             map: tex,
             transparent: true,
-            roughness: 0.1, 
+            roughness: 0.1,
             metalness: 0.2,
             depthWrite: false,
             polygonOffset: true,
@@ -3055,24 +3083,19 @@ function spawnBloodFloorDecal(pos) {
             polygonOffsetUnits: -4
         });
     }
-
     const size = 1.5 + Math.random() * 1.5;
     const geometry = new THREE.PlaneGeometry(size, size);
-    
     const decal = new THREE.Mesh(geometry, sharedBloodMaterial);
     decal.position.set(pos.x, -1.98, pos.z);
     decal.rotation.x = -Math.PI / 2;
     decal.rotation.z = Math.random() * Math.PI * 2;
-    
     scene.add(decal);
 }
-// --- COLISIONES JUGADOR ---
 function checkCollisions(newX, newZ) {
     let resolvedX = newX;
     let resolvedZ = newZ;
     const currentGridX = Math.floor((newX + GRID_SIZE / 2) / GRID_SIZE);
     const currentGridZ = Math.floor((newZ + GRID_SIZE / 2) / GRID_SIZE);
-    // Verificar celdas vecinas (3x3)
     for (let dx = -1; dx <= 1; dx++) {
         for (let dz = -1; dz <= 1; dz++) {
             const gx = currentGridX + dx;
@@ -3081,6 +3104,23 @@ function checkCollisions(newX, newZ) {
                 continue;
             const type = activeMap[gz][gx];
             if (type === 1 || type === 2 || type === 3) {
+                if (currentLevel === 2 && type === 1) {
+                    const centerX = gx * GRID_SIZE;
+                    const centerZ = gz * GRID_SIZE;
+                    const diffX = resolvedX - centerX;
+                    const diffZ = resolvedZ - centerZ;
+                    const dist = Math.sqrt(diffX*diffX + diffZ*diffZ);
+                    const trunkRadius = 0.5;
+                    const minAllowedDist = PLAYER_RADIUS + trunkRadius;
+                    
+                    if (dist < minAllowedDist && dist > 0.01) {
+                        const overlap = minAllowedDist - dist;
+                        resolvedX += (diffX / dist) * overlap;
+                        resolvedZ += (diffZ / dist) * overlap;
+                    }
+                    continue; // Saltar chequeo cuadrado para árboles de jungla
+                }
+
                 // Si es compuerta normal interactiva
                 if (type === 3) {
                     const door = interactiveDoors.find(d => d.gridX === gx && d.gridZ === gz);
@@ -3141,6 +3181,22 @@ function checkZombieWallCollisions(zX, zZ) {
                 continue;
             const type = activeMap[gz][gx];
             if (type === 1 || type === 2 || type === 3) {
+                // --- COLISION CIRCULAR PERFECTA PARA ARBOLES (Nivel 2) ---
+                if (currentLevel === 2 && type === 1) {
+                    const centerX = gx * GRID_SIZE;
+                    const centerZ = gz * GRID_SIZE;
+                    const diffX = resolvedX - centerX;
+                    const diffZ = resolvedZ - centerZ;
+                    const dist = Math.sqrt(diffX*diffX + diffZ*diffZ);
+                    const trunkRadius = 0.5;
+                    const minAllowedDist = zRadius + trunkRadius;
+                    if (dist < minAllowedDist && dist > 0.01) {
+                        const overlap = minAllowedDist - dist;
+                        resolvedX += (diffX / dist) * overlap;
+                        resolvedZ += (diffZ / dist) * overlap;
+                    }
+                    continue;
+                }
                 if (type === 3) {
                     const door = interactiveDoors.find(d => d.gridX === gx && d.gridZ === gz);
                     if (door && door.isOpen) {
@@ -3272,7 +3328,7 @@ function tryOpenDoor() {
             }
             return;
         }
-        if (fusesCollected >= 3) {
+        if (fusesCollected >= 3 || currentLevel === 2) {
             // Activar generador!
             fuseBoxConsole.activated = true;
             fuseBoxConsole.led.material.color.setHex(0x00ff41); // Luz a verde
@@ -3305,22 +3361,24 @@ function tryOpenDoor() {
             });
             lights = []; // suspender el parpadeo
             // Montar visualmente los 3 fusibles en la consola
-            const fuseCapMat = new THREE.MeshStandardMaterial({ color: 0xe5a93b, roughness: 0.3, metalness: 0.85 });
-            const fuseGlassMat = new THREE.MeshStandardMaterial({ color: 0x00ff41, emissive: 0x008822, transparent: true, opacity: 0.9 });
-            for (let k = 0; k < 3; k++) {
-                const fuseMesh = new THREE.Group();
-                fuseMesh.name = `mounted_fuse_${k}`;
-                const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.05, 8), fuseCapMat);
-                cap.position.y = 0.08;
-                const capBot = cap.clone();
-                capBot.position.y = -0.08;
-                const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.12, 8), fuseGlassMat);
-                fuseMesh.add(cap);
-                fuseMesh.add(capBot);
-                fuseMesh.add(glass);
-                fuseMesh.position.set(-0.18 + k * 0.18, 1.34, 0.12);
-                fuseMesh.rotation.x = Math.PI / 6;
-                fuseBoxConsole.group.add(fuseMesh);
+            if (currentLevel !== 2) {
+                const fuseCapMat = new THREE.MeshStandardMaterial({ color: 0xe5a93b, roughness: 0.3, metalness: 0.85 });
+                const fuseGlassMat = new THREE.MeshStandardMaterial({ color: 0x00ff41, emissive: 0x008822, transparent: true, opacity: 0.9 });
+                for (let k = 0; k < 3; k++) {
+                    const fuseMesh = new THREE.Group();
+                    fuseMesh.name = `mounted_fuse_${k}`;
+                    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.05, 8), fuseCapMat);
+                    cap.position.y = 0.08;
+                    const capBot = cap.clone();
+                    capBot.position.y = -0.08;
+                    const glass = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.12, 8), fuseGlassMat);
+                    fuseMesh.add(cap);
+                    fuseMesh.add(capBot);
+                    fuseMesh.add(glass);
+                    fuseMesh.position.set(-0.18 + k * 0.18, 1.34, 0.12);
+                    fuseMesh.rotation.x = Math.PI / 6;
+                    fuseBoxConsole.group.add(fuseMesh);
+                }
             }
         }
         else {
@@ -3809,6 +3867,7 @@ function buyRations() {
     }
 }
 async function startNextLevel() {
+    document.body.requestPointerLock();
     currentLevel++;
     document.getElementById('level-display').innerText = `SECTOR C-14   |   NIVEL ${currentLevel}`;
     clearSpiders();
@@ -3873,7 +3932,6 @@ async function startNextLevel() {
     gameState = 'PLAYING';
     document.getElementById('upgrade-overlay').classList.remove('active');
     AudioSynth.init();
-    document.body.requestPointerLock();
     showFeedback(`INICIANDO NIVEL ${currentLevel}. RECUPERA LOS FUSIBLES`);
 }
 // --- MINIJUEGO DE CABLEADO (CANVAS DRAG & DROP) ---
@@ -4280,6 +4338,9 @@ function animate() {
     requestAnimationFrame(animate);
     const deltaTime = Math.min(0.1, clock.getDelta());
     drawBiomonitor(deltaTime);
+    if (typeof grassMaterial !== 'undefined' && grassMaterial) {
+        grassMaterial.uniforms.time.value = performance.now() * 0.002;
+    }
     if (gameState === 'PLAYING') {
         // Disparar en ráfaga para armas automáticas
         const activeWep = WEAPONS[player.activeWeapon];

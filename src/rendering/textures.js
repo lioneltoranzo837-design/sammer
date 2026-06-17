@@ -2079,6 +2079,7 @@ function getBloodMessagePlacements(level = 1) {
     });
 }
 export async function addBloodWallMessages(scene, level = 1) {
+    if (level === 2) return; // No generar textos en la jungla
     await loadBloodMessageFont();
     getBloodMessagePlacements(level).forEach((placement) => {
         addBloodMessageToWall(scene, placement.message, placement);
@@ -2823,6 +2824,73 @@ export function generateInfernalCeilingTexture() {
         ctx.arc(ex, ey, er * 2.5, 0, Math.PI * 2);
         ctx.fill();
     }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+}
+
+export function generateBarkTexture() {
+    const canvas = document.createElement('canvas');
+    const S = 512;
+    canvas.width = S;
+    canvas.height = S;
+    const ctx = canvas.getContext('2d');
+    
+    // Base wood color
+    ctx.fillStyle = '#4a3018';
+    ctx.fillRect(0, 0, S, S);
+    
+    // Vertical bark grooves
+    for (let i = 0; i < 600; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        const w = 1 + Math.random() * 3;
+        const h = 20 + Math.random() * 80;
+        
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(30, 15, 5, 0.4)' : 'rgba(90, 60, 30, 0.3)';
+        ctx.fillRect(x, y, w, h);
+    }
+    
+    // Horizontal noise
+    for (let i = 0; i < 2000; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.15})`;
+        ctx.fillRect(x, y, 2, 1);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+}
+
+export function generateLeafTexture() {
+    const canvas = document.createElement('canvas');
+    const S = 512;
+    canvas.width = S;
+    canvas.height = S;
+    const ctx = canvas.getContext('2d');
+    
+    // Base dark green
+    ctx.fillStyle = '#0f2910';
+    ctx.fillRect(0, 0, S, S);
+    
+    // Leaf blotches
+    for (let i = 0; i < 1500; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        const r = 5 + Math.random() * 15;
+        
+        const g = 30 + Math.floor(Math.random() * 60);
+        ctx.fillStyle = `rgba(10, ${g}, 15, 0.6)`;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
