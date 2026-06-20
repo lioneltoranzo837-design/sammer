@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, getMapForLevel } from './config/gameConfig.js?v=3';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, getMapForLevel } from './config/gameConfig.js?v=3';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
@@ -97,6 +97,8 @@ let gunRecoilTimer = 0;
 let muzzleFlashSprite;
 let muzzleLight;
 let playerFlashlight;
+let flashlightCycleTimer = 0;
+let flashlightUserEnabled = true;
 let dustParticles;
 
 // Estado del juego
@@ -3328,8 +3330,34 @@ function showFeedback(text) {
 }
 function toggleFlashlight() {
     if (playerFlashlight) {
-        playerFlashlight.visible = !playerFlashlight.visible;
-        showFeedback(playerFlashlight.visible ? "LINTERNA: ENCENDIDA" : "LINTERNA: APAGADA");
+        flashlightUserEnabled = !playerFlashlight.visible;
+        if (flashlightUserEnabled)
+            flashlightCycleTimer = 0;
+        playerFlashlight.visible = flashlightUserEnabled;
+        showFeedback(flashlightUserEnabled ? "LINTERNA: ENCENDIDA" : "LINTERNA: APAGADA");
+    }
+}
+function updateFlashlightFlicker(deltaTime) {
+    if (!playerFlashlight)
+        return;
+    if (!flashlightUserEnabled) {
+        playerFlashlight.visible = false;
+        return;
+    }
+    flashlightCycleTimer = (flashlightCycleTimer + deltaTime) % FLASHLIGHT_FLICKER_CYCLE_SECONDS;
+    const offStart = FLASHLIGHT_FLICKER_START_SECONDS + FLASHLIGHT_FLICKER_SECONDS;
+    const secondFlickerStart = offStart + FLASHLIGHT_OFF_SECONDS;
+    const flickerBeforeOff = flashlightCycleTimer >= FLASHLIGHT_FLICKER_START_SECONDS && flashlightCycleTimer < offStart;
+    const fullyOff = flashlightCycleTimer >= offStart && flashlightCycleTimer < secondFlickerStart;
+    const flickerBeforeOn = flashlightCycleTimer >= secondFlickerStart;
+    if (fullyOff) {
+        playerFlashlight.visible = false;
+    }
+    else if (flickerBeforeOff || flickerBeforeOn) {
+        playerFlashlight.visible = Math.floor(flashlightCycleTimer * FLASHLIGHT_FLICKER_RATE) % 2 === 0;
+    }
+    else {
+        playerFlashlight.visible = true;
     }
 }
 // --- ACCIÓN: INTERACTUAR ---
@@ -3727,6 +3755,8 @@ async function startGame() {
     player.isReloading = false;
     camera.position.copy(player.position);
     camera.rotation.set(0, 0, 0);
+    flashlightCycleTimer = 0;
+    flashlightUserEnabled = true;
     if (playerFlashlight)
         playerFlashlight.visible = true;
     // Resetea compuerta salida
@@ -4396,6 +4426,7 @@ function animate() {
         grassMaterial.uniforms.time.value = performance.now() * 0.002;
     }
     if (gameState === 'PLAYING') {
+        updateFlashlightFlicker(deltaTime);
         // Disparar en ráfaga para armas automáticas
         const activeWep = WEAPONS[player.activeWeapon];
         if (activeWep.automatic && isMouseDown && !player.isReloading && !gunRecoilActive) {

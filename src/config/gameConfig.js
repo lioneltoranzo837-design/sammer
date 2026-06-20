@@ -42,6 +42,11 @@ export const LEVEL_ONE_LAMP_DECAY = 2.2;
 export const LEVEL_ONE_LAMP_SPACING_MODULO = 5;
 export const LEVEL_ONE_LAMP_MIN_GRID_X = 3;
 export const LEVEL_ONE_LAMP_MIN_GRID_Z = 3;
+export const FLASHLIGHT_FLICKER_CYCLE_SECONDS = 66;
+export const FLASHLIGHT_FLICKER_START_SECONDS = 60;
+export const FLASHLIGHT_FLICKER_SECONDS = 0.5;
+export const FLASHLIGHT_OFF_SECONDS = 4.0;
+export const FLASHLIGHT_FLICKER_RATE = 14;
 // Configuración de Armamento
 export const WEAPONS = {
     shotgun: {
