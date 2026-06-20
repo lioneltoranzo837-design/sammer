@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, getMapForLevel } from './config/gameConfig.js?v=3';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, getMapForLevel } from './config/gameConfig.js?v=3';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
@@ -154,7 +154,7 @@ async function initEngine() {
     hemisphereLight = new THREE.HemisphereLight(0x111122, 0x080810, 0.1);
     scene.add(hemisphereLight);
     // Linterna acoplada a la cámara del jugador (SpotLight) - Potente y amplio rango
-    playerFlashlight = new THREE.SpotLight(0xfff9e6, 5.0, 40, Math.PI / 4.5, 0.8, 1.5);
+    playerFlashlight = new THREE.SpotLight(0xfff9e6, 2.5, 40, Math.PI / 4.5, 0.8, 1.5);
     playerFlashlight.castShadow = true;
     playerFlashlight.shadow.mapSize.width = 2048; // Sombras de alta resolución
     playerFlashlight.shadow.mapSize.height = 2048;
@@ -959,6 +959,53 @@ async function publishScore() {
     }
 }
 // --- CONSTRUCTOR DE MAPA ---
+function shouldPlaceLevelOneMazeLamp(x, z) {
+    const awayFromStart = x >= LEVEL_ONE_LAMP_MIN_GRID_X && z >= LEVEL_ONE_LAMP_MIN_GRID_Z;
+    const staggeredSpacing = (x + z) % LEVEL_ONE_LAMP_SPACING_MODULO === 0;
+    return currentLevel === 1 && awayFromStart && staggeredSpacing;
+}
+
+function buildLevelOneMazeLamp(posX, posZ) {
+    const lampHeight = WALL_HEIGHT - 0.18;
+    const targetY = 0.35;
+    const ceilingLight = new THREE.SpotLight(
+        LEVEL_ONE_LAMP_COLOR,
+        LEVEL_ONE_LAMP_INTENSITY,
+        LEVEL_ONE_LAMP_DISTANCE,
+        LEVEL_ONE_LAMP_ANGLE,
+        LEVEL_ONE_LAMP_PENUMBRA,
+        LEVEL_ONE_LAMP_DECAY
+    );
+    ceilingLight.position.set(posX, lampHeight, posZ);
+    ceilingLight.target.position.set(posX, targetY, posZ);
+    ceilingLight.castShadow = false;
+    scene.add(ceilingLight);
+    scene.add(ceilingLight.target);
+
+    const lampGeo = new THREE.CylinderGeometry(0.24, 0.32, 0.16, 12);
+    const lampMat = new THREE.MeshStandardMaterial({
+        color: 0x372417,
+        emissive: 0xff8a22,
+        emissiveIntensity: 0.8,
+        roughness: 0.45,
+        metalness: 0.35
+    });
+    const lamp = new THREE.Mesh(lampGeo, lampMat);
+    lamp.position.set(posX, WALL_HEIGHT - 0.08, posZ);
+    scene.add(lamp);
+
+    lights.push({
+        light: ceilingLight,
+        lamp: lamp,
+        target: ceilingLight.target,
+        color: LEVEL_ONE_LAMP_COLOR,
+        isRed: false,
+        baseIntensity: LEVEL_ONE_LAMP_INTENSITY,
+        dimIntensity: LEVEL_ONE_LAMP_DIM_INTENSITY,
+        flickerTimer: Math.random() * 10
+    });
+}
+
 function buildMap3D() {
     const activeMap = getMapForLevel(currentLevel);
     const wallGeo = new THREE.BoxGeometry(GRID_SIZE, WALL_HEIGHT, GRID_SIZE);
@@ -1199,7 +1246,10 @@ function buildMap3D() {
                 colliders.push(doorCollider);
                 interactiveDoors.push(doorCollider);
             }
-            if (type === 0 && Math.random() < 0.08 && z > 2 && x > 2) {
+            if (type === 0 && shouldPlaceLevelOneMazeLamp(x, z)) {
+                buildLevelOneMazeLamp(posX, posZ);
+            }
+            else if (type === 0 && currentLevel !== 1 && Math.random() < 0.08 && z > 2 && x > 2) {
                 const isRed = Math.random() < 0.35;
                 const lightColor = isRed ? 0xff0000 : 0xffaa44;
                 const ceilingLight = new THREE.PointLight(lightColor, 1.2, 8, 1.5);
@@ -1250,6 +1300,8 @@ function clearCurrentMap() {
     lights.forEach(item => {
         scene.remove(item.light);
         scene.remove(item.lamp);
+        if (item.target)
+            scene.remove(item.target);
         if (item.lamp.geometry)
             item.lamp.geometry.dispose();
         if (item.lamp.material)
@@ -4359,11 +4411,11 @@ function animate() {
             item.flickerTimer += deltaTime;
             const noise = Math.sin(item.flickerTimer * 10) * Math.cos(item.flickerTimer * 4.3);
             if (noise > 0.4) {
-                item.light.intensity = 0.1;
+                item.light.intensity = item.dimIntensity ?? 0.1;
                 item.lamp.material.color.setHex(0x332211);
             }
             else {
-                item.light.intensity = item.isRed ? 1.5 : 1.2;
+                item.light.intensity = item.baseIntensity ?? (item.isRed ? 1.5 : 1.2);
                 item.lamp.material.color.setHex(item.isRed ? 0xcc0000 : 0xe59400);
             }
         });

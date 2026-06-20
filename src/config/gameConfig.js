@@ -32,6 +32,16 @@ export const BOSS_RUSH_SPEED_MULTIPLIER = 3.6;
 export const BOSS_RUSH_DURATION = 3.0;
 export const BOSS_RUSH_INTERVAL = 15.0;
 export const GAME_PAYOUT_NWC_URI = '';
+export const LEVEL_ONE_LAMP_COLOR = 0xffb36a;
+export const LEVEL_ONE_LAMP_INTENSITY = 2.0;
+export const LEVEL_ONE_LAMP_DIM_INTENSITY = 0.18;
+export const LEVEL_ONE_LAMP_DISTANCE = 12;
+export const LEVEL_ONE_LAMP_ANGLE = Math.PI / 3.4;
+export const LEVEL_ONE_LAMP_PENUMBRA = 0.55;
+export const LEVEL_ONE_LAMP_DECAY = 2.2;
+export const LEVEL_ONE_LAMP_SPACING_MODULO = 5;
+export const LEVEL_ONE_LAMP_MIN_GRID_X = 3;
+export const LEVEL_ONE_LAMP_MIN_GRID_Z = 3;
 // Configuración de Armamento
 export const WEAPONS = {
     shotgun: {
