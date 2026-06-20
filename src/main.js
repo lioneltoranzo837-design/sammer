@@ -166,7 +166,7 @@ async function initEngine() {
     
     // Objetivo de la linterna (apunta al frente de la cámara)
     const flashTarget = new THREE.Object3D();
-    flashTarget.position.set(0, 0, -1);
+    flashTarget.position.set(0, 0.58, -1);
     camera.add(flashTarget);
     playerFlashlight.target = flashTarget;
     playerFlashlight.visible = false;
