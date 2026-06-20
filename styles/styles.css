@@ -108,6 +108,89 @@ html, body {
     align-items: center;
 }
 
+#menu-overlay .menu-content {
+    width: 90vw;
+    max-width: 1440px;
+    max-height: calc(100vh - 48px);
+    padding: 32px;
+    display: grid;
+    grid-template-columns: minmax(260px, 0.95fr) minmax(320px, 1.1fr) minmax(280px, 0.95fr);
+    grid-template-areas:
+        "title title title"
+        "subtitle subtitle subtitle"
+        "divider divider divider"
+        "brief controls leaderboard"
+        "gate controls leaderboard"
+        "free start nostr"
+        "manual manual manual";
+    gap: 18px 22px;
+    align-items: stretch;
+    overflow-y: auto;
+}
+
+#menu-overlay .glitch-title {
+    grid-area: title;
+    font-size: clamp(2.6rem, 5vw, 4.8rem);
+    margin-bottom: 0;
+}
+
+#menu-overlay .subtitle {
+    grid-area: subtitle;
+    margin-bottom: 0;
+}
+
+#menu-overlay .menu-divider {
+    grid-area: divider;
+    margin-bottom: 0;
+}
+
+#menu-overlay .mission-brief {
+    grid-area: brief;
+    margin-bottom: 0;
+}
+
+#menu-overlay .controls-guide {
+    grid-area: controls;
+    margin-bottom: 0;
+}
+
+#menu-overlay .start-leaderboard-panel {
+    grid-area: leaderboard;
+    margin-bottom: 0;
+}
+
+#menu-overlay .entry-gate-panel {
+    grid-area: gate;
+    margin-bottom: 0;
+}
+
+#menu-overlay #free-start-btn {
+    grid-area: free;
+}
+
+#menu-overlay #start-btn {
+    grid-area: start;
+}
+
+#menu-overlay #nostr-connect-btn {
+    grid-area: nostr;
+}
+
+#menu-overlay #nostr-manual-section {
+    grid-area: manual;
+}
+
+#menu-overlay .retro-btn {
+    width: 100%;
+    min-height: 50px;
+}
+
+#menu-overlay .start-leaderboard-list {
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
 /* Glitch Effect Title */
 .glitch-title {
     font-size: 3.5rem;
@@ -356,6 +439,22 @@ html, body {
     resize: vertical;
 }
 
+@media (max-width: 1040px) {
+    #menu-overlay .menu-content {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+            "title title"
+            "subtitle subtitle"
+            "divider divider"
+            "brief controls"
+            "gate controls"
+            "leaderboard leaderboard"
+            "free start"
+            "nostr nostr"
+            "manual manual";
+    }
+}
+
 .retro-btn:disabled {
     opacity: 0.45;
     cursor: not-allowed;
@@ -364,6 +463,45 @@ html, body {
 }
 
 @media (max-width: 720px) {
+    #menu-overlay {
+        align-items: flex-start;
+        padding: 12px 0;
+    }
+
+    #menu-overlay .menu-content {
+        width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+        padding: 22px;
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "title"
+            "subtitle"
+            "divider"
+            "brief"
+            "controls"
+            "leaderboard"
+            "gate"
+            "free"
+            "start"
+            "nostr"
+            "manual";
+        gap: 14px;
+    }
+
+    #menu-overlay .glitch-title {
+        font-size: clamp(2rem, 13vw, 2.8rem);
+        letter-spacing: 2px;
+    }
+
+    #menu-overlay .subtitle {
+        font-size: 0.82rem;
+        letter-spacing: 1.6px;
+    }
+
+    #menu-overlay .controls-guide li {
+        align-items: flex-start;
+    }
+
     .entry-gate-actions {
         grid-template-columns: 1fr;
     }
