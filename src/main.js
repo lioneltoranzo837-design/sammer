@@ -154,7 +154,7 @@ async function initEngine() {
     hemisphereLight = new THREE.HemisphereLight(0x111122, 0x080810, 0.1);
     scene.add(hemisphereLight);
     // Linterna acoplada a la cámara del jugador (SpotLight) - Potente y amplio rango
-    playerFlashlight = new THREE.SpotLight(0xfff9e6, 2.5, 40, Math.PI / 4.5, 0.8, 1.5);
+    playerFlashlight = new THREE.SpotLight(0xfff9e6, 2.5, 30, Math.PI / 4.5, 0.8, 1.5);
     playerFlashlight.castShadow = true;
     playerFlashlight.shadow.mapSize.width = 2048; // Sombras de alta resolución
     playerFlashlight.shadow.mapSize.height = 2048;
@@ -3727,6 +3727,8 @@ async function startGame() {
     player.isReloading = false;
     camera.position.copy(player.position);
     camera.rotation.set(0, 0, 0);
+    if (playerFlashlight)
+        playerFlashlight.visible = true;
     // Resetea compuerta salida
     const exitDoor = colliders.find(c => c.isExit);
     if (exitDoor && exitDoor.mesh) {
