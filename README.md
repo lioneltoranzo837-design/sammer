@@ -22,6 +22,30 @@ Luego abrí:
 http://localhost:8000
 ```
 
+## Deploy
+
+El proyecto está vinculado a Vercel desde `.vercel/project.json` y se publica en:
+
+```text
+https://sammer.shiafu.com/
+```
+
+Para desplegar producción desde la rama `main`:
+
+```bash
+git checkout main
+git pull --ff-only origin main
+make deploy
+```
+
+El deploy usa una versión fija de Vercel CLI vía `npm exec`, sin instalar dependencias en el repo:
+
+```bash
+npm exec --yes --package vercel@54.14.5 -- vercel deploy --prod --yes
+```
+
+Después del deploy, verificá que Vercel haya aliasado la publicación a `https://sammer.shiafu.com/` y abrí ese dominio para confirmar que el juego carga.
+
 ## Arquitectura rápida
 
 - `index.html`: documento raíz, overlays, HUD y carga de Three.js + `src/main.js`.
