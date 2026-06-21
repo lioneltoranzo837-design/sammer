@@ -120,6 +120,7 @@ html, body {
         "subtitle subtitle subtitle"
         "divider divider divider"
         "brief controls leaderboard"
+        "luna controls leaderboard"
         "gate controls leaderboard"
         "free start nostr"
         "manual manual manual";
@@ -159,6 +160,11 @@ html, body {
     margin-bottom: 0;
 }
 
+#menu-overlay .luna-negra-panel {
+    grid-area: luna;
+    margin-bottom: 0;
+}
+
 #menu-overlay .entry-gate-panel {
     grid-area: gate;
     margin-bottom: 0;
@@ -185,7 +191,8 @@ html, body {
     min-height: 50px;
 }
 
-#menu-overlay .start-leaderboard-list {
+#menu-overlay .start-leaderboard-list,
+#menu-overlay .luna-negra-leaderboard-list {
     max-height: 260px;
     overflow-y: auto;
     padding-right: 4px;
@@ -358,6 +365,91 @@ html, body {
     text-align: right;
 }
 
+.luna-negra-panel {
+    width: 100%;
+    margin-bottom: 22px;
+    padding: 16px 18px;
+    border: 1px solid rgba(185, 167, 255, 0.28);
+    background: linear-gradient(180deg, rgba(10, 8, 24, 0.95), rgba(6, 4, 14, 0.9));
+    box-shadow: inset 0 0 18px rgba(185, 167, 255, 0.08);
+    text-align: left;
+}
+
+.luna-negra-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+    margin-bottom: 12px;
+}
+
+.luna-negra-header h3 {
+    color: #b9a7ff;
+    font-size: 1rem;
+    letter-spacing: 2px;
+}
+
+.luna-negra-status {
+    color: #aaa0d8;
+    font-size: 0.78rem;
+    letter-spacing: 1.4px;
+    text-align: right;
+}
+
+.luna-negra-status[data-tone="error"] {
+    color: #ff8b8b;
+}
+
+.luna-negra-status[data-tone="success"] {
+    color: #d9d0ff;
+}
+
+.luna-negra-player {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+    padding: 10px;
+    border: 1px solid rgba(185, 167, 255, 0.16);
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.luna-negra-avatar {
+    width: 42px;
+    height: 42px;
+    object-fit: cover;
+    border: 1px solid rgba(185, 167, 255, 0.45);
+}
+
+.luna-negra-label,
+.luna-negra-player small {
+    display: block;
+    color: #8f86b8;
+    font-size: 0.72rem;
+    letter-spacing: 1.2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.luna-negra-player strong {
+    display: block;
+    color: #f2eeff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.luna-negra-leaderboard-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.luna-negra-leaderboard-list .start-leaderboard-rank {
+    color: #b9a7ff;
+}
+
 .entry-gate-panel {
     width: 100%;
     margin-bottom: 22px;
@@ -447,6 +539,7 @@ html, body {
             "subtitle subtitle"
             "divider divider"
             "brief controls"
+            "luna controls"
             "gate controls"
             "leaderboard leaderboard"
             "free start"
@@ -480,6 +573,7 @@ html, body {
             "brief"
             "controls"
             "leaderboard"
+            "luna"
             "gate"
             "free"
             "start"

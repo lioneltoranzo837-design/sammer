@@ -181,14 +181,29 @@
                     <li><span class="key">1</span> <span class="key">2</span> <span class="key">3</span> &nbsp; Cambiar Arma (Escopeta / Glock / M4)</li>
                 </ul>
             </div>
-            <section id="start-leaderboard-panel" class="start-leaderboard-panel" aria-label="Scoreboard de Nostr">
+            <section id="start-leaderboard-panel" class="start-leaderboard-panel" aria-label="Scoreboard de Nostr" hidden>
                 <div class="start-leaderboard-header">
                     <h3>OPERADORES CAÍDOS</h3>
                     <p id="start-leaderboard-status" class="start-leaderboard-status" data-tone="loading">CONSULTANDO RELAYS...</p>
                 </div>
                 <ol id="start-leaderboard-list" class="start-leaderboard-list" aria-live="polite"></ol>
             </section>
-            <section id="entry-gate-panel" class="entry-gate-panel" aria-label="Pago de entrada">
+            <section id="luna-negra-panel" class="luna-negra-panel" aria-label="Luna Negra" hidden>
+                <div class="luna-negra-header">
+                    <h3>LUNA NEGRA</h3>
+                    <p id="luna-negra-status" class="luna-negra-status" data-tone="idle">ESPERANDO SESIÓN...</p>
+                </div>
+                <div id="luna-negra-player" class="luna-negra-player" hidden>
+                    <img id="luna-negra-avatar" class="luna-negra-avatar" alt="Avatar Luna Negra" hidden>
+                    <div>
+                        <span class="luna-negra-label">OPERADOR</span>
+                        <strong data-luna-negra-name>NO IDENTIFICADO</strong>
+                        <small data-luna-negra-npub></small>
+                    </div>
+                </div>
+                <ol id="luna-negra-leaderboard-list" class="luna-negra-leaderboard-list" aria-live="polite"></ol>
+            </section>
+            <section id="entry-gate-panel" class="entry-gate-panel" aria-label="Pago de entrada" hidden>
                 <div class="entry-gate-header">
                     <h3>ACCESO ZAP</h3>
                     <p class="entry-gate-pot">POZO REPORTADO: <span id="jackpot-value">0</span> SATS</p>
@@ -201,8 +216,8 @@
                 <textarea id="entry-invoice-output" class="entry-invoice-output" hidden readonly placeholder="La factura BOLT11 aparecerá aquí si tu wallet no paga automáticamente."></textarea>
             </section>
             <button id="free-start-btn" class="retro-btn">JUGAR</button>
-            <button id="start-btn" class="retro-btn" disabled>INICIAR OPERACIÓN</button>
-            <button id="nostr-connect-btn" class="retro-btn">Connect Nostr</button>
+            <button id="start-btn" class="retro-btn" disabled hidden>INICIAR OPERACIÓN</button>
+            <button id="nostr-connect-btn" class="retro-btn" hidden>Connect Nostr</button>
             <div id="nostr-manual-section" style="display:none">
                 <input type="password" id="nostr-nsec-input" placeholder="nsec1..." />
                 <button id="nostr-nsec-btn" class="retro-btn">Ingresar nsec</button>

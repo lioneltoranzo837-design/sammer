@@ -110,13 +110,13 @@ export class SoundSynth {
         const bufferSize = this.ctx.sampleRate * 2;
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
         const data = buffer.getChannelData(0);
+        let lastOut = 0;
         for (let i = 0; i < bufferSize; i++) {
             const white = Math.random() * 2 - 1;
             data[i] = (lastOut + (0.02 * white)) / 1.02;
             lastOut = data[i];
             data[i] *= 3.5;
         }
-        let lastOut = 0;
         this.noiseSource = this.ctx.createBufferSource();
         this.noiseSource.buffer = buffer;
         this.noiseSource.loop = true;

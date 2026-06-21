@@ -1,25 +1,26 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, getMapForLevel } from './config/gameConfig.js?v=3';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, SHOW_START_LUNA_NEGRA_SECTION, LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME, getMapForLevel } from './config/gameConfig.js?v=3';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
-import { 
-    addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture, 
-    generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture, 
-    generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture, 
+import { buildLunaNegraLeaderboardRows, buildLunaNegraLeaderboardUrl, buildLunaNegraScoresUrl, buildLunaNegraSessionUrl, getLunaNegraTokenFromSearch, normalizeLunaNegraSession, removeLunaNegraTokenFromUrl } from './nostr/lunaNegra.js';
+import {
+    addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture,
+    generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture,
+    generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture,
     generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture,
     createNormalMapFromCanvas, createRoughnessMapFromCanvas,
     generateBarkTexture, generateLeafTexture
 } from './rendering/textures.js?v=2';
-import { 
-    ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg, 
-    healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn, 
-    zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn, 
-    nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus, 
-    entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus 
+import {
+    ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg,
+    healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn,
+    zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn,
+    nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus,
+    entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus, lunaNegraPanel, lunaNegraStatus, lunaNegraPlayer, lunaNegraAvatar, lunaNegraLeaderboardList
 } from './ui/dom.js';
 const { THREE } = window;
 // --- CONFIGURACIÓN DE THREE.JS ---
@@ -64,6 +65,7 @@ const STARTUP_LEADERBOARD_LIMIT = 5;
 const showStartZapAccess = Boolean(SHOW_START_ZAP_ACCESS);
 const showStartNostrLeaderboard = Boolean(SHOW_START_NOSTR_LEADERBOARD);
 const showStartNostrControls = showStartZapAccess || showStartNostrLeaderboard;
+const showStartLunaNegraSection = Boolean(SHOW_START_LUNA_NEGRA_SECTION);
 // Variables para el Minijuego de Cableado
 let wiringFixed = false;
 let draggingWireIdx = -1;
@@ -71,6 +73,7 @@ let mousePos = { x: 0, y: 0 };
 let leftSockets = [];
 let rightSockets = [];
 let entryGateState = createEntryGateState(ENTRY_FEE_SATS);
+let lunaNegraSession = null;
 let currentJackpotSats = 0;
 let jackpotBackendConfigured = false;
 let pendingEntryZapRequest = null;
@@ -127,10 +130,10 @@ async function initEngine() {
     renderer.toneMappingExposure = 1.1;
     renderer.outputEncoding = THREE.sRGBEncoding; // Color encoding correcto
     document.getElementById('game-container').appendChild(renderer.domElement);
-    
+
     // --- POST-PROCESSING ---
     const renderScene = new THREE.RenderPass(scene, camera);
-    
+
     // UnrealBloomPass para luces intensas (disparos, linterna, fuego)
     const bloomPass = new THREE.UnrealBloomPass(
         new THREE.Vector2(window.innerWidth, window.innerHeight - 110),
@@ -138,7 +141,7 @@ async function initEngine() {
         0.8,  // Radio (radius)
         0.6   // Umbral (threshold)
     );
-    
+
     // FilmPass para grano de película y scanlines de terror
     const filmPass = new THREE.FilmPass(
         0.5,   // Intensidad de ruido
@@ -168,14 +171,14 @@ async function initEngine() {
     playerFlashlight.shadow.bias = -0.0005;
     playerFlashlight.shadow.radius = 2; // Sombras suavizadas
     camera.add(playerFlashlight);
-    
+
     // Objetivo de la linterna (apunta al frente de la cámara)
     const flashTarget = new THREE.Object3D();
     flashTarget.position.set(0, 0.58, -1);
     camera.add(flashTarget);
     playerFlashlight.target = flashTarget;
     playerFlashlight.visible = false;
-    
+
     // --- POLVO ATMOSFÉRICO ---
     const particleCount = 2500;
     const dustGeometry = new THREE.BufferGeometry();
@@ -184,7 +187,7 @@ async function initEngine() {
         dustPositions[i] = (Math.random() - 0.5) * 50;
     }
     dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-    
+
     const dustCanvas = document.createElement('canvas');
     dustCanvas.width = 16;
     dustCanvas.height = 16;
@@ -207,7 +210,7 @@ async function initEngine() {
     });
     dustParticles = new THREE.Points(dustGeometry, dustMaterial);
     scene.add(dustParticles);
-    
+
     // Carga de Texturas procedimentales
     const texWall0 = generateWallTexture(0);
     const texWall1 = generateWallTexture(1);
@@ -215,45 +218,45 @@ async function initEngine() {
     const texWall3 = generateWallTexture(3);
     const texFloor = generateFloorTexture();
     const texCeiling = generateCeilingTexture();
-    
-    wallMaterialStandard = new THREE.MeshStandardMaterial({ 
-        map: texWall0, 
+
+    wallMaterialStandard = new THREE.MeshStandardMaterial({
+        map: texWall0,
         normalMap: createNormalMapFromCanvas(texWall0, 3.0),
         roughnessMap: createRoughnessMapFromCanvas(texWall0, 1.2, 0.1),
-        metalness: 0.3 
+        metalness: 0.3
     });
-    wallMaterialHazard = new THREE.MeshStandardMaterial({ 
-        map: texWall1, 
+    wallMaterialHazard = new THREE.MeshStandardMaterial({
+        map: texWall1,
         normalMap: createNormalMapFromCanvas(texWall1, 2.5),
         roughnessMap: createRoughnessMapFromCanvas(texWall1, 1.0, 0.2),
-        metalness: 0.3 
+        metalness: 0.3
     });
-    wallMaterialBlood = new THREE.MeshStandardMaterial({ 
-        map: texWall2, 
+    wallMaterialBlood = new THREE.MeshStandardMaterial({
+        map: texWall2,
         normalMap: createNormalMapFromCanvas(texWall2, 3.0),
-        roughnessMap: createRoughnessMapFromCanvas(texWall2, 2.0, -0.2), 
-        metalness: 0.2 
+        roughnessMap: createRoughnessMapFromCanvas(texWall2, 2.0, -0.2),
+        metalness: 0.2
     });
-    doorMaterial = new THREE.MeshStandardMaterial({ 
-        map: texWall3, 
+    doorMaterial = new THREE.MeshStandardMaterial({
+        map: texWall3,
         normalMap: createNormalMapFromCanvas(texWall3, 1.5),
         roughnessMap: createRoughnessMapFromCanvas(texWall3, 1.0, 0.0),
-        metalness: 0.5 
+        metalness: 0.5
     });
-    
-    floorMaterial = new THREE.MeshStandardMaterial({ 
-        map: texFloor, 
+
+    floorMaterial = new THREE.MeshStandardMaterial({
+        map: texFloor,
         normalMap: createNormalMapFromCanvas(texFloor, 2.5),
-        roughnessMap: createRoughnessMapFromCanvas(texFloor, 1.5, -0.1), 
-        metalness: 0.1 
+        roughnessMap: createRoughnessMapFromCanvas(texFloor, 1.5, -0.1),
+        metalness: 0.1
     });
-    ceilingMaterial = new THREE.MeshStandardMaterial({ 
-        map: texCeiling, 
+    ceilingMaterial = new THREE.MeshStandardMaterial({
+        map: texCeiling,
         normalMap: createNormalMapFromCanvas(texCeiling, 1.0),
         roughnessMap: createRoughnessMapFromCanvas(texCeiling, 0.8, 0.3),
-        metalness: 0.2 
+        metalness: 0.2
     });
-    
+
     zombieFaceTexture = generateZombieFaceTexture();
     // Carga del modelo de zombie GLB original en segundo plano
     try {
@@ -344,6 +347,7 @@ function applyStartMenuVisibility() {
     setStartMenuElementVisible(entryGatePanel, showStartZapAccess);
     setStartMenuElementVisible(startBtn, showStartZapAccess);
     setStartMenuElementVisible(startLeaderboardPanel, showStartNostrLeaderboard);
+    setStartMenuElementVisible(lunaNegraPanel, showStartLunaNegraSection);
     setStartMenuElementVisible(nostrConnectBtn, showStartNostrControls);
     setStartMenuElementVisible(nostrManualSection, false);
 }
@@ -567,6 +571,144 @@ async function loadStartupLeaderboard() {
         }
     }
 }
+
+function setLunaNegraStatus(message, tone) {
+    if (!lunaNegraStatus) {
+        return;
+    }
+    lunaNegraStatus.textContent = message;
+    lunaNegraStatus.dataset.tone = tone;
+}
+function clearLunaNegraLeaderboard() {
+    if (!lunaNegraLeaderboardList) {
+        return;
+    }
+    lunaNegraLeaderboardList.replaceChildren();
+}
+function renderLunaNegraPlayer(session) {
+    if (!lunaNegraPlayer) {
+        return;
+    }
+    const nameElement = lunaNegraPlayer.querySelector('[data-luna-negra-name]');
+    const npubElement = lunaNegraPlayer.querySelector('[data-luna-negra-npub]');
+    if (nameElement) {
+        nameElement.textContent = session.displayName;
+    }
+    if (npubElement) {
+        npubElement.textContent = session.npub || session.pubkey || session.gameId || '';
+    }
+    if (lunaNegraAvatar) {
+        if (session.avatarUrl) {
+            lunaNegraAvatar.src = session.avatarUrl;
+            lunaNegraAvatar.hidden = false;
+        }
+        else {
+            lunaNegraAvatar.removeAttribute('src');
+            lunaNegraAvatar.hidden = true;
+        }
+    }
+    lunaNegraPlayer.hidden = false;
+}
+function renderLunaNegraLeaderboardRows(rows) {
+    if (!lunaNegraLeaderboardList) {
+        return;
+    }
+    clearLunaNegraLeaderboard();
+    if (rows.length === 0) {
+        const emptyItem = document.createElement('li');
+        emptyItem.className = 'start-leaderboard-empty';
+        emptyItem.textContent = 'SIN REGISTROS EN LUNA NEGRA';
+        lunaNegraLeaderboardList.appendChild(emptyItem);
+        return;
+    }
+    rows.forEach((row) => {
+        const item = document.createElement('li');
+        item.className = 'start-leaderboard-item';
+        const rank = document.createElement('span');
+        rank.className = 'start-leaderboard-rank';
+        rank.textContent = row.rank;
+        const player = document.createElement('span');
+        player.className = 'start-leaderboard-player';
+        player.textContent = row.player;
+        const score = document.createElement('span');
+        score.className = 'start-leaderboard-score';
+        score.textContent = row.score;
+        const level = document.createElement('span');
+        level.className = 'start-leaderboard-level';
+        level.textContent = row.level;
+        item.append(rank, player, score, level);
+        lunaNegraLeaderboardList.appendChild(item);
+    });
+}
+async function fetchLunaNegraJson(url, options = {}) {
+    const response = await fetch(url, options);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        throw new Error(payload.error || payload.message || `Luna Negra HTTP ${response.status}`);
+    }
+    return payload;
+}
+async function loadLunaNegraLeaderboard() {
+    if (!showStartLunaNegraSection || !lunaNegraSession?.token) {
+        return;
+    }
+    setLunaNegraStatus('CARGANDO LEADERBOARD LUNA NEGRA...', 'loading');
+    clearLunaNegraLeaderboard();
+    const payload = await fetchLunaNegraJson(buildLunaNegraLeaderboardUrl(LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME), {
+        headers: { authorization: `Bearer ${lunaNegraSession.token}` }
+    });
+    const rows = buildLunaNegraLeaderboardRows(payload, STARTUP_LEADERBOARD_LIMIT);
+    renderLunaNegraLeaderboardRows(rows);
+    setLunaNegraStatus(rows.length > 0 ? `TOP ${rows.length} LUNA NEGRA` : 'SIN SCORES EN LUNA NEGRA', rows.length > 0 ? 'success' : 'idle');
+}
+async function initLunaNegraUI() {
+    if (!showStartLunaNegraSection || !lunaNegraPanel) {
+        return;
+    }
+    const token = getLunaNegraTokenFromSearch(window.location.search);
+    if (!token) {
+        setLunaNegraStatus('ABRÍ EL JUEGO DESDE LUNA NEGRA PARA INICIAR SESIÓN', 'idle');
+        clearLunaNegraLeaderboard();
+        renderLunaNegraLeaderboardRows([]);
+        return;
+    }
+    setLunaNegraStatus('VALIDANDO SESIÓN LUNA NEGRA...', 'loading');
+    try {
+        const sessionPayload = await fetchLunaNegraJson(buildLunaNegraSessionUrl(LUNA_NEGRA_BASE_URL), {
+            headers: { authorization: `Bearer ${token}` }
+        });
+        lunaNegraSession = normalizeLunaNegraSession(sessionPayload, token);
+        renderLunaNegraPlayer(lunaNegraSession);
+        history.replaceState(history.state, document.title, removeLunaNegraTokenFromUrl(window.location.href));
+        await loadLunaNegraLeaderboard();
+    }
+    catch (error) {
+        console.error('Luna Negra session error:', error);
+        setLunaNegraStatus('ERROR DE SESIÓN LUNA NEGRA', 'error');
+    }
+}
+async function publishLunaNegraScore() {
+    if (!showStartLunaNegraSection || !lunaNegraSession?.token) {
+        return;
+    }
+    try {
+        await fetchLunaNegraJson(buildLunaNegraScoresUrl(LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME), {
+            method: 'POST',
+            headers: {
+                authorization: `Bearer ${lunaNegraSession.token}`,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({ score: supplyPoints })
+        });
+        setLunaNegraStatus('PUNTAJE ENVIADO A LUNA NEGRA', 'success');
+        await loadLunaNegraLeaderboard();
+    }
+    catch (error) {
+        console.error('Luna Negra score publish error:', error);
+        setLunaNegraStatus('NO SE PUDO ENVIAR PUNTAJE A LUNA NEGRA', 'error');
+    }
+}
+
 function parseLedgerAmount(event) {
     const amount = Number.parseInt(event.tags.find((tag) => tag[0] === 'amount')?.[1] || '0', 10);
     return Number.isFinite(amount) ? amount : 0;
@@ -930,7 +1072,7 @@ function handlePaidStart() {
     }
     startGame();
 }
-async function publishScore() {
+async function publishNostrScore() {
     try {
         if (!playerNostrPubkey) {
             return;
@@ -981,6 +1123,12 @@ async function publishScore() {
         console.error('Publish score error:', error);
         showFeedback('NO SE PUDO PUBLICAR EL PUNTAJE');
     }
+}
+async function publishScore() {
+    await Promise.allSettled([
+        publishNostrScore(),
+        publishLunaNegraScore()
+    ]);
 }
 // --- CONSTRUCTOR DE MAPA ---
 function shouldPlaceLevelOneMazeLamp(x, z) {
@@ -1093,12 +1241,12 @@ function buildMap3D() {
             // Paredes
             if (type === 1) {
                 let collisionMesh = null;
-                
+
                 if (currentLevel === 2) {
                     // Generar múltiples árboles si estamos en los bordes para crear un bosque denso que tape el fondo
                     const isEdge = (x === 0 || x === activeMap[0].length - 1 || z === 0 || z === activeMap.length - 1);
                     const numTrees = isEdge ? 4 : 1;
-                    
+
                     for (let t = 0; t < numTrees; t++) {
                         const tPosX = (t === 0) ? posX : posX + (Math.random() - 0.5) * GRID_SIZE * 0.9;
                         const tPosZ = (t === 0) ? posZ : posZ + (Math.random() - 0.5) * GRID_SIZE * 0.9;
@@ -1107,7 +1255,7 @@ function buildMap3D() {
                         const treeGroup = new THREE.Group();
                         treeGroup.name = "map_tree";
                         treeGroup.position.set(tPosX, 0, tPosZ);
-                        
+
                         if (!barkMaterial) {
                             const barkTex = generateBarkTexture();
                             const barkNorm = createNormalMapFromCanvas(barkTex, 2.0);
@@ -1117,7 +1265,7 @@ function buildMap3D() {
                                 normalMap: barkNorm,
                                 roughnessMap: barkRough
                             });
-                            
+
                             const leafTex = generateLeafTexture();
                             const leafNorm = createNormalMapFromCanvas(leafTex, 1.0);
                             const leafRough = createRoughnessMapFromCanvas(leafTex, 0.8, 0.2);
@@ -1127,34 +1275,34 @@ function buildMap3D() {
                                 roughnessMap: leafRough
                             });
                         }
-                        
+
                         // Tronco
                         const trunkRadius = 0.3 + Math.random() * 0.4;
                         const trunkHeight = WALL_HEIGHT + 1 + Math.random() * 4;
                         const trunkGeo = new THREE.CylinderGeometry(trunkRadius * 0.6, trunkRadius, trunkHeight, 8);
-                        
+
                         const trunk = new THREE.Mesh(trunkGeo, barkMaterial);
                         trunk.position.y = trunkHeight / 2;
                         trunk.castShadow = true;
                         trunk.receiveShadow = true;
                         treeGroup.add(trunk);
-                        
+
                         // Follaje (Esferas interceptadas)
                         const leafCount = 3 + Math.floor(Math.random() * 4);
                         for (let i = 0; i < leafCount; i++) {
                             const leafSize = 2.0 + Math.random() * 2.5;
                             const leafGeo = new THREE.DodecahedronGeometry(leafSize, 1);
                             const leaf = new THREE.Mesh(leafGeo, leafMaterial);
-                            
+
                             leaf.position.y = trunkHeight - 1.0 + Math.random() * 2.5;
                             leaf.position.x = (Math.random() - 0.5) * 2.5;
                             leaf.position.z = (Math.random() - 0.5) * 2.5;
-                            
+
                             leaf.castShadow = true;
                             leaf.receiveShadow = true;
                             treeGroup.add(leaf);
                         }
-                        
+
                         scene.add(treeGroup);
                     }
                     collisionMesh = null; // Árboles manejados manualmente
@@ -1176,7 +1324,7 @@ function buildMap3D() {
                     scene.add(wall);
                     collisionMesh = wall;
                 }
-                
+
                 // Guardar colisionadores
                 if (currentLevel === 2) {
                     colliders.push({
@@ -1370,7 +1518,7 @@ function updateLevelEnvironment() {
         hemiGroundColor = 0x081008;
         hemiIntensity = 0.45;
         toneExposure = 0.9;
-        
+
         if (!sunLight) {
             sunLight = new THREE.DirectionalLight(0x778899, 0.5);
             sunLight.position.set(60, 100, 60);
@@ -1426,13 +1574,13 @@ function updateLevelEnvironment() {
         hemiIntensity = 0.3;
         toneExposure = 1.1;
     }
-    
+
     if (currentLevel !== 2 && sunLight) {
         scene.remove(sunLight);
         sunLight.dispose();
         sunLight = null;
     }
-    
+
     if (scene.fog) {
         scene.fog.color.setHex(fogColor);
         scene.fog.density = fogDensity;
@@ -3188,7 +3336,7 @@ function checkCollisions(newX, newZ) {
                     const dist = Math.sqrt(diffX*diffX + diffZ*diffZ);
                     const trunkRadius = 0.5;
                     const minAllowedDist = PLAYER_RADIUS + trunkRadius;
-                    
+
                     if (dist < minAllowedDist && dist > 0.01) {
                         const overlap = minAllowedDist - dist;
                         resolvedX += (diffX / dist) * overlap;
@@ -4264,6 +4412,7 @@ function setupControls() {
     applyStartMenuVisibility();
     initNostrUI();
     void loadStartupLeaderboard();
+    void initLunaNegraUI();
     void loadCurrentJackpot();
     updateEntryGateUI();
     freeStartBtn.addEventListener('click', startGame);

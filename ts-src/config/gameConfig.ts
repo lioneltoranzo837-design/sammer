@@ -33,6 +33,11 @@ export const BOSS_RUSH_SPEED_MULTIPLIER = 3.6;
 export const BOSS_RUSH_DURATION = 3.0;
 export const BOSS_RUSH_INTERVAL = 15.0;
 export const GAME_PAYOUT_NWC_URI = '';
+export const SHOW_START_ZAP_ACCESS = false;
+export const SHOW_START_NOSTR_LEADERBOARD = false;
+export const SHOW_START_LUNA_NEGRA_SECTION = false;
+export const LUNA_NEGRA_BASE_URL = 'https://moon21.vercel.app';
+export const LUNA_NEGRA_LEADERBOARD_NAME = 'sammer';
 
 // Configuración de Armamento
 export const WEAPONS = {

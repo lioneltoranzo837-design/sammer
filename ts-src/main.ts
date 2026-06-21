@@ -33,6 +33,11 @@ import {
     BOSS_RUSH_SPEED_MULTIPLIER,
     BOSS_RUSH_DURATION,
     BOSS_RUSH_INTERVAL,
+    SHOW_START_ZAP_ACCESS,
+    SHOW_START_NOSTR_LEADERBOARD,
+    SHOW_START_LUNA_NEGRA_SECTION,
+    LUNA_NEGRA_BASE_URL,
+    LUNA_NEGRA_LEADERBOARD_NAME,
     getMapForLevel
 } from './config/gameConfig.js';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
@@ -40,6 +45,7 @@ import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, computeCurrentJackpot, createEntryGateState } from './nostr/paymentGate.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
+import { buildLunaNegraLeaderboardRows, buildLunaNegraLeaderboardUrl, buildLunaNegraScoresUrl, buildLunaNegraSessionUrl, getLunaNegraTokenFromSearch, normalizeLunaNegraSession, removeLunaNegraTokenFromUrl, type LunaNegraSession } from './nostr/lunaNegra.js';
 import {
     addBloodWallMessages,
     generateCeilingTexture,
@@ -69,6 +75,7 @@ import {
     healthVal,
     menuOverlay,
     restartBtn,
+    freeStartBtn,
     startBtn,
     victoryOverlay,
     winBtn,
@@ -87,7 +94,12 @@ import {
     jackpotValue,
     startLeaderboardList,
     startLeaderboardPanel,
-    startLeaderboardStatus
+    startLeaderboardStatus,
+    lunaNegraPanel,
+    lunaNegraStatus,
+    lunaNegraPlayer,
+    lunaNegraAvatar,
+    lunaNegraLeaderboardList
 } from './ui/dom.js';
 
 const { THREE } = window;
@@ -128,6 +140,10 @@ const NOSTR_SCORE_RELAYS = [
 const ENTRY_FEE_SATS = 100;
 const JACKPOT_LEDGER_KIND = 30078;
 const STARTUP_LEADERBOARD_LIMIT = 5;
+const showStartZapAccess = Boolean(SHOW_START_ZAP_ACCESS);
+const showStartNostrLeaderboard = Boolean(SHOW_START_NOSTR_LEADERBOARD);
+const showStartNostrControls = showStartZapAccess || showStartNostrLeaderboard;
+const showStartLunaNegraSection = Boolean(SHOW_START_LUNA_NEGRA_SECTION);
 
 // Variables para el Minijuego de Cableado
 let wiringFixed = false;
@@ -136,6 +152,7 @@ let mousePos = { x: 0, y: 0 };
 let leftSockets = [];
 let rightSockets = [];
 let entryGateState = createEntryGateState(ENTRY_FEE_SATS);
+let lunaNegraSession: LunaNegraSession | null = null;
 let currentJackpotSats = 0;
 let jackpotBackendConfigured = false;
 let pendingEntryZapRequest = null;
@@ -335,7 +352,26 @@ async function initEngine() {
     animate();
 }
 
+function setStartMenuElementVisible(element, visible) {
+    if (!element) {
+        return;
+    }
+    element.hidden = !visible;
+}
+
+function applyStartMenuVisibility() {
+    setStartMenuElementVisible(entryGatePanel, showStartZapAccess);
+    setStartMenuElementVisible(startBtn, showStartZapAccess);
+    setStartMenuElementVisible(startLeaderboardPanel, showStartNostrLeaderboard);
+    setStartMenuElementVisible(lunaNegraPanel, showStartLunaNegraSection);
+    setStartMenuElementVisible(nostrConnectBtn, showStartNostrControls);
+    setStartMenuElementVisible(nostrManualSection, false);
+}
+
 function initNostrUI() {
+    if (!showStartNostrControls) {
+        return;
+    }
     nostrConnectBtn.addEventListener('click', async () => {
         if (window.nostr) {
             try {
@@ -411,6 +447,9 @@ function setEntryGateStatus(message, tone) {
 }
 
 function updateEntryGateUI() {
+    if (!showStartZapAccess) {
+        return;
+    }
     const payoutReady = isGamePayoutReady();
     const startUnlocked = canStartPaidRun(entryGateState) && payoutReady;
 
@@ -589,6 +628,145 @@ async function loadStartupLeaderboard() {
         if (typeof pool.close === 'function') {
             pool.close(NOSTR_SCORE_RELAYS);
         }
+    }
+}
+
+
+function setLunaNegraStatus(message: string, tone: string) {
+    if (!lunaNegraStatus) {
+        return;
+    }
+    lunaNegraStatus.textContent = message;
+    lunaNegraStatus.dataset.tone = tone;
+}
+function clearLunaNegraLeaderboard() {
+    if (!lunaNegraLeaderboardList) {
+        return;
+    }
+    lunaNegraLeaderboardList.replaceChildren();
+}
+function renderLunaNegraPlayer(session: LunaNegraSession) {
+    if (!lunaNegraPlayer) {
+        return;
+    }
+    const nameElement = lunaNegraPlayer.querySelector('[data-luna-negra-name]');
+    const npubElement = lunaNegraPlayer.querySelector('[data-luna-negra-npub]');
+    if (nameElement) {
+        nameElement.textContent = session.displayName;
+    }
+    if (npubElement) {
+        npubElement.textContent = session.npub || session.pubkey || session.gameId || '';
+    }
+    if (lunaNegraAvatar) {
+        if (session.avatarUrl) {
+            lunaNegraAvatar.src = session.avatarUrl;
+            lunaNegraAvatar.hidden = false;
+        }
+        else {
+            lunaNegraAvatar.removeAttribute('src');
+            lunaNegraAvatar.hidden = true;
+        }
+    }
+    lunaNegraPlayer.hidden = false;
+}
+function renderLunaNegraLeaderboardRows(rows: ReturnType<typeof buildLunaNegraLeaderboardRows>) {
+    if (!lunaNegraLeaderboardList) {
+        return;
+    }
+    clearLunaNegraLeaderboard();
+    if (rows.length === 0) {
+        const emptyItem = document.createElement('li');
+        emptyItem.className = 'start-leaderboard-empty';
+        emptyItem.textContent = 'SIN REGISTROS EN LUNA NEGRA';
+        lunaNegraLeaderboardList.appendChild(emptyItem);
+        return;
+    }
+    rows.forEach((row) => {
+        const item = document.createElement('li');
+        item.className = 'start-leaderboard-item';
+        const rank = document.createElement('span');
+        rank.className = 'start-leaderboard-rank';
+        rank.textContent = row.rank;
+        const player = document.createElement('span');
+        player.className = 'start-leaderboard-player';
+        player.textContent = row.player;
+        const score = document.createElement('span');
+        score.className = 'start-leaderboard-score';
+        score.textContent = row.score;
+        const level = document.createElement('span');
+        level.className = 'start-leaderboard-level';
+        level.textContent = row.level;
+        item.append(rank, player, score, level);
+        lunaNegraLeaderboardList.appendChild(item);
+    });
+}
+async function fetchLunaNegraJson(url: string, options: RequestInit = {}) {
+    const response = await fetch(url, options);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const errorPayload = payload && typeof payload === 'object' ? payload as { error?: string; message?: string } : {};
+        throw new Error(errorPayload.error || errorPayload.message || `Luna Negra HTTP ${response.status}`);
+    }
+    return payload;
+}
+async function loadLunaNegraLeaderboard() {
+    if (!showStartLunaNegraSection || !lunaNegraSession?.token) {
+        return;
+    }
+    setLunaNegraStatus('CARGANDO LEADERBOARD LUNA NEGRA...', 'loading');
+    clearLunaNegraLeaderboard();
+    const payload = await fetchLunaNegraJson(buildLunaNegraLeaderboardUrl(LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME), {
+        headers: { authorization: `Bearer ${lunaNegraSession.token}` }
+    });
+    const rows = buildLunaNegraLeaderboardRows(payload, STARTUP_LEADERBOARD_LIMIT);
+    renderLunaNegraLeaderboardRows(rows);
+    setLunaNegraStatus(rows.length > 0 ? `TOP ${rows.length} LUNA NEGRA` : 'SIN SCORES EN LUNA NEGRA', rows.length > 0 ? 'success' : 'idle');
+}
+async function initLunaNegraUI() {
+    if (!showStartLunaNegraSection || !lunaNegraPanel) {
+        return;
+    }
+    const token = getLunaNegraTokenFromSearch(window.location.search);
+    if (!token) {
+        setLunaNegraStatus('ABRÍ EL JUEGO DESDE LUNA NEGRA PARA INICIAR SESIÓN', 'idle');
+        clearLunaNegraLeaderboard();
+        renderLunaNegraLeaderboardRows([]);
+        return;
+    }
+    setLunaNegraStatus('VALIDANDO SESIÓN LUNA NEGRA...', 'loading');
+    try {
+        const sessionPayload = await fetchLunaNegraJson(buildLunaNegraSessionUrl(LUNA_NEGRA_BASE_URL), {
+            headers: { authorization: `Bearer ${token}` }
+        });
+        lunaNegraSession = normalizeLunaNegraSession(sessionPayload, token);
+        renderLunaNegraPlayer(lunaNegraSession);
+        history.replaceState(history.state, document.title, removeLunaNegraTokenFromUrl(window.location.href));
+        await loadLunaNegraLeaderboard();
+    }
+    catch (error) {
+        console.error('Luna Negra session error:', error);
+        setLunaNegraStatus('ERROR DE SESIÓN LUNA NEGRA', 'error');
+    }
+}
+async function publishLunaNegraScore() {
+    if (!showStartLunaNegraSection || !lunaNegraSession?.token) {
+        return;
+    }
+    try {
+        await fetchLunaNegraJson(buildLunaNegraScoresUrl(LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME), {
+            method: 'POST',
+            headers: {
+                authorization: `Bearer ${lunaNegraSession.token}`,
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({ score: supplyPoints })
+        });
+        setLunaNegraStatus('PUNTAJE ENVIADO A LUNA NEGRA', 'success');
+        await loadLunaNegraLeaderboard();
+    }
+    catch (error) {
+        console.error('Luna Negra score publish error:', error);
+        setLunaNegraStatus('NO SE PUDO ENVIAR PUNTAJE A LUNA NEGRA', 'error');
     }
 }
 
@@ -1007,7 +1185,7 @@ function handlePaidStart() {
     startGame();
 }
 
-async function publishScore() {
+async function publishNostrScore() {
     try {
         if (!playerNostrPubkey) {
             return;
@@ -4455,11 +4633,14 @@ function setupWiringCanvasEvents() {
 
 // --- BINDING DE CONTROLES ---
 function setupControls() {
+    applyStartMenuVisibility();
     initNostrUI();
     void loadStartupLeaderboard();
+    void initLunaNegraUI();
     void loadCurrentJackpot();
     updateEntryGateUI();
 
+    freeStartBtn.addEventListener('click', startGame);
     startBtn.addEventListener('click', handlePaidStart);
     restartBtn.addEventListener('click', handlePaidStart);
     winBtn.addEventListener('click', handlePaidStart);
