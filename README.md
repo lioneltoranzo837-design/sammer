@@ -10,9 +10,10 @@ https://sammer.shiafu.com/
 
 ## Ejecutar localmente
 
-Este proyecto no requiere build ni instalación de dependencias. Servilo como archivos estáticos:
+Este proyecto no requiere instalación de dependencias para jugar, pero compila TypeScript a JavaScript antes de servir:
 
 ```bash
+npm run build:ts
 python3 -m http.server 8000
 ```
 
@@ -50,12 +51,14 @@ Después del deploy, verificá que Vercel haya aliasado la publicación a `https
 
 - `index.html`: documento raíz, overlays, HUD y carga de Three.js + `src/main.js`.
 - `styles/styles.css`: estilos visuales, CRT, menús, HUD y tienda.
-- `src/config/gameConfig.js`: constantes, armas, mapa y mensajes de sangre.
-- `src/audio/SoundSynth.js`: audio procedural.
-- `src/rendering/textures.js`: texturas canvas, fuente SHLOP y mensajes en paredes.
-- `src/core/state.js`: estado inicial base.
-- `src/ui/dom.js`: referencias DOM compartidas.
-- `src/main.js`: composición del juego, escena, entidades, gameplay y loop.
+- `ts-src/config/gameConfig.ts`: constantes, armas, mapa y mensajes de sangre.
+- `ts-src/audio/SoundSynth.ts`: audio procedural.
+- `ts-src/rendering/textures.ts`: texturas canvas, fuente SHLOP y mensajes en paredes.
+- `ts-src/core/state.ts`: estado inicial base.
+- `ts-src/ui/dom.ts`: referencias DOM compartidas.
+- `ts-src/main.ts`: composición del juego, escena, entidades, gameplay y loop.
 - `assets/`: fuentes y futuros assets estáticos.
+
+`src/` es la salida compilada de `ts-src/` (ver `tsconfig.build.json`). No editar `src/` directamente; correr `npm run build:ts` para regenerarlo.
 
 Ver `docs/architecture.md` para reglas de edición orientadas a agentes.

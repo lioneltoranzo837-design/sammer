@@ -7,3 +7,8 @@
 .playwright-mcp/
 .tmp/
 node_modules/
+
+# src/ is generated from ts-src/ via npm run build:ts.
+# Exception: src/GLTFLoader.js is a vendored Three.js loader with no TS source.
+src/*
+!src/GLTFLoader.js

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build:ts": "tsc -p tsconfig.build.json",
+    "build": "npm run build:ts",
     "test": "node --test",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
