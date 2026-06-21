@@ -1,3 +1,14 @@
+# Compilar TypeScript a src/ antes de servir
+Write-Host "Compilando TypeScript..." -ForegroundColor Cyan
+npm run build:ts
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Error: fallo la compilacion de TypeScript. No se puede iniciar el servidor." -ForegroundColor Red
+    Read-Host "Presiona Enter para salir..."
+    exit 1
+}
+Write-Host "Compilacion OK." -ForegroundColor Green
+Write-Host ""
+
 $port = 8000
 # Buscar puerto libre entre 8000 y 8020
 while ($true) {
@@ -20,6 +31,7 @@ Clear-Host
 Write-Host "==================================================" -ForegroundColor Red
 Write-Host "  DREAD FACILITY - SERVIDOR LOCAL ACTIVO" -ForegroundColor Yellow -BackgroundColor Black
 Write-Host "==================================================" -ForegroundColor Red
+Write-Host "  TypeScript compilado desde ts-src/ a src/." -ForegroundColor DarkGray
 Write-Host "  Puerto del servidor: $port" -ForegroundColor White
 Write-Host "  Abriendo http://localhost:$port/ en tu navegador..." -ForegroundColor Green
 Write-Host "  NO CIERRES ESTA VENTANA MIENTRAS JUEGAS." -ForegroundColor DarkRed -BackgroundColor White

@@ -1,9 +1,14 @@
-.PHONY: deploy build
+.PHONY: deploy build run serve
 
 VERCEL_CLI_VERSION := 54.14.5
+PORT ?= 8000
 
 build:
 	npm run build:ts
 
 deploy: build
 	npm exec --yes --package vercel@$(VERCEL_CLI_VERSION) -- vercel deploy --prod --yes
+
+run serve: build
+	python3 -m http.server $(PORT)
+
