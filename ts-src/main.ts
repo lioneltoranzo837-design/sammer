@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, SHOW_START_LUNA_NEGRA_SECTION, LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME, getMapForLevel } from './config/gameConfig.js?v=3';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, LEVEL_THREE_LAMP_SPAWN_CHANCE, LEVEL_THREE_LAMP_MIN_GRID_X, LEVEL_THREE_LAMP_MIN_GRID_Z, LEVEL_THREE_LAMP_RED_CHANCE, LEVEL_THREE_LAMP_RED_COLOR, LEVEL_THREE_LAMP_ORANGE_COLOR, LEVEL_THREE_LAMP_INTENSITY, LEVEL_THREE_LAMP_DIM_INTENSITY, LEVEL_THREE_LAMP_DISTANCE, LEVEL_THREE_LAMP_DECAY, LEVEL_THREE_LAMP_RED_MATERIAL_COLOR, LEVEL_THREE_LAMP_ORANGE_MATERIAL_COLOR, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, SHOW_START_LUNA_NEGRA_SECTION, LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME, getMapForLevel } from './config/gameConfig.js?v=3';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
+import { DelegationUnavailableError, buildDelegationTag, isDelegationActive, isSignSchnorrAvailable, requestDelegation } from './nostr/delegation.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import { buildLunaNegraLeaderboardRows, buildLunaNegraLeaderboardUrl, buildLunaNegraScoresUrl, buildLunaNegraSessionUrl, getLunaNegraTokenFromSearch, normalizeLunaNegraSession, removeLunaNegraTokenFromUrl } from './nostr/lunaNegra.js';
@@ -53,6 +54,7 @@ let supplyPoints = 0;
 let unlockedWeapons = { shotgun: true, glock: false, m4: false };
 let playerNostrPubkey = null;
 let playerNostrPrivateKey = null;
+let activeDelegation = null;
 const NOSTR_GAME_PUBKEY = 'fdd8790e8c462fc680cf57f5852392a8a22ba93ff26030253030c6da5509928b';
 const NOSTR_SCORE_RELAYS = [
     'wss://relay.damus.io',
@@ -364,6 +366,7 @@ function initNostrUI() {
                 nostrManualSection.style.display = 'none';
                 nostrNsecInput.value = '';
                 updateNostrButton();
+                await tryActivateDelegation(pubkey);
                 showFeedback('NOSTR CONECTADO');
             }
             catch (e) {
@@ -387,6 +390,7 @@ function initNostrUI() {
             }
             playerNostrPrivateKey = decoded.data;
             playerNostrPubkey = getPublicKey(playerNostrPrivateKey);
+            activeDelegation = null;
             nostrManualSection.style.display = 'none';
             nostrNsecInput.value = '';
             updateNostrButton();
@@ -397,6 +401,26 @@ function initNostrUI() {
             showFeedback('NSEC INVALIDO');
         }
     });
+}
+async function tryActivateDelegation(delegatorPubkey) {
+    activeDelegation = null;
+    if (!isSignSchnorrAvailable()) {
+        console.info('NIP-26 no disponible: la extension no expone signSchnorr. Se usara signEvent por score.');
+        return;
+    }
+    try {
+        const delegation = await requestDelegation(delegatorPubkey);
+        activeDelegation = delegation;
+        console.info('Delegacion NIP-26 activa hasta', new Date(delegation.expiresAt * 1000).toISOString());
+    }
+    catch (error) {
+        if (error instanceof DelegationUnavailableError) {
+            console.warn('Delegacion no disponible:', error.message);
+        }
+        else {
+            console.error('Error solicitando delegacion NIP-26:', error);
+        }
+    }
 }
 function showManualSection() {
     nostrManualSection.style.display = 'block';
@@ -1078,6 +1102,21 @@ async function publishNostrScore() {
             return;
         }
         const now = Math.floor(Date.now() / 1000);
+        const useDelegation = isDelegationActive(activeDelegation);
+        const signerPubkey = useDelegation ? activeDelegation.delegateePubkey : playerNostrPubkey;
+        const tags = [
+            ['d', `sammer-score-${currentLevel}-${now}`],
+            ['game', 'sammer'],
+            ['p', NOSTR_GAME_PUBKEY],
+            ['p', playerNostrPubkey],
+            ['player', playerNostrPubkey],
+            ['score', supplyPoints.toString()],
+            ['level', currentLevel.toString()],
+            ['timestamp', now.toString()]
+        ];
+        if (useDelegation) {
+            tags.push(buildDelegationTag(activeDelegation));
+        }
         const unsignedEvent = {
             kind: 78,
             content: JSON.stringify({
@@ -1087,20 +1126,14 @@ async function publishNostrScore() {
                 timestamp: now
             }),
             created_at: now,
-            tags: [
-                ['d', `sammer-score-${currentLevel}-${now}`],
-                ['game', 'sammer'],
-                ['p', NOSTR_GAME_PUBKEY],
-                ['p', playerNostrPubkey],
-                ['player', playerNostrPubkey],
-                ['score', supplyPoints.toString()],
-                ['level', currentLevel.toString()],
-                ['timestamp', now.toString()]
-            ],
-            pubkey: playerNostrPubkey
+            tags,
+            pubkey: signerPubkey
         };
         let signedEvent;
-        if (playerNostrPrivateKey) {
+        if (useDelegation) {
+            signedEvent = window.NostrTools.finalizeEvent(unsignedEvent, activeDelegation.delegateePrivateKey);
+        }
+        else if (playerNostrPrivateKey) {
             signedEvent = window.NostrTools.finalizeEvent(unsignedEvent, playerNostrPrivateKey);
         }
         else if (typeof window.nostr?.signEvent === 'function') {
@@ -1421,26 +1454,42 @@ function buildMap3D() {
             if (type === 0 && shouldPlaceLevelOneMazeLamp(x, z)) {
                 buildLevelOneMazeLamp(posX, posZ);
             }
-            else if (type === 0 && currentLevel !== 1 && Math.random() < 0.08 && z > 2 && x > 2) {
-                const isRed = Math.random() < 0.35;
-                const lightColor = isRed ? 0xff0000 : 0xffaa44;
-                const ceilingLight = new THREE.PointLight(lightColor, 1.2, 8, 1.5);
-                ceilingLight.position.set(posX, WALL_HEIGHT - 0.2, posZ);
-                ceilingLight.castShadow = false;
-                ceilingLight.shadow.bias = -0.002;
-                scene.add(ceilingLight);
-                const lampGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.05, 8);
-                const lampMat = new THREE.MeshBasicMaterial({ color: isRed ? 0x880000 : 0xe59400 });
-                const lamp = new THREE.Mesh(lampGeo, lampMat);
-                lamp.position.set(posX, WALL_HEIGHT - 0.025, posZ);
-                scene.add(lamp);
-                lights.push({
-                    light: ceilingLight,
-                    lamp: lamp,
-                    color: lightColor,
-                    isRed: isRed,
-                    flickerTimer: Math.random() * 10
-                });
+            else if (type === 0 && currentLevel !== 1) {
+                const lampSpawnChance = currentLevel === 3 ? LEVEL_THREE_LAMP_SPAWN_CHANCE : 0.08;
+                const lampMinGridX = currentLevel === 3 ? LEVEL_THREE_LAMP_MIN_GRID_X : 3;
+                const lampMinGridZ = currentLevel === 3 ? LEVEL_THREE_LAMP_MIN_GRID_Z : 3;
+                if (Math.random() < lampSpawnChance && z >= lampMinGridZ && x >= lampMinGridX) {
+                    const redChance = currentLevel === 3 ? LEVEL_THREE_LAMP_RED_CHANCE : 0.35;
+                    const isRed = Math.random() < redChance;
+                    const lightColor = currentLevel === 3
+                        ? (isRed ? LEVEL_THREE_LAMP_RED_COLOR : LEVEL_THREE_LAMP_ORANGE_COLOR)
+                        : (isRed ? 0xff0000 : 0xffaa44);
+                    const lightIntensity = currentLevel === 3 ? LEVEL_THREE_LAMP_INTENSITY : 1.2;
+                    const lightDistance = currentLevel === 3 ? LEVEL_THREE_LAMP_DISTANCE : 8;
+                    const lightDecay = currentLevel === 3 ? LEVEL_THREE_LAMP_DECAY : 1.5;
+                    const lampMaterialColor = currentLevel === 3
+                        ? (isRed ? LEVEL_THREE_LAMP_RED_MATERIAL_COLOR : LEVEL_THREE_LAMP_ORANGE_MATERIAL_COLOR)
+                        : (isRed ? 0x880000 : 0xe59400);
+                    const ceilingLight = new THREE.PointLight(lightColor, lightIntensity, lightDistance, lightDecay);
+                    ceilingLight.position.set(posX, WALL_HEIGHT - 0.2, posZ);
+                    ceilingLight.castShadow = false;
+                    ceilingLight.shadow.bias = -0.002;
+                    scene.add(ceilingLight);
+                    const lampGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.05, 8);
+                    const lampMat = new THREE.MeshBasicMaterial({ color: lampMaterialColor });
+                    const lamp = new THREE.Mesh(lampGeo, lampMat);
+                    lamp.position.set(posX, WALL_HEIGHT - 0.025, posZ);
+                    scene.add(lamp);
+                    lights.push({
+                        light: ceilingLight,
+                        lamp: lamp,
+                        color: lightColor,
+                        isRed: isRed,
+                        baseIntensity: lightIntensity,
+                        dimIntensity: currentLevel === 3 ? LEVEL_THREE_LAMP_DIM_INTENSITY : undefined,
+                        flickerTimer: Math.random() * 10
+                    });
+                }
             }
         }
     }
@@ -4035,10 +4084,6 @@ function triggerVictory() {
         updateShopButtons();
         document.getElementById('upgrade-overlay').classList.add('active');
         AudioSynth.playWinTune();
-        // Publicar puntuación si está logueado
-        if (playerNostrPubkey) {
-            publishScore().catch(e => console.error('Publish score error:', e));
-        }
     }
 }
 // --- MECÁNICAS DE TIENDA Y CAMBIO DE ARMAS ---
