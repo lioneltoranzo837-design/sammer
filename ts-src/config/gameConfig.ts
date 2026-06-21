@@ -48,6 +48,16 @@ export const LEVEL_ONE_LAMP_SPACING_MODULO = 5;
 export const LEVEL_ONE_LAMP_MIN_GRID_X = 3;
 export const LEVEL_ONE_LAMP_MIN_GRID_Z = 3;
 // LEVEL 3 settings
+export const LEVEL_THREE_FOG_COLOR = 0x7f8f9f;
+export const LEVEL_THREE_FOG_DENSITY = 0.025;
+export const LEVEL_THREE_HEMI_SKY_COLOR = 0xaab8c8;
+export const LEVEL_THREE_HEMI_GROUND_COLOR = 0x8899aa;
+export const LEVEL_THREE_HEMI_INTENSITY = 0.35;
+export const LEVEL_THREE_TONE_EXPOSURE = 0.9;
+export const LEVEL_THREE_PARTICLE_COLOR = 0xffffff;
+export const LEVEL_THREE_PARTICLE_EMISSIVE = 0x8888aa;
+export const LEVEL_THREE_PARTICLE_SIZE = 0.035;
+export const LEVEL_THREE_PARTICLE_OPACITY = 0.25;
 export const LEVEL_THREE_LAMP_SPAWN_CHANCE = 0.08;
 export const LEVEL_THREE_LAMP_MIN_GRID_X = 3;
 export const LEVEL_THREE_LAMP_MIN_GRID_Z = 3;
