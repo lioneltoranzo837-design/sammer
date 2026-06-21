@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, getMapForLevel } from './config/gameConfig.js?v=3';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, getMapForLevel } from './config/gameConfig.js?v=3';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
@@ -61,6 +61,9 @@ const NOSTR_SCORE_RELAYS = [
 const ENTRY_FEE_SATS = 100;
 const JACKPOT_LEDGER_KIND = 30078;
 const STARTUP_LEADERBOARD_LIMIT = 5;
+const showStartZapAccess = Boolean(SHOW_START_ZAP_ACCESS);
+const showStartNostrLeaderboard = Boolean(SHOW_START_NOSTR_LEADERBOARD);
+const showStartNostrControls = showStartZapAccess || showStartNostrLeaderboard;
 // Variables para el Minijuego de Cableado
 let wiringFixed = false;
 let draggingWireIdx = -1;
@@ -331,7 +334,23 @@ async function initEngine() {
     // Bucle de renderizado
     animate();
 }
+function setStartMenuElementVisible(element, visible) {
+    if (!element) {
+        return;
+    }
+    element.hidden = !visible;
+}
+function applyStartMenuVisibility() {
+    setStartMenuElementVisible(entryGatePanel, showStartZapAccess);
+    setStartMenuElementVisible(startBtn, showStartZapAccess);
+    setStartMenuElementVisible(startLeaderboardPanel, showStartNostrLeaderboard);
+    setStartMenuElementVisible(nostrConnectBtn, showStartNostrControls);
+    setStartMenuElementVisible(nostrManualSection, false);
+}
 function initNostrUI() {
+    if (!showStartNostrControls) {
+        return;
+    }
     nostrConnectBtn.addEventListener('click', async () => {
         if (window.nostr) {
             try {
@@ -400,6 +419,9 @@ function setEntryGateStatus(message, tone) {
     entryGateStatus.dataset.tone = tone;
 }
 function updateEntryGateUI() {
+    if (!showStartZapAccess) {
+        return;
+    }
     const payoutReady = isGamePayoutReady();
     const startUnlocked = canStartPaidRun(entryGateState) && payoutReady;
     setJackpotValueDisplay(currentJackpotSats);
@@ -508,7 +530,7 @@ function renderStartupLeaderboardRows(rows) {
     });
 }
 async function loadStartupLeaderboard() {
-    if (!startLeaderboardPanel) {
+    if (!showStartNostrLeaderboard || !startLeaderboardPanel) {
         return;
     }
     if (typeof window.NostrTools?.SimplePool !== 'function') {
@@ -643,7 +665,7 @@ function buildJackpotLedgerEvent(type, amountSats) {
     };
 }
 async function loadCurrentJackpot() {
-    if (!entryGatePanel) {
+    if (!showStartZapAccess || !entryGatePanel) {
         return;
     }
     try {
@@ -4239,6 +4261,7 @@ function setupWiringCanvasEvents() {
 }
 // --- BINDING DE CONTROLES ---
 function setupControls() {
+    applyStartMenuVisibility();
     initNostrUI();
     void loadStartupLeaderboard();
     void loadCurrentJackpot();
