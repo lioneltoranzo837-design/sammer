@@ -7,21 +7,8 @@ import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
 import { buildLunaNegraLeaderboardRows, buildLunaNegraLeaderboardUrl, buildLunaNegraScoresUrl, buildLunaNegraSessionUrl, getLunaNegraTokenFromSearch, normalizeLunaNegraSession, removeLunaNegraTokenFromUrl } from './nostr/lunaNegra.js';
-import {
-    addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture,
-    generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture,
-    generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture,
-    generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture,
-    createNormalMapFromCanvas, createRoughnessMapFromCanvas,
-    generateBarkTexture, generateLeafTexture
-} from './rendering/textures.js?v=2';
-import {
-    ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg,
-    healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn,
-    zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn,
-    nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus,
-    entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus, lunaNegraPanel, lunaNegraStatus, lunaNegraPlayer, lunaNegraAvatar, lunaNegraLeaderboardList
-} from './ui/dom.js';
+import { addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture, generateJungleWallTexture, generateJungleFloorTexture, generateJungleCeilingTexture, generateMountainWallTexture, generateMountainFloorTexture, generateMountainCeilingTexture, generateInfernalWallTexture, generateInfernalFloorTexture, generateInfernalCeilingTexture, createNormalMapFromCanvas, createRoughnessMapFromCanvas, generateBarkTexture, generateLeafTexture } from './rendering/textures.js?v=2';
+import { ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg, healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn, zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn, nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus, entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus, lunaNegraPanel, lunaNegraStatus, lunaNegraPlayer, lunaNegraAvatar, lunaNegraLeaderboardList } from './ui/dom.js';
 const { THREE } = window;
 // --- CONFIGURACIÓN DE THREE.JS ---
 let scene, camera, renderer, composer;
@@ -106,7 +93,6 @@ let playerFlashlight;
 let flashlightCycleTimer = 0;
 let flashlightUserEnabled = true;
 let dustParticles;
-
 // Estado del juego
 let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER, VICTORY
 // --- INICIALIZACIÓN DE LA ESCENA ---
@@ -130,27 +116,20 @@ async function initEngine() {
     renderer.toneMappingExposure = 1.1;
     renderer.outputEncoding = THREE.sRGBEncoding; // Color encoding correcto
     document.getElementById('game-container').appendChild(renderer.domElement);
-
     // --- POST-PROCESSING ---
     const renderScene = new THREE.RenderPass(scene, camera);
-
     // UnrealBloomPass para luces intensas (disparos, linterna, fuego)
-    const bloomPass = new THREE.UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight - 110),
-        1.2,  // Fuerza (strength)
-        0.8,  // Radio (radius)
-        0.6   // Umbral (threshold)
+    const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight - 110), 1.2, // Fuerza (strength)
+    0.8, // Radio (radius)
+    0.6 // Umbral (threshold)
     );
-
     // FilmPass para grano de película y scanlines de terror
-    const filmPass = new THREE.FilmPass(
-        0.5,   // Intensidad de ruido
-        0.25,  // Intensidad de scanlines
-        648,   // Cantidad de scanlines
-        false  // Grayscale
+    const filmPass = new THREE.FilmPass(0.5, // Intensidad de ruido
+    0.25, // Intensidad de scanlines
+    648, // Cantidad de scanlines
+    false // Grayscale
     );
     filmPass.renderToScreen = true;
-
     composer = new THREE.EffectComposer(renderer);
     composer.addPass(renderScene);
     composer.addPass(bloomPass);
@@ -171,14 +150,12 @@ async function initEngine() {
     playerFlashlight.shadow.bias = -0.0005;
     playerFlashlight.shadow.radius = 2; // Sombras suavizadas
     camera.add(playerFlashlight);
-
     // Objetivo de la linterna (apunta al frente de la cámara)
     const flashTarget = new THREE.Object3D();
     flashTarget.position.set(0, 0.58, -1);
     camera.add(flashTarget);
     playerFlashlight.target = flashTarget;
     playerFlashlight.visible = false;
-
     // --- POLVO ATMOSFÉRICO ---
     const particleCount = 2500;
     const dustGeometry = new THREE.BufferGeometry();
@@ -187,7 +164,6 @@ async function initEngine() {
         dustPositions[i] = (Math.random() - 0.5) * 50;
     }
     dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
-
     const dustCanvas = document.createElement('canvas');
     dustCanvas.width = 16;
     dustCanvas.height = 16;
@@ -196,9 +172,8 @@ async function initEngine() {
     dGrad.addColorStop(0, 'rgba(255,255,255,0.4)');
     dGrad.addColorStop(1, 'rgba(255,255,255,0)');
     dCtx.fillStyle = dGrad;
-    dCtx.fillRect(0,0,16,16);
+    dCtx.fillRect(0, 0, 16, 16);
     const dustTex = new THREE.CanvasTexture(dustCanvas);
-
     const dustMaterial = new THREE.PointsMaterial({
         color: 0xcccccc,
         size: 0.15,
@@ -210,7 +185,6 @@ async function initEngine() {
     });
     dustParticles = new THREE.Points(dustGeometry, dustMaterial);
     scene.add(dustParticles);
-
     // Carga de Texturas procedimentales
     const texWall0 = generateWallTexture(0);
     const texWall1 = generateWallTexture(1);
@@ -218,7 +192,6 @@ async function initEngine() {
     const texWall3 = generateWallTexture(3);
     const texFloor = generateFloorTexture();
     const texCeiling = generateCeilingTexture();
-
     wallMaterialStandard = new THREE.MeshStandardMaterial({
         map: texWall0,
         normalMap: createNormalMapFromCanvas(texWall0, 3.0),
@@ -243,7 +216,6 @@ async function initEngine() {
         roughnessMap: createRoughnessMapFromCanvas(texWall3, 1.0, 0.0),
         metalness: 0.5
     });
-
     floorMaterial = new THREE.MeshStandardMaterial({
         map: texFloor,
         normalMap: createNormalMapFromCanvas(texFloor, 2.5),
@@ -256,7 +228,6 @@ async function initEngine() {
         roughnessMap: createRoughnessMapFromCanvas(texCeiling, 0.8, 0.3),
         metalness: 0.2
     });
-
     zombieFaceTexture = generateZombieFaceTexture();
     // Carga del modelo de zombie GLB original en segundo plano
     try {
@@ -571,7 +542,6 @@ async function loadStartupLeaderboard() {
         }
     }
 }
-
 function setLunaNegraStatus(message, tone) {
     if (!lunaNegraStatus) {
         return;
@@ -708,7 +678,6 @@ async function publishLunaNegraScore() {
         setLunaNegraStatus('NO SE PUDO ENVIAR PUNTAJE A LUNA NEGRA', 'error');
     }
 }
-
 function parseLedgerAmount(event) {
     const amount = Number.parseInt(event.tags.find((tag) => tag[0] === 'amount')?.[1] || '0', 10);
     return Number.isFinite(amount) ? amount : 0;
@@ -1136,24 +1105,15 @@ function shouldPlaceLevelOneMazeLamp(x, z) {
     const staggeredSpacing = (x + z) % LEVEL_ONE_LAMP_SPACING_MODULO === 0;
     return currentLevel === 1 && awayFromStart && staggeredSpacing;
 }
-
 function buildLevelOneMazeLamp(posX, posZ) {
     const lampHeight = WALL_HEIGHT - 0.18;
     const targetY = 0.35;
-    const ceilingLight = new THREE.SpotLight(
-        LEVEL_ONE_LAMP_COLOR,
-        LEVEL_ONE_LAMP_INTENSITY,
-        LEVEL_ONE_LAMP_DISTANCE,
-        LEVEL_ONE_LAMP_ANGLE,
-        LEVEL_ONE_LAMP_PENUMBRA,
-        LEVEL_ONE_LAMP_DECAY
-    );
+    const ceilingLight = new THREE.SpotLight(LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY);
     ceilingLight.position.set(posX, lampHeight, posZ);
     ceilingLight.target.position.set(posX, targetY, posZ);
     ceilingLight.castShadow = false;
     scene.add(ceilingLight);
     scene.add(ceilingLight.target);
-
     const lampGeo = new THREE.CylinderGeometry(0.24, 0.32, 0.16, 12);
     const lampMat = new THREE.MeshStandardMaterial({
         color: 0x372417,
@@ -1165,7 +1125,6 @@ function buildLevelOneMazeLamp(posX, posZ) {
     const lamp = new THREE.Mesh(lampGeo, lampMat);
     lamp.position.set(posX, WALL_HEIGHT - 0.08, posZ);
     scene.add(lamp);
-
     lights.push({
         light: ceilingLight,
         lamp: lamp,
@@ -1177,7 +1136,6 @@ function buildLevelOneMazeLamp(posX, posZ) {
         flickerTimer: Math.random() * 10
     });
 }
-
 function buildMap3D() {
     const activeMap = getMapForLevel(currentLevel);
     const wallGeo = new THREE.BoxGeometry(GRID_SIZE, WALL_HEIGHT, GRID_SIZE);
@@ -1241,21 +1199,17 @@ function buildMap3D() {
             // Paredes
             if (type === 1) {
                 let collisionMesh = null;
-
                 if (currentLevel === 2) {
                     // Generar múltiples árboles si estamos en los bordes para crear un bosque denso que tape el fondo
                     const isEdge = (x === 0 || x === activeMap[0].length - 1 || z === 0 || z === activeMap.length - 1);
                     const numTrees = isEdge ? 4 : 1;
-
                     for (let t = 0; t < numTrees; t++) {
                         const tPosX = (t === 0) ? posX : posX + (Math.random() - 0.5) * GRID_SIZE * 0.9;
                         const tPosZ = (t === 0) ? posZ : posZ + (Math.random() - 0.5) * GRID_SIZE * 0.9;
-
                         // --- ÁRBOL 3D PROCEDURAL ---
                         const treeGroup = new THREE.Group();
                         treeGroup.name = "map_tree";
                         treeGroup.position.set(tPosX, 0, tPosZ);
-
                         if (!barkMaterial) {
                             const barkTex = generateBarkTexture();
                             const barkNorm = createNormalMapFromCanvas(barkTex, 2.0);
@@ -1265,7 +1219,6 @@ function buildMap3D() {
                                 normalMap: barkNorm,
                                 roughnessMap: barkRough
                             });
-
                             const leafTex = generateLeafTexture();
                             const leafNorm = createNormalMapFromCanvas(leafTex, 1.0);
                             const leafRough = createRoughnessMapFromCanvas(leafTex, 0.8, 0.2);
@@ -1275,38 +1228,33 @@ function buildMap3D() {
                                 roughnessMap: leafRough
                             });
                         }
-
                         // Tronco
                         const trunkRadius = 0.3 + Math.random() * 0.4;
                         const trunkHeight = WALL_HEIGHT + 1 + Math.random() * 4;
                         const trunkGeo = new THREE.CylinderGeometry(trunkRadius * 0.6, trunkRadius, trunkHeight, 8);
-
                         const trunk = new THREE.Mesh(trunkGeo, barkMaterial);
                         trunk.position.y = trunkHeight / 2;
                         trunk.castShadow = true;
                         trunk.receiveShadow = true;
                         treeGroup.add(trunk);
-
                         // Follaje (Esferas interceptadas)
                         const leafCount = 3 + Math.floor(Math.random() * 4);
                         for (let i = 0; i < leafCount; i++) {
                             const leafSize = 2.0 + Math.random() * 2.5;
                             const leafGeo = new THREE.DodecahedronGeometry(leafSize, 1);
                             const leaf = new THREE.Mesh(leafGeo, leafMaterial);
-
                             leaf.position.y = trunkHeight - 1.0 + Math.random() * 2.5;
                             leaf.position.x = (Math.random() - 0.5) * 2.5;
                             leaf.position.z = (Math.random() - 0.5) * 2.5;
-
                             leaf.castShadow = true;
                             leaf.receiveShadow = true;
                             treeGroup.add(leaf);
                         }
-
                         scene.add(treeGroup);
                     }
                     collisionMesh = null; // Árboles manejados manualmente
-                } else {
+                }
+                else {
                     // --- PARED ESTÁNDAR ---
                     let mat = wallMaterialStandard;
                     const rVal = Math.random();
@@ -1324,7 +1272,6 @@ function buildMap3D() {
                     scene.add(wall);
                     collisionMesh = wall;
                 }
-
                 // Guardar colisionadores
                 if (currentLevel === 2) {
                     colliders.push({
@@ -1332,7 +1279,8 @@ function buildMap3D() {
                         posX: posX,
                         posZ: posZ
                     });
-                } else {
+                }
+                else {
                     colliders.push({
                         mesh: collisionMesh,
                         minX: posX - GRID_SIZE / 2,
@@ -1350,11 +1298,9 @@ function buildMap3D() {
                     exitMesh.position.set(posX, 0.1, posZ);
                     exitMesh.rotation.x = -Math.PI / 2;
                     scene.add(exitMesh);
-
                     const exitLight = new THREE.PointLight(0x00ff00, 2, 20);
                     exitLight.position.set(posX, 3, posZ);
                     scene.add(exitLight);
-
                     colliders.push({
                         mesh: exitMesh,
                         isExit: true,
@@ -1364,7 +1310,8 @@ function buildMap3D() {
                         minZ: posZ - GRID_SIZE / 2,
                         maxZ: posZ + GRID_SIZE / 2
                     });
-                } else {
+                }
+                else {
                     const doorGeo = new THREE.BoxGeometry(GRID_SIZE, WALL_HEIGHT, 0.4);
                     const door = new THREE.Mesh(doorGeo, doorMaterial);
                     door.name = "map_wall";
@@ -1518,7 +1465,6 @@ function updateLevelEnvironment() {
         hemiGroundColor = 0x081008;
         hemiIntensity = 0.45;
         toneExposure = 0.9;
-
         if (!sunLight) {
             sunLight = new THREE.DirectionalLight(0x778899, 0.5);
             sunLight.position.set(60, 100, 60);
@@ -1574,13 +1520,11 @@ function updateLevelEnvironment() {
         hemiIntensity = 0.3;
         toneExposure = 1.1;
     }
-
     if (currentLevel !== 2 && sunLight) {
         scene.remove(sunLight);
         sunLight.dispose();
         sunLight = null;
     }
-
     if (scene.fog) {
         scene.fog.color.setHex(fogColor);
         scene.fog.density = fogDensity;
@@ -1738,8 +1682,10 @@ function createFacilityDecoration(px, pz) {
         strip.position.y = 0.45;
         strip.rotation.y = crate.rotation.y;
         group.add(strip);
-    } else if (type === 2) {
-    } else {
+    }
+    else if (type === 2) {
+    }
+    else {
         const cableCount = 2 + Math.floor(Math.random() * 3);
         for (let c = 0; c < cableCount; c++) {
             const cableGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.2 + Math.random() * 1.5, 4);
@@ -2022,7 +1968,8 @@ function buildFuseBox3D(posX, posZ) {
 }
 // --- GENERACIÓN Y GESTIÓN DE FUSIBLES ---
 function spawnFuses() {
-    if (currentLevel === 2) return;
+    if (currentLevel === 2)
+        return;
     fuses.forEach(f => {
         scene.remove(f.mesh);
         if (fuseBoxConsole && fuseBoxConsole.group) {
@@ -2096,7 +2043,8 @@ function updateFuseHUD() {
         if (currentLevel === 2) {
             fuseCountEl.style.display = 'none';
             return;
-        } else {
+        }
+        else {
             fuseCountEl.style.display = 'block';
         }
         fuseCountEl.innerText = `${fusesCollected}/3`;
@@ -3333,10 +3281,9 @@ function checkCollisions(newX, newZ) {
                     const centerZ = gz * GRID_SIZE;
                     const diffX = resolvedX - centerX;
                     const diffZ = resolvedZ - centerZ;
-                    const dist = Math.sqrt(diffX*diffX + diffZ*diffZ);
+                    const dist = Math.sqrt(diffX * diffX + diffZ * diffZ);
                     const trunkRadius = 0.5;
                     const minAllowedDist = PLAYER_RADIUS + trunkRadius;
-
                     if (dist < minAllowedDist && dist > 0.01) {
                         const overlap = minAllowedDist - dist;
                         resolvedX += (diffX / dist) * overlap;
@@ -3344,7 +3291,6 @@ function checkCollisions(newX, newZ) {
                     }
                     continue; // Saltar chequeo cuadrado para árboles de jungla
                 }
-
                 // Si es compuerta normal interactiva
                 if (type === 3) {
                     const door = interactiveDoors.find(d => d.gridX === gx && d.gridZ === gz);
@@ -3411,7 +3357,7 @@ function checkZombieWallCollisions(zX, zZ) {
                     const centerZ = gz * GRID_SIZE;
                     const diffX = resolvedX - centerX;
                     const diffZ = resolvedZ - centerZ;
-                    const dist = Math.sqrt(diffX*diffX + diffZ*diffZ);
+                    const dist = Math.sqrt(diffX * diffX + diffZ * diffZ);
                     const trunkRadius = 0.5;
                     const minAllowedDist = zRadius + trunkRadius;
                     if (dist < minAllowedDist && dist > 0.01) {
@@ -4136,8 +4082,10 @@ async function startNextLevel() {
     player.health = MAX_HEALTH;
     player.armor = MAX_ARMOR;
     // Resetea compuertas y salida
-    colliders.forEach(c => { if (c.isExit)
-        c.unlocked = false; });
+    colliders.forEach(c => {
+        if (c.isExit)
+            c.unlocked = false;
+    });
     const exitDoor = colliders.find(c => c.isExit);
     if (exitDoor && exitDoor.mesh) {
         exitDoor.mesh.position.y = WALL_HEIGHT / 2;
@@ -4452,12 +4400,18 @@ function setupControls() {
         const k = e.key.toUpperCase();
         keyboard[k] = true;
         if (gameState === 'PLAYING') {
-            if (k === 'R') reload();
-            if (k === 'F') toggleFlashlight();
-            if (k === 'E') tryOpenDoor();
-            if (k === '1') switchWeapon('shotgun');
-            if (k === '2') switchWeapon('glock');
-            if (k === '3') switchWeapon('m4');
+            if (k === 'R')
+                reload();
+            if (k === 'F')
+                toggleFlashlight();
+            if (k === 'E')
+                tryOpenDoor();
+            if (k === '1')
+                switchWeapon('shotgun');
+            if (k === '2')
+                switchWeapon('glock');
+            if (k === '3')
+                switchWeapon('m4');
             // Cheat code para saltar nivel
             if (k === 'K') {
                 if (currentLevel < 4) {
