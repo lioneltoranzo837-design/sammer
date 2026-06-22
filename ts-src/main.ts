@@ -1,7 +1,10 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, LEVEL_THREE_FOG_COLOR, LEVEL_THREE_FOG_DENSITY, LEVEL_THREE_HEMI_SKY_COLOR, LEVEL_THREE_HEMI_GROUND_COLOR, LEVEL_THREE_HEMI_INTENSITY, LEVEL_THREE_TONE_EXPOSURE, LEVEL_THREE_PARTICLE_COLOR, LEVEL_THREE_PARTICLE_EMISSIVE, LEVEL_THREE_PARTICLE_SIZE, LEVEL_THREE_PARTICLE_OPACITY, LEVEL_THREE_LAMP_SPAWN_CHANCE, LEVEL_THREE_LAMP_MIN_GRID_X, LEVEL_THREE_LAMP_MIN_GRID_Z, LEVEL_THREE_LAMP_RED_CHANCE, LEVEL_THREE_LAMP_RED_COLOR, LEVEL_THREE_LAMP_ORANGE_COLOR, LEVEL_THREE_LAMP_INTENSITY, LEVEL_THREE_LAMP_DIM_INTENSITY, LEVEL_THREE_LAMP_DISTANCE, LEVEL_THREE_LAMP_DECAY, LEVEL_THREE_LAMP_RED_MATERIAL_COLOR, LEVEL_THREE_LAMP_ORANGE_MATERIAL_COLOR, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, SHOW_START_LUNA_NEGRA_SECTION, LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME, getMapForLevel } from './config/gameConfig.js?v=3';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, ZOMBIE_GROAN_RATE, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, BOSS_ACID_SHOT_SPEED, BOSS_ROAR_RATE, FUSE_SPARK_RATE, PARTICLE_GRAVITY, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, LEVEL_THREE_FOG_COLOR, LEVEL_THREE_FOG_DENSITY, LEVEL_THREE_HEMI_SKY_COLOR, LEVEL_THREE_HEMI_GROUND_COLOR, LEVEL_THREE_HEMI_INTENSITY, LEVEL_THREE_TONE_EXPOSURE, LEVEL_THREE_PARTICLE_COLOR, LEVEL_THREE_PARTICLE_EMISSIVE, LEVEL_THREE_PARTICLE_SIZE, LEVEL_THREE_PARTICLE_OPACITY, LEVEL_THREE_LAMP_SPAWN_CHANCE, LEVEL_THREE_LAMP_MIN_GRID_X, LEVEL_THREE_LAMP_MIN_GRID_Z, LEVEL_THREE_LAMP_RED_CHANCE, LEVEL_THREE_LAMP_RED_COLOR, LEVEL_THREE_LAMP_ORANGE_COLOR, LEVEL_THREE_LAMP_INTENSITY, LEVEL_THREE_LAMP_DIM_INTENSITY, LEVEL_THREE_LAMP_DISTANCE, LEVEL_THREE_LAMP_DECAY, LEVEL_THREE_LAMP_RED_MATERIAL_COLOR, LEVEL_THREE_LAMP_ORANGE_MATERIAL_COLOR, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, SHOW_START_LUNA_NEGRA_SECTION, LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME, getMapForLevel } from './config/gameConfig.js?v=3';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
+import { BoundedPool } from './core/boundedPool.js';
+import { LazyAsset } from './core/lazyAsset.js';
+import { clampSimulationDelta, distanceForDelta, eventOccursForDelta, integrateConstantAcceleration, legacyFrameVelocityToPerSecond } from './core/timing.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
 import { DelegationUnavailableError, buildDelegationTag, isDelegationActive, isSignSchnorrAvailable, requestDelegation } from './nostr/delegation.js';
@@ -16,6 +19,7 @@ import {
     createNormalMapFromCanvas, createRoughnessMapFromCanvas,
     generateBarkTexture, generateLeafTexture
 } from './rendering/textures.js?v=2';
+import { createAdaptiveResolutionState, getRenderViewport, sampleAdaptiveResolution } from './rendering/adaptiveResolution.js';
 import {
     ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg,
     healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn,
@@ -27,6 +31,7 @@ const { THREE } = window;
 // --- CONFIGURACIÓN DE THREE.JS ---
 let scene, camera, renderer, composer;
 let clock;
+let adaptiveResolutionState;
 let player = createInitialPlayer();
 window.player = player;
 let keyboard = createKeyboardState();
@@ -98,6 +103,7 @@ let cachedBossModel = null;
 let bossGLBScaleFactor = 1.0;
 let bossGLBBaseYOffset = 0.0;
 let bossEnemy = null;
+const BOSS_MODEL_URL = 'assets/Meshy_AI_Infernal_Ironclad_0613141919_texture.glb';
 // Arma y disparo
 let gunGroup;
 let gunRecoilActive = false;
@@ -124,8 +130,10 @@ async function initEngine() {
     clock = new THREE.Clock();
     // Renderizador con mejoras de calidad gráfica
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // HiDPI sin excederse
-    renderer.setSize(window.innerWidth, window.innerHeight - 110);
+    adaptiveResolutionState = createAdaptiveResolutionState(window.devicePixelRatio);
+    renderer.setPixelRatio(adaptiveResolutionState.scale);
+    const initialViewport = getRenderViewport(window.innerWidth, window.innerHeight);
+    renderer.setSize(initialViewport.width, initialViewport.height);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; // Tone mapping cinematográfico
@@ -138,7 +146,7 @@ async function initEngine() {
 
     // UnrealBloomPass para luces intensas (disparos, linterna, fuego)
     const bloomPass = new THREE.UnrealBloomPass(
-        new THREE.Vector2(window.innerWidth, window.innerHeight - 110),
+        new THREE.Vector2(initialViewport.width, initialViewport.height),
         1.2,  // Fuerza (strength)
         0.8,  // Radio (radius)
         0.6   // Umbral (threshold)
@@ -157,6 +165,7 @@ async function initEngine() {
     composer.addPass(renderScene);
     composer.addPass(bloomPass);
     composer.addPass(filmPass);
+    resizeRenderTargets();
     // Luz ambiental base muy tenue
     const ambientLight = new THREE.AmbientLight(0x0a0a14, 0.15);
     scene.add(ambientLight);
@@ -166,8 +175,8 @@ async function initEngine() {
     // Linterna acoplada a la cámara del jugador (SpotLight) - Potente y amplio rango
     playerFlashlight = new THREE.SpotLight(0xfff9e6, 2.5, 30, Math.PI / 4.5, 0.8, 1.5);
     playerFlashlight.castShadow = true;
-    playerFlashlight.shadow.mapSize.width = 2048; // Sombras de alta resolución
-    playerFlashlight.shadow.mapSize.height = 2048;
+    playerFlashlight.shadow.mapSize.width = 1024;
+    playerFlashlight.shadow.mapSize.height = 1024;
     playerFlashlight.shadow.camera.near = 0.5;
     playerFlashlight.shadow.camera.far = 45;
     playerFlashlight.shadow.bias = -0.0005;
@@ -296,38 +305,7 @@ async function initEngine() {
     catch (err) {
         console.error("Error al inicializar el cargador GLTF:", err);
     }
-    // Carga del modelo del Jefe Final (Level 4) en segundo plano
-    try {
-        console.log("Iniciando carga de modelo de jefe GLB en segundo plano...");
-        const bossLoader = new THREE.GLTFLoader();
-        bossLoader.load('assets/Meshy_AI_Infernal_Ironclad_0613141919_texture.glb', (gltf) => {
-            cachedBossModel = gltf.scene;
-            cachedBossModel.updateMatrixWorld(true);
-            const box = new THREE.Box3().setFromObject(cachedBossModel);
-            const size = box.getSize(new THREE.Vector3());
-            let height = size.y;
-            if (isNaN(height) || height < 0.01) {
-                height = 4.0;
-            }
-            bossGLBScaleFactor = 4.0 / height; // Jefe grande: 4 unidades de alto
-            if (isNaN(bossGLBScaleFactor) || !isFinite(bossGLBScaleFactor)) {
-                bossGLBScaleFactor = 1.0;
-            }
-            cachedBossModel.scale.set(bossGLBScaleFactor, bossGLBScaleFactor, bossGLBScaleFactor);
-            cachedBossModel.updateMatrixWorld(true);
-            const boxScaled = new THREE.Box3().setFromObject(cachedBossModel);
-            bossGLBBaseYOffset = -boxScaled.min.y;
-            if (isNaN(bossGLBBaseYOffset) || !isFinite(bossGLBBaseYOffset)) {
-                bossGLBBaseYOffset = 0.0;
-            }
-            console.log(`Modelo de jefe GLB cargado. Altura original: ${height}, Factor: ${bossGLBScaleFactor}, Offset Y: ${bossGLBBaseYOffset}`);
-        }, undefined, (err) => {
-            console.error("Error al cargar el modelo del jefe GLB:", err);
-        });
-    }
-    catch (err) {
-        console.error("Error al inicializar cargador GLTF del jefe:", err);
-    }
+    // El jefe se carga bajo demanda al entrar al nivel 4.
     // Construir el mapa
     buildMap3D();
     await addBloodWallMessages(scene);
@@ -338,6 +316,46 @@ async function initEngine() {
     setupControls();
     // Bucle de renderizado
     animate();
+}
+function loadBossModel() {
+    console.log('Iniciando carga bajo demanda del modelo de jefe GLB...');
+    return new Promise((resolve, reject) => {
+        const bossLoader = new THREE.GLTFLoader();
+        bossLoader.load(BOSS_MODEL_URL, (gltf) => {
+            cachedBossModel = gltf.scene;
+            cachedBossModel.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(cachedBossModel);
+            const size = box.getSize(new THREE.Vector3());
+            let height = size.y;
+            if (!Number.isFinite(height) || height < 0.01) {
+                height = 4.0;
+            }
+            bossGLBScaleFactor = 4.0 / height;
+            if (!Number.isFinite(bossGLBScaleFactor)) {
+                bossGLBScaleFactor = 1.0;
+            }
+            cachedBossModel.scale.set(bossGLBScaleFactor, bossGLBScaleFactor, bossGLBScaleFactor);
+            cachedBossModel.updateMatrixWorld(true);
+            const boxScaled = new THREE.Box3().setFromObject(cachedBossModel);
+            bossGLBBaseYOffset = -boxScaled.min.y;
+            if (!Number.isFinite(bossGLBBaseYOffset)) {
+                bossGLBBaseYOffset = 0.0;
+            }
+            console.log(`Modelo de jefe GLB cargado. Altura original: ${height}, Factor: ${bossGLBScaleFactor}, Offset Y: ${bossGLBBaseYOffset}`);
+            resolve(cachedBossModel);
+        }, undefined, reject);
+    });
+}
+const bossModelAsset = new LazyAsset(loadBossModel);
+function ensureBossModelLoaded() {
+    if (bossModelAsset.status !== 'idle') {
+        return;
+    }
+    bossModelAsset.ensure().then(model => {
+        if (model === undefined) {
+            console.error('Error al cargar el modelo del jefe; se mantiene el respaldo procedimental.');
+        }
+    });
 }
 function setStartMenuElementVisible(element, visible) {
     if (!element) {
@@ -2537,7 +2555,7 @@ class Zombie {
         dir.normalize();
         const angle = Math.atan2(dir.x, dir.z);
         this.group.rotation.y = angle;
-        if (Math.random() < 0.003 && dist < 22) {
+        if (eventOccursForDelta(ZOMBIE_GROAN_RATE, deltaTime, Math.random()) && dist < 22) {
             AudioSynth.playZombieGroan();
         }
         if (this.type === 'SPITTER' && dist < 12.0 && dist > 2.0 && this.state === 'ALIVE') {
@@ -2549,8 +2567,9 @@ class Zombie {
         }
         if (dist > ZOMBIE_ATTACK_DIST) {
             const currentSpeed = ZOMBIE_SPEED * this.speedMultiplier * (1.0 + (currentLevel - 1) * 0.08);
-            const nextX = this.group.position.x + dir.x * currentSpeed;
-            const nextZ = this.group.position.z + dir.z * currentSpeed;
+            const movementDistance = distanceForDelta(currentSpeed, deltaTime);
+            const nextX = this.group.position.x + dir.x * movementDistance;
+            const nextZ = this.group.position.z + dir.z * movementDistance;
             const resolved = checkZombieWallCollisions(nextX, nextZ);
             this.group.position.x = resolved.x;
             this.group.position.z = resolved.z;
@@ -2814,8 +2833,9 @@ class CeilingSpider {
             this.group.rotation.y = Math.atan2(dir.x, dir.z);
         }
         if (dist > 4.5) {
-            const nextX = this.group.position.x + dir.x * SPIDER_SPEED;
-            const nextZ = this.group.position.z + dir.z * SPIDER_SPEED;
+            const movementDistance = distanceForDelta(SPIDER_SPEED, deltaTime);
+            const nextX = this.group.position.x + dir.x * movementDistance;
+            const nextZ = this.group.position.z + dir.z * movementDistance;
             const resolved = checkZombieWallCollisions(nextX, nextZ);
             this.group.position.x = resolved.x;
             this.group.position.z = resolved.z;
@@ -3026,7 +3046,7 @@ class BossEnemy {
         dir.normalize();
         const angle = Math.atan2(dir.x, dir.z);
         this.group.rotation.y = angle;
-        if (Math.random() < 0.005 && dist < 30) {
+        if (eventOccursForDelta(BOSS_ROAR_RATE, deltaTime, Math.random()) && dist < 30) {
             AudioSynth.playBossRoar();
         }
         if (dist >= BOSS_ACID_RANGE_MIN && dist <= BOSS_ACID_RANGE_MAX && this.state === 'ALIVE') {
@@ -3039,8 +3059,9 @@ class BossEnemy {
         const speedMult = this.isRushing ? BOSS_RUSH_SPEED_MULTIPLIER : BOSS_SPEED_MULTIPLIER;
         const currentSpeed = ZOMBIE_SPEED * speedMult;
         if (dist > BOSS_MELEE_RANGE) {
-            const nextX = this.group.position.x + dir.x * currentSpeed;
-            const nextZ = this.group.position.z + dir.z * currentSpeed;
+            const movementDistance = distanceForDelta(currentSpeed, deltaTime);
+            const nextX = this.group.position.x + dir.x * movementDistance;
+            const nextZ = this.group.position.z + dir.z * movementDistance;
             const resolved = checkZombieWallCollisions(nextX, nextZ);
             this.group.position.x = resolved.x;
             this.group.position.z = resolved.z;
@@ -3091,7 +3112,7 @@ class BossEnemy {
         const targetPos = camera.position.clone();
         targetPos.x += (Math.random() - 0.5) * 0.3;
         targetPos.z += (Math.random() - 0.5) * 0.3;
-        const velocity = new THREE.Vector3().subVectors(targetPos, startPos).normalize().multiplyScalar(0.25);
+        const velocity = new THREE.Vector3().subVectors(targetPos, startPos).normalize().multiplyScalar(BOSS_ACID_SHOT_SPEED);
         acidProjectiles.push({
             mesh: projMesh,
             velocity: velocity,
@@ -3121,7 +3142,7 @@ class BossEnemy {
             for (let i = 0; i < 30; i++) {
                 const sparkPos = this.group.position.clone();
                 sparkPos.y += Math.random() * 3;
-                particles.push(new Particle(sparkPos, 0xff4400, 0.08 + Math.random() * 0.06, 0.04));
+                spawnParticle(sparkPos, 0xff4400, 0.08 + Math.random() * 0.06, 0.04);
             }
         }
     }
@@ -3213,6 +3234,7 @@ function spawnZombies() {
     acidProjectiles.forEach(p => scene.remove(p.mesh));
     acidProjectiles = [];
     if (currentLevel === 4) {
+        ensureBossModelLoaded();
         const mapSize = activeMap.length;
         const centerX = Math.floor(mapSize / 2) * GRID_SIZE;
         const centerZ = Math.floor(mapSize / 2) * GRID_SIZE;
@@ -3258,38 +3280,65 @@ function zombiesRemainingCount() {
     }
 }
 class Particle {
-    constructor(pos, color, scale, speedY) {
-        this.geometry = new THREE.BoxGeometry(scale, scale, scale);
-        this.material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1 });
+    constructor() {
+        this.geometry = new THREE.BoxGeometry(1, 1, 1);
+        this.material = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1 });
         this.mesh = new THREE.Mesh(this.geometry, this.material);
+        this.velocity = new THREE.Vector3();
+        this.gravity = PARTICLE_GRAVITY;
+        this.life = 0;
+    }
+    activate(pos, color, scale, speedY) {
+        this.mesh.scale.setScalar(scale);
         this.mesh.position.copy(pos);
+        this.material.color.setHex(color);
+        this.material.opacity = 1;
         scene.add(this.mesh);
-        this.velocity = new THREE.Vector3((Math.random() - 0.5) * 0.12, Math.random() * 0.06 + speedY, (Math.random() - 0.5) * 0.12);
-        this.gravity = -0.005;
+        this.velocity.set(
+            legacyFrameVelocityToPerSecond((Math.random() - 0.5) * 0.12),
+            legacyFrameVelocityToPerSecond(Math.random() * 0.06 + speedY, PARTICLE_GRAVITY),
+            legacyFrameVelocityToPerSecond((Math.random() - 0.5) * 0.12)
+        );
         this.life = 1.0;
     }
     update(deltaTime) {
-        this.velocity.y += this.gravity;
-        this.mesh.position.add(this.velocity);
+        const verticalStep = integrateConstantAcceleration(this.velocity.y, this.gravity, deltaTime);
+        this.mesh.position.x += distanceForDelta(this.velocity.x, deltaTime);
+        this.mesh.position.y += verticalStep.displacement;
+        this.mesh.position.z += distanceForDelta(this.velocity.z, deltaTime);
+        this.velocity.y = verticalStep.velocity;
         this.life -= deltaTime * 1.8;
         this.material.opacity = Math.max(0, this.life);
         if (this.life <= 0) {
             scene.remove(this.mesh);
-            this.geometry.dispose();
-            this.material.dispose();
             return false;
         }
         return true;
     }
 }
+const MAX_TRANSIENT_PARTICLES = 256;
+const particlePool = new BoundedPool(MAX_TRANSIENT_PARTICLES, () => new Particle());
+function spawnParticle(pos, color, scale, speedY) {
+    const particle = particlePool.acquire();
+    if (!particle) {
+        return;
+    }
+    particle.activate(pos, color, scale, speedY);
+    particles.push(particle);
+}
+function clearTransientParticles() {
+    particles.forEach(particle => scene.remove(particle.mesh));
+    particles = [];
+    particlePool.clear();
+}
 function spawnBloodSpatter(pos) {
     for (let i = 0; i < 18; i++) {
-        particles.push(new Particle(pos, 0x990000, 0.05 + Math.random() * 0.04, 0.05));
+        spawnParticle(pos, 0x990000, 0.05 + Math.random() * 0.04, 0.05);
     }
 }
 function spawnSparkSpatter(pos) {
     for (let i = 0; i < 8; i++) {
-        particles.push(new Particle(pos, 0xffd700, 0.03 + Math.random() * 0.03, 0.02));
+        spawnParticle(pos, 0xffd700, 0.03 + Math.random() * 0.03, 0.02);
     }
 }
 let sharedBulletMaterial = null;
@@ -4008,8 +4057,7 @@ async function startGame() {
         door.isOpen = false;
     });
     // Limpiar partículas viejas y proyectiles
-    particles.forEach(p => scene.remove(p.mesh));
-    particles = [];
+    clearTransientParticles();
     acidProjectiles.forEach(p => scene.remove(p.mesh));
     acidProjectiles = [];
     // Spawnear fusibles
@@ -4210,8 +4258,7 @@ async function startNextLevel() {
     player.position.set(GRID_SIZE * 1.0, 1.8, GRID_SIZE * 1.0);
     camera.position.copy(player.position);
     // Limpiar partículas y proyectiles
-    particles.forEach(p => scene.remove(p.mesh));
-    particles = [];
+    clearTransientParticles();
     acidProjectiles.forEach(p => scene.remove(p.mesh));
     acidProjectiles = [];
     // Spawnear fusibles
@@ -4542,10 +4589,21 @@ function setupControls() {
     });
 }
 function onWindowResize() {
-    camera.aspect = window.innerWidth / (window.innerHeight - 110);
+    resizeRenderTargets();
+}
+function resizeRenderTargets() {
+    if (!camera || !renderer || !composer || !adaptiveResolutionState) {
+        return;
+    }
+    const viewport = getRenderViewport(window.innerWidth, window.innerHeight);
+    camera.aspect = viewport.width / viewport.height;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight - 110);
-    composer.setSize(window.innerWidth, window.innerHeight - 110);
+    renderer.setPixelRatio(adaptiveResolutionState.scale);
+    renderer.setSize(viewport.width, viewport.height);
+    if (typeof composer.setPixelRatio === 'function') {
+        composer.setPixelRatio(adaptiveResolutionState.scale);
+    }
+    composer.setSize(viewport.width, viewport.height);
 }
 // --- BIOMONITOR ECG PROCEDIMENTAL EN TIEMPO REAL ---
 const bioCanvas = document.getElementById('biomonitor-canvas');
@@ -4637,7 +4695,17 @@ function drawBiomonitor(deltaTime) {
 // --- BUCLE DE RENDERIZADO PRINCIPAL (ANIMATE) ---
 function animate() {
     requestAnimationFrame(animate);
-    const deltaTime = Math.min(0.1, clock.getDelta());
+    const frameDelta = clock.getDelta();
+    const previousRenderScale = adaptiveResolutionState.scale;
+    adaptiveResolutionState = sampleAdaptiveResolution(
+        adaptiveResolutionState,
+        frameDelta > 0 ? 1 / frameDelta : 0,
+        frameDelta,
+    );
+    if (adaptiveResolutionState.scale !== previousRenderScale) {
+        resizeRenderTargets();
+    }
+    const deltaTime = clampSimulationDelta(frameDelta);
     drawBiomonitor(deltaTime);
     if (typeof grassMaterial !== 'undefined' && grassMaterial) {
         grassMaterial.uniforms.time.value = performance.now() * 0.002;
@@ -4692,12 +4760,12 @@ function animate() {
             fuse.mesh.rotation.x = Math.sin(fuse.angle * 0.5) * 0.1;
             fuse.light.intensity = 1.0 + Math.sin(fuse.angle * 4) * 0.35;
             // Emitir chispas eléctricas azules procedimentales
-            if (Math.random() < 0.08) {
+            if (eventOccursForDelta(FUSE_SPARK_RATE, deltaTime, Math.random())) {
                 const sparkPos = fuse.mesh.position.clone();
                 sparkPos.x += (Math.random() - 0.5) * 0.3;
                 sparkPos.y += (Math.random() - 0.5) * 0.4;
                 sparkPos.z += (Math.random() - 0.5) * 0.3;
-                particles.push(new Particle(sparkPos, 0x00d9ff, 0.02 + Math.random() * 0.02, 0.015));
+                spawnParticle(sparkPos, 0x00d9ff, 0.02 + Math.random() * 0.02, 0.015);
             }
         });
         // Colisión de recogida automática de fusibles
@@ -4717,7 +4785,7 @@ function animate() {
                 for (let k = 0; k < 12; k++) {
                     const sparkPos = player.position.clone();
                     sparkPos.y -= 0.5; // altura cintura
-                    particles.push(new Particle(sparkPos, 0x00d9ff, 0.03 + Math.random() * 0.03, 0.03));
+                    spawnParticle(sparkPos, 0x00d9ff, 0.03 + Math.random() * 0.03, 0.03);
                 }
             }
         }
@@ -4746,7 +4814,7 @@ function animate() {
         }
         for (let i = acidProjectiles.length - 1; i >= 0; i--) {
             const proj = acidProjectiles[i];
-            proj.mesh.position.add(proj.velocity);
+            proj.mesh.position.addScaledVector(proj.velocity, deltaTime);
             proj.life -= deltaTime;
             // Colisión con el jugador
             const distToPlayer = proj.mesh.position.distanceTo(camera.position);
@@ -4781,7 +4849,7 @@ function animate() {
                 AudioSynth.playMetallicClick(900, 0.05, 0.08);
                 const impactColor = proj.impactColor || 0x39ff14;
                 for (let k = 0; k < 8; k++) {
-                    particles.push(new Particle(proj.mesh.position, impactColor, 0.04 + Math.random() * 0.03, 0.02));
+                    spawnParticle(proj.mesh.position, impactColor, 0.04 + Math.random() * 0.03, 0.02);
                 }
                 scene.remove(proj.mesh);
                 acidProjectiles.splice(i, 1);
@@ -4845,6 +4913,7 @@ function animate() {
     for (let i = particles.length - 1; i >= 0; i--) {
         const active = particles[i].update(deltaTime);
         if (!active) {
+            particlePool.release(particles[i]);
             particles.splice(i, 1);
         }
     }
@@ -4870,8 +4939,8 @@ function updatePlayerMovement(deltaTime) {
     if (player.velocity.length() > 0) {
         player.velocity.normalize();
         player.velocity.multiplyScalar(PLAYER_SPEED);
-        const nextX = player.position.x + player.velocity.x;
-        const nextZ = player.position.z + player.velocity.z;
+        const nextX = player.position.x + distanceForDelta(player.velocity.x, deltaTime);
+        const nextZ = player.position.z + distanceForDelta(player.velocity.z, deltaTime);
         const resolved = checkCollisions(nextX, nextZ);
         player.position.x = resolved.x;
         player.position.z = resolved.z;

@@ -2,18 +2,19 @@
 // --- CONFIGURACIÓN Y CONSTANTES DEL JUEGO ---
 export const GRID_SIZE = 4;
 export const WALL_HEIGHT = 4;
-export const PLAYER_SPEED = 0.07;
+export const PLAYER_SPEED = 4.2; // unidades/segundo; conserva 0.07 por frame a 60 FPS
 export const PLAYER_RADIUS = 0.6;
-export const ZOMBIE_SPEED = 0.025;
+export const ZOMBIE_SPEED = 1.5; // unidades/segundo; conserva 0.025 por frame a 60 FPS
+export const ZOMBIE_GROAN_RATE = 0.18027054121830648; // eventos/segundo desde p=0.003 a 60 FPS
 export const ZOMBIE_ATTACK_DIST = 1.3;
 export const ZOMBIE_ATTACK_COOLDOWN = 1500; // ms
 export const ZOMBIE_SPAWN_COUNT = 8;
 export const SPIDER_SPAWN_COUNT = 3;
 export const SPIDER_HEALTH = 60;
-export const SPIDER_SPEED = 0.035;
+export const SPIDER_SPEED = 2.1; // unidades/segundo; conserva 0.035 por frame a 60 FPS
 export const SPIDER_CEILING_Y = WALL_HEIGHT - 0.35;
 export const SPIDER_SHOT_DAMAGE = 12;
-export const SPIDER_SHOT_SPEED = 0.2;
+export const SPIDER_SHOT_SPEED = 12; // unidades/segundo; conserva 0.2 por frame a 60 FPS
 export const SPIDER_SHOT_RANGE = 18;
 export const SPIDER_SHOT_COOLDOWN_MIN = 1800;
 export const SPIDER_SHOT_COOLDOWN_MAX = 3200;
@@ -31,6 +32,10 @@ export const BOSS_SPEED_MULTIPLIER = 1.8;
 export const BOSS_RUSH_SPEED_MULTIPLIER = 3.6;
 export const BOSS_RUSH_DURATION = 3.0;
 export const BOSS_RUSH_INTERVAL = 15.0;
+export const BOSS_ACID_SHOT_SPEED = 15; // unidades/segundo; conserva 0.25 por frame a 60 FPS
+export const BOSS_ROAR_RATE = 0.3007525075287223; // eventos/segundo desde p=0.005 a 60 FPS
+export const FUSE_SPARK_RATE = 5.002896249256134; // eventos/segundo desde p=0.08 a 60 FPS
+export const PARTICLE_GRAVITY = -18; // unidades/segundo²; conserva -0.005 por frame a 60 FPS
 export const GAME_PAYOUT_NWC_URI = '';
 export const SHOW_START_ZAP_ACCESS = false;
 export const SHOW_START_NOSTR_LEADERBOARD = true;
