@@ -147,7 +147,7 @@ async function initEngine() {
     // UnrealBloomPass para luces intensas (disparos, linterna, fuego)
     const bloomPass = new THREE.UnrealBloomPass(
         new THREE.Vector2(initialViewport.width, initialViewport.height),
-        1.2,  // Fuerza (strength)
+        0.9,  // Fuerza (strength)
         0.8,  // Radio (radius)
         0.6   // Umbral (threshold)
     );
@@ -1687,7 +1687,7 @@ function updateLevelEnvironment() {
         floorMaterial.map = floorTex;
         if (typeof createNormalMapFromCanvas !== 'undefined') {
             floorMaterial.normalMap = createNormalMapFromCanvas(floorTex, currentLevel === 2 ? 1.5 : 2.5);
-            floorMaterial.roughnessMap = createRoughnessMapFromCanvas(floorTex, currentLevel === 2 ? 1.8 : 1.5, currentLevel === 2 ? 0.2 : -0.1);
+            floorMaterial.roughnessMap = createRoughnessMapFromCanvas(floorTex, currentLevel === 2 ? 1.8 : 1.5, currentLevel === 2 ? 0.2 : 0.2);
         }
         floorMaterial.needsUpdate = true;
     }
@@ -3704,7 +3704,7 @@ function tryOpenDoor() {
             }
             // Encender las lámparas parpadeantes de la instalación de forma fija
             lights.forEach(item => {
-                item.light.intensity = 2.0;
+                item.light.intensity = 1.2;
                 item.lamp.material.color.setHex(0xffffff);
             });
             lights = []; // suspender el parpadeo

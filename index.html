@@ -6,6 +6,17 @@
     <meta name="sammer-game-payout-nwc" content="">
     <script>
         window.__SAMMER_CONFIG__ = window.__SAMMER_CONFIG__ || {};
+        // SHOW_DEBUG_MESSAGES: controla los carteles rojos de errores en pantalla.
+        // Por defecto false (asume producción). Habilitar con ?showDebugMessages=1,
+        // ?debug=1, o asignando window.__SAMMER_CONFIG__.SHOW_DEBUG_MESSAGES = true
+        // antes de que se ejecute este script.
+        (function() {
+            const params = new URLSearchParams(window.location.search);
+            const urlFlag = params.get('showDebugMessages') === '1' || params.get('debug') === '1';
+            const configFlag = window.__SAMMER_CONFIG__.SHOW_DEBUG_MESSAGES === true;
+            window.__SAMMER_CONFIG__.SHOW_DEBUG_MESSAGES = urlFlag || configFlag;
+        })();
+        if (window.__SAMMER_CONFIG__.SHOW_DEBUG_MESSAGES) {
         // Capturador global de errores para mostrar en pantalla
         window.addEventListener('error', function(event) {
             let message = event.message || 'Error de carga de recurso o script (posible bloqueo de CORS)';
@@ -58,6 +69,7 @@
             errDiv.innerHTML = `<strong>PROMESA RECHAZADA NO CONTROLADA:</strong><br>${message}<br><br><strong>Detalles / Stack:</strong><br>${stack}`;
             document.body.appendChild(errDiv);
         });
+        }
     </script>
     <title>DREAD FACILITY - Doom-like 3D Horror Survival</title>
     <link rel="stylesheet" href="styles/styles.css">
