@@ -1,12 +1,16 @@
 # Compilar TypeScript a src/ antes de servir
-Write-Host "Compilando TypeScript..." -ForegroundColor Cyan
-npm run build:ts
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Error: fallo la compilacion de TypeScript. No se puede iniciar el servidor." -ForegroundColor Red
-    Read-Host "Presiona Enter para salir..."
-    exit 1
+if (Get-Command npm -ErrorAction SilentlyContinue) {
+    Write-Host "Compilando TypeScript..." -ForegroundColor Cyan
+    npm run build:ts
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: fallo la compilacion de TypeScript. No se puede iniciar el servidor." -ForegroundColor Red
+        Read-Host "Presiona Enter para salir..."
+        exit 1
+    }
+    Write-Host "Compilacion OK." -ForegroundColor Green
+} else {
+    Write-Host "Advertencia: 'npm' no está instalado. Omitiendo la compilación de TypeScript..." -ForegroundColor Yellow
 }
-Write-Host "Compilacion OK." -ForegroundColor Green
 Write-Host ""
 
 $port = 8000
