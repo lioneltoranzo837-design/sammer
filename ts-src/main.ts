@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { AudioSynth } from './audio/SoundSynth.js';
-import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, ZOMBIE_GROAN_RATE, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, BOSS_ACID_SHOT_SPEED, BOSS_ROAR_RATE, FUSE_SPARK_RATE, PARTICLE_GRAVITY, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, LEVEL_THREE_FOG_COLOR, LEVEL_THREE_FOG_DENSITY, LEVEL_THREE_HEMI_SKY_COLOR, LEVEL_THREE_HEMI_GROUND_COLOR, LEVEL_THREE_HEMI_INTENSITY, LEVEL_THREE_TONE_EXPOSURE, LEVEL_THREE_PARTICLE_COLOR, LEVEL_THREE_PARTICLE_EMISSIVE, LEVEL_THREE_PARTICLE_SIZE, LEVEL_THREE_PARTICLE_OPACITY, LEVEL_THREE_LAMP_SPAWN_CHANCE, LEVEL_THREE_LAMP_MIN_GRID_X, LEVEL_THREE_LAMP_MIN_GRID_Z, LEVEL_THREE_LAMP_RED_CHANCE, LEVEL_THREE_LAMP_RED_COLOR, LEVEL_THREE_LAMP_ORANGE_COLOR, LEVEL_THREE_LAMP_INTENSITY, LEVEL_THREE_LAMP_DIM_INTENSITY, LEVEL_THREE_LAMP_DISTANCE, LEVEL_THREE_LAMP_DECAY, LEVEL_THREE_LAMP_RED_MATERIAL_COLOR, LEVEL_THREE_LAMP_ORANGE_MATERIAL_COLOR, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, SHOW_START_LUNA_NEGRA_SECTION, LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME, getMapForLevel } from './config/gameConfig.js?v=3';
+import { GRID_SIZE, MAP, MAX_ARMOR, MAX_HEALTH, PLAYER_RADIUS, PLAYER_SPEED, WALL_HEIGHT, WEAPONS, ZOMBIE_ATTACK_COOLDOWN, ZOMBIE_ATTACK_DIST, ZOMBIE_SPEED, ZOMBIE_GROAN_RATE, SPIDER_SPAWN_COUNT, SPIDER_HEALTH, SPIDER_SPEED, SPIDER_CEILING_Y, SPIDER_SHOT_DAMAGE, SPIDER_SHOT_SPEED, SPIDER_SHOT_RANGE, SPIDER_SHOT_COOLDOWN_MIN, SPIDER_SHOT_COOLDOWN_MAX, SPIDER_PLAYER_START_SAFE_CELLS, SPIDER_MIN_SEPARATION_CELLS, BOSS_HEALTH, BOSS_MELEE_DAMAGE, BOSS_ACID_DAMAGE, BOSS_MELEE_RANGE, BOSS_ACID_RANGE_MIN, BOSS_ACID_RANGE_MAX, BOSS_SPEED_MULTIPLIER, BOSS_RUSH_SPEED_MULTIPLIER, BOSS_RUSH_DURATION, BOSS_RUSH_INTERVAL, BOSS_ACID_SHOT_SPEED, BOSS_ROAR_RATE, FUSE_SPARK_RATE, PARTICLE_GRAVITY, LEVEL_ONE_LAMP_COLOR, LEVEL_ONE_LAMP_INTENSITY, LEVEL_ONE_LAMP_DIM_INTENSITY, LEVEL_ONE_LAMP_DISTANCE, LEVEL_ONE_LAMP_ANGLE, LEVEL_ONE_LAMP_PENUMBRA, LEVEL_ONE_LAMP_DECAY, LEVEL_ONE_LAMP_SPACING_MODULO, LEVEL_ONE_LAMP_MIN_GRID_X, LEVEL_ONE_LAMP_MIN_GRID_Z, LEVEL_THREE_FOG_COLOR, LEVEL_THREE_FOG_DENSITY, LEVEL_THREE_HEMI_SKY_COLOR, LEVEL_THREE_HEMI_GROUND_COLOR, LEVEL_THREE_HEMI_INTENSITY, LEVEL_THREE_TONE_EXPOSURE, LEVEL_THREE_PARTICLE_COLOR, LEVEL_THREE_PARTICLE_EMISSIVE, LEVEL_THREE_PARTICLE_SIZE, LEVEL_THREE_PARTICLE_OPACITY, LEVEL_THREE_LAMP_SPAWN_CHANCE, LEVEL_THREE_LAMP_MIN_GRID_X, LEVEL_THREE_LAMP_MIN_GRID_Z, LEVEL_THREE_LAMP_BLUE_CHANCE, LEVEL_THREE_LAMP_BLUE_COLOR, LEVEL_THREE_LAMP_WHITE_COLOR, LEVEL_THREE_LAMP_INTENSITY, LEVEL_THREE_LAMP_DIM_INTENSITY, LEVEL_THREE_LAMP_DISTANCE, LEVEL_THREE_LAMP_DECAY, LEVEL_THREE_LAMP_BLUE_MATERIAL_COLOR, LEVEL_THREE_LAMP_WHITE_MATERIAL_COLOR, FLASHLIGHT_FLICKER_CYCLE_SECONDS, FLASHLIGHT_FLICKER_START_SECONDS, FLASHLIGHT_FLICKER_SECONDS, FLASHLIGHT_OFF_SECONDS, FLASHLIGHT_FLICKER_RATE, SHOW_START_ZAP_ACCESS, SHOW_START_NOSTR_LEADERBOARD, SHOW_START_LUNA_NEGRA_SECTION, LUNA_NEGRA_BASE_URL, LUNA_NEGRA_LEADERBOARD_NAME, getMapForLevel } from './config/gameConfig.js?v=3';
 import { createInitialPlayer, createKeyboardState } from './core/state.js';
 import { BoundedPool } from './core/boundedPool.js';
 import { LazyAsset } from './core/lazyAsset.js';
@@ -30,6 +30,10 @@ import {
 const { THREE } = window;
 // --- CONFIGURACIÓN DE THREE.JS ---
 let scene, camera, renderer, composer;
+let envCamera = null;
+let globalSnowMaterial = null;
+let bloomPass = null;
+let frameCount = 0;
 let clock;
 let adaptiveResolutionState;
 let player = createInitialPlayer();
@@ -44,6 +48,8 @@ let interactiveDoors = []; // Registro de puertas normales interactuadas
 let fuses = []; // Registro de fusibles en el mapa
 let fusesCollected = 0; // Fichas recogidas
 let ambientParticles = []; // Partículas ambientales flotantes (polvo/esporas/nieve)
+let breathParticles = []; // Partículas de aliento para el Nivel 3
+let breathTimer = 0;
 let hemisphereLight = null; // Luz hemisférica ambiental por bioma
 let decorations = []; // Objetos decorativos 3D ambientales
 let fuseBoxConsole = null; // Estructura 3D del generador final
@@ -103,7 +109,7 @@ let cachedBossModel = null;
 let bossGLBScaleFactor = 1.0;
 let bossGLBBaseYOffset = 0.0;
 let bossEnemy = null;
-const BOSS_MODEL_URL = 'assets/Meshy_AI_Infernal_Ironclad_0613141919_texture.glb';
+const BOSS_MODEL_URL = 'assets/Meshy_AI_Infernal_Ironclad_0624210309_texture.glb';
 // Arma y disparo
 let gunGroup;
 let gunRecoilActive = false;
@@ -126,6 +132,13 @@ async function initEngine() {
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / (window.innerHeight - 110), 0.1, 1000);
     camera.position.copy(player.position);
     scene.add(camera);
+    const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(128, {
+        format: THREE.RGBFormat,
+        generateMipmaps: true,
+        minFilter: THREE.LinearMipmapLinearFilter
+    });
+    envCamera = new THREE.CubeCamera(0.1, 100, cubeRenderTarget);
+    scene.add(envCamera);
     // Reloj
     clock = new THREE.Clock();
     // Renderizador con mejoras de calidad gráfica
@@ -145,7 +158,7 @@ async function initEngine() {
     const renderScene = new THREE.RenderPass(scene, camera);
 
     // UnrealBloomPass para luces intensas (disparos, linterna, fuego)
-    const bloomPass = new THREE.UnrealBloomPass(
+    bloomPass = new THREE.UnrealBloomPass(
         new THREE.Vector2(initialViewport.width, initialViewport.height),
         0.9,  // Fuerza (strength)
         0.8,  // Radio (radius)
@@ -323,6 +336,19 @@ function loadBossModel() {
         const bossLoader = new THREE.GLTFLoader();
         bossLoader.load(BOSS_MODEL_URL, (gltf) => {
             cachedBossModel = gltf.scene;
+            
+            // Optimización drástica de rendimiento para el modelo pesado
+            cachedBossModel.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = false; // No emitir sombras
+                    child.receiveShadow = false;
+                    if (child.material) {
+                        child.material.envMap = null; // No procesar reflejos
+                        child.material.needsUpdate = true;
+                    }
+                }
+            });
+
             cachedBossModel.updateMatrixWorld(true);
             const box = new THREE.Box3().setFromObject(cachedBossModel);
             const size = box.getSize(new THREE.Vector3());
@@ -348,11 +374,12 @@ function loadBossModel() {
 }
 const bossModelAsset = new LazyAsset(loadBossModel);
 function ensureBossModelLoaded() {
-    if (bossModelAsset.status !== 'idle') {
-        return;
-    }
     bossModelAsset.ensure().then(model => {
-        if (model === undefined) {
+        if (model) {
+            if (currentLevel === 4 && bossEnemy && bossEnemy.state === 'ALIVE' && bossEnemy.replaceMeshWithGLB) {
+                bossEnemy.replaceMeshWithGLB();
+            }
+        } else {
             console.error('Error al cargar el modelo del jefe; se mantiene el respaldo procedimental.');
         }
     });
@@ -1296,11 +1323,11 @@ function buildMap3D() {
                 if (currentLevel === 2) {
                     // Generar múltiples árboles si estamos en los bordes para crear un bosque denso que tape el fondo
                     const isEdge = (x === 0 || x === activeMap[0].length - 1 || z === 0 || z === activeMap.length - 1);
-                    const numTrees = isEdge ? 4 : 1;
+                    const numTrees = isEdge ? 15 : 1;
 
                     for (let t = 0; t < numTrees; t++) {
-                        const tPosX = (t === 0) ? posX : posX + (Math.random() - 0.5) * GRID_SIZE * 0.9;
-                        const tPosZ = (t === 0) ? posZ : posZ + (Math.random() - 0.5) * GRID_SIZE * 0.9;
+                        const tPosX = (t === 0) ? posX : posX + (Math.random() - 0.5) * GRID_SIZE * (isEdge ? 2.5 : 0.9);
+                        const tPosZ = (t === 0) ? posZ : posZ + (Math.random() - 0.5) * GRID_SIZE * (isEdge ? 2.5 : 0.9);
 
                         // --- ÁRBOL 3D PROCEDURAL ---
                         const treeGroup = new THREE.Group();
@@ -1374,6 +1401,53 @@ function buildMap3D() {
                     wall.receiveShadow = true;
                     scene.add(wall);
                     collisionMesh = wall;
+
+                    if (currentLevel === 3) {
+                        const checkAndSpawnSnow = (dx, dz) => {
+                            if (z + dz >= 0 && z + dz < activeMap.length && x + dx >= 0 && x + dx < activeMap[0].length) {
+                                if (activeMap[z + dz][x + dx] !== 1) { 
+                                    const sGroup = new THREE.Group();
+                                    sGroup.name = "map_snow"; // Nombrarlo para que clearCurrentMap lo borre!
+                                    const parts = 4 + Math.floor(Math.random() * 3);
+                                    for(let i=0; i<parts; i++) {
+                                        const h = WALL_HEIGHT * (0.4 + Math.random() * 0.5);
+                                        const r = 0.15 + Math.random() * 0.15; // Mucho más fino (radio pequeño)
+                                        const snowG = new THREE.DodecahedronGeometry(r, 1);
+                                        if (!globalSnowMaterial) {
+                                            globalSnowMaterial = new THREE.MeshStandardMaterial({
+                                                color: 0xebf2f8, roughness: 0.85, metalness: 0.2,
+                                                envMap: envCamera ? envCamera.renderTarget.texture : null
+                                            });
+                                        }
+                                        const sm = new THREE.Mesh(snowG, globalSnowMaterial);
+                                        // Posicionarlo casi incrustado en la pared
+                                        const offsetX = dx * (GRID_SIZE / 2 - 0.1) + (Math.random()-0.5) * 0.1;
+                                        const offsetZ = dz * (GRID_SIZE / 2 - 0.1) + (Math.random()-0.5) * 0.1;
+                                        const distSideX = (dz !== 0) ? (Math.random()-0.5)*(GRID_SIZE*0.9) : 0;
+                                        const distSideZ = (dx !== 0) ? (Math.random()-0.5)*(GRID_SIZE*0.9) : 0;
+                                        sm.position.set(posX + offsetX + distSideX, (h / 2) + Math.random() * 0.2, posZ + offsetZ + distSideZ);
+                                        sm.scale.y = h / r;
+                                        sm.rotation.set(0, Math.random() * Math.PI, 0); // No rotar en X/Z para que no sobresalgan picos
+                                        if (dx !== 0) {
+                                            sm.scale.x = 0.2; // Aplastar la nieve contra la pared
+                                            sm.scale.z = 1.8; // Estirar a lo largo de la pared
+                                        } else {
+                                            sm.scale.z = 0.2;
+                                            sm.scale.x = 1.8;
+                                        }
+                                        sm.castShadow = false; // Sin sombras extra FPS
+                                        sm.receiveShadow = false; // Sin sombras extra FPS
+                                        sGroup.add(sm);
+                                    }
+                                    scene.add(sGroup);
+                                }
+                            }
+                        };
+                        checkAndSpawnSnow(1, 0);
+                        checkAndSpawnSnow(-1, 0);
+                        checkAndSpawnSnow(0, 1);
+                        checkAndSpawnSnow(0, -1);
+                    }
                 }
 
                 // Guardar colisionadores
@@ -1472,22 +1546,22 @@ function buildMap3D() {
             if (type === 0 && shouldPlaceLevelOneMazeLamp(x, z)) {
                 buildLevelOneMazeLamp(posX, posZ);
             }
-            else if (type === 0 && currentLevel !== 1) {
+            else if (type === 0 && currentLevel !== 1 && currentLevel !== 2) {
                 const lampSpawnChance = currentLevel === 3 ? LEVEL_THREE_LAMP_SPAWN_CHANCE : 0.08;
                 const lampMinGridX = currentLevel === 3 ? LEVEL_THREE_LAMP_MIN_GRID_X : 3;
                 const lampMinGridZ = currentLevel === 3 ? LEVEL_THREE_LAMP_MIN_GRID_Z : 3;
                 if (Math.random() < lampSpawnChance && z >= lampMinGridZ && x >= lampMinGridX) {
-                    const redChance = currentLevel === 3 ? LEVEL_THREE_LAMP_RED_CHANCE : 0.35;
-                    const isRed = Math.random() < redChance;
+                    const blueChance = currentLevel === 3 ? LEVEL_THREE_LAMP_BLUE_CHANCE : 0.35;
+                    const isBlueOrRed = Math.random() < blueChance;
                     const lightColor = currentLevel === 3
-                        ? (isRed ? LEVEL_THREE_LAMP_RED_COLOR : LEVEL_THREE_LAMP_ORANGE_COLOR)
-                        : (isRed ? 0xff0000 : 0xffaa44);
+                        ? (isBlueOrRed ? LEVEL_THREE_LAMP_BLUE_COLOR : LEVEL_THREE_LAMP_WHITE_COLOR)
+                        : (isBlueOrRed ? 0xff0000 : 0xffaa44);
                     const lightIntensity = currentLevel === 3 ? LEVEL_THREE_LAMP_INTENSITY : 1.2;
                     const lightDistance = currentLevel === 3 ? LEVEL_THREE_LAMP_DISTANCE : 8;
                     const lightDecay = currentLevel === 3 ? LEVEL_THREE_LAMP_DECAY : 1.5;
                     const lampMaterialColor = currentLevel === 3
-                        ? (isRed ? LEVEL_THREE_LAMP_RED_MATERIAL_COLOR : LEVEL_THREE_LAMP_ORANGE_MATERIAL_COLOR)
-                        : (isRed ? 0x880000 : 0xe59400);
+                        ? (isBlueOrRed ? LEVEL_THREE_LAMP_BLUE_MATERIAL_COLOR : LEVEL_THREE_LAMP_WHITE_MATERIAL_COLOR)
+                        : (isBlueOrRed ? 0x880000 : 0xe59400);
                     const ceilingLight = new THREE.PointLight(lightColor, lightIntensity, lightDistance, lightDecay);
                     ceilingLight.position.set(posX, WALL_HEIGHT - 0.2, posZ);
                     ceilingLight.castShadow = false;
@@ -1502,7 +1576,7 @@ function buildMap3D() {
                         light: ceilingLight,
                         lamp: lamp,
                         color: lightColor,
-                        isRed: isRed,
+                        isRed: isBlueOrRed,
                         baseIntensity: lightIntensity,
                         dimIntensity: currentLevel === 3 ? LEVEL_THREE_LAMP_DIM_INTENSITY : undefined,
                         flickerTimer: Math.random() * 10
@@ -1516,7 +1590,7 @@ function buildMap3D() {
 function clearCurrentMap() {
     const toRemove = [];
     scene.traverse((child) => {
-        if (child.name === "map_floor" || child.name === "map_ceiling" || child.name === "map_wall" || child.name === "map_tree") {
+        if (child.name === "map_floor" || child.name === "map_ceiling" || child.name === "map_wall" || child.name === "map_tree" || child.name === "map_snow") {
             toRemove.push(child);
         }
         if (child.isMesh && child.geometry && child.geometry.type === 'PlaneGeometry' && child.name !== 'map_floor' && child.name !== 'map_ceiling') {
@@ -1585,22 +1659,6 @@ function updateLevelEnvironment() {
         hemiGroundColor = 0x081008;
         hemiIntensity = 0.45;
         toneExposure = 0.9;
-
-        if (!sunLight) {
-            sunLight = new THREE.DirectionalLight(0x778899, 0.5);
-            sunLight.position.set(60, 100, 60);
-            sunLight.castShadow = true;
-            sunLight.shadow.mapSize.width = 1024;
-            sunLight.shadow.mapSize.height = 1024;
-            sunLight.shadow.camera.near = 10;
-            sunLight.shadow.camera.far = 300;
-            sunLight.shadow.camera.left = -60;
-            sunLight.shadow.camera.right = 60;
-            sunLight.shadow.camera.top = 60;
-            sunLight.shadow.camera.bottom = -60;
-            sunLight.shadow.bias = -0.001;
-            scene.add(sunLight);
-        }
     }
     else if (currentLevel === 3) {
         fogColor = LEVEL_THREE_FOG_COLOR;
@@ -1614,6 +1672,10 @@ function updateLevelEnvironment() {
         hemiGroundColor = LEVEL_THREE_HEMI_GROUND_COLOR;
         hemiIntensity = LEVEL_THREE_HEMI_INTENSITY;
         toneExposure = LEVEL_THREE_TONE_EXPOSURE;
+        if (bloomPass) {
+            bloomPass.threshold = 0.45;
+            bloomPass.strength = 1.4; // Max graphics glowing bloom
+        }
     }
     else if (currentLevel === 4) {
         fogColor = 0x1a0505;
@@ -1627,6 +1689,10 @@ function updateLevelEnvironment() {
         hemiGroundColor = 0x220505;
         hemiIntensity = 0.6;
         toneExposure = 0.9;
+        if (bloomPass) {
+            bloomPass.threshold = 0.6;
+            bloomPass.strength = 0.9;
+        }
     }
     else {
         fogColor = 0x050508;
@@ -1640,9 +1706,36 @@ function updateLevelEnvironment() {
         hemiGroundColor = 0x080810;
         hemiIntensity = 0.3;
         toneExposure = 1.1;
+        if (bloomPass) {
+            bloomPass.threshold = 0.6;
+            bloomPass.strength = 0.9;
+        }
     }
 
-    if (currentLevel !== 2 && sunLight) {
+    if (currentLevel === 2 || currentLevel === 3) {
+        if (!sunLight) {
+            sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            sunLight.position.set(60, 100, 60);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 1024;
+            sunLight.shadow.mapSize.height = 1024;
+            sunLight.shadow.camera.near = 10;
+            sunLight.shadow.camera.far = 300;
+            sunLight.shadow.camera.left = -60;
+            sunLight.shadow.camera.right = 60;
+            sunLight.shadow.camera.top = 60;
+            sunLight.shadow.camera.bottom = -60;
+            sunLight.shadow.bias = -0.001;
+            scene.add(sunLight);
+        }
+        if (currentLevel === 2) {
+            sunLight.color.setHex(0x778899);
+            sunLight.intensity = 0.5;
+        } else {
+            sunLight.color.setHex(0x88aacc);
+            sunLight.intensity = 0.3; // Moonlight for level 3
+        }
+    } else if (sunLight) {
         scene.remove(sunLight);
         sunLight.dispose();
         sunLight = null;
@@ -1726,7 +1819,7 @@ function clearDecorations() {
 function spawnLevelDecorations() {
     const map = getMapForLevel(currentLevel);
     let spawned = 0;
-    const maxDecorations = 20;
+    const maxDecorations = currentLevel === 3 ? 45 : 20;
     for (let z = 2; z < map.length - 2 && spawned < maxDecorations; z++) {
         for (let x = 2; x < map[z].length - 2 && spawned < maxDecorations; x++) {
             if (map[z][x] !== 0)
@@ -1746,7 +1839,7 @@ function spawnLevelDecorations() {
             else if (currentLevel === 2) {
                 group = createJungleDecoration(posX, posZ);
             }
-            else {
+            else if (currentLevel === 3) {
                 group = createMountainDecoration(posX, posZ);
             }
             if (group) {
@@ -1893,67 +1986,111 @@ function createJungleDecoration(px, pz) {
 }
 function createMountainDecoration(px, pz) {
     const group = new THREE.Group();
-    const type = Math.floor(Math.random() * 4);
+    const type = Math.floor(Math.random() * 5);
     if (type === 0) {
-        const rockGeo = new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.3, 1);
-        const rockMat = new THREE.MeshStandardMaterial({
-            color: 0x555560, roughness: 0.95, metalness: 0.1
-        });
-        const rock = new THREE.Mesh(rockGeo, rockMat);
-        rock.position.set(px + (Math.random() - 0.5) * 1.5, 0.25, pz + (Math.random() - 0.5) * 1.5);
-        rock.scale.y = 0.6;
-        rock.rotation.set(Math.random(), Math.random(), Math.random());
-        rock.castShadow = true;
-        rock.receiveShadow = true;
-        group.add(rock);
-        const frostGeo = new THREE.SphereGeometry(0.3, 6, 6, 0, Math.PI * 2, 0, Math.PI / 3);
-        const frostMat = new THREE.MeshStandardMaterial({
-            color: 0xddeeff, roughness: 0.2, metalness: 0.1,
-            transparent: true, opacity: 0.6
-        });
-        const frost = new THREE.Mesh(frostGeo, frostMat);
-        frost.position.copy(rock.position);
-        frost.position.y += 0.35;
-        group.add(frost);
+        const rockCount = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < rockCount; i++) {
+            const rockGeo = new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.4, 1);
+            const rockMat = new THREE.MeshStandardMaterial({
+                color: 0x4a4f55, roughness: 0.95, metalness: 0.1
+            });
+            const rock = new THREE.Mesh(rockGeo, rockMat);
+            const ox = px + (Math.random() - 0.5) * 1.5;
+            const oz = pz + (Math.random() - 0.5) * 1.5;
+            rock.position.set(ox, 0.2 + Math.random() * 0.1, oz);
+            rock.scale.y = 0.5 + Math.random() * 0.5;
+            rock.rotation.set(Math.random(), Math.random(), Math.random());
+            rock.castShadow = true;
+            rock.receiveShadow = true;
+            group.add(rock);
+            if (Math.random() > 0.3) {
+                const snowGeo = new THREE.SphereGeometry(0.25, 6, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+                const snowMat = new THREE.MeshStandardMaterial({
+                    color: 0xebf2f8, roughness: 0.8, metalness: 0.0
+                });
+                const snow = new THREE.Mesh(snowGeo, snowMat);
+                snow.position.copy(rock.position);
+                snow.position.y += 0.25 * rock.scale.y;
+                group.add(snow);
+            }
+        }
     }
     else if (type === 1) {
-        const crystalGeo = new THREE.ConeGeometry(0.12, 0.6 + Math.random() * 0.4, 5);
-        const crystalMat = new THREE.MeshStandardMaterial({
-            color: 0x88ccff, emissive: 0x2255aa, emissiveIntensity: 0.4,
-            roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.7
-        });
-        const crystal = new THREE.Mesh(crystalGeo, crystalMat);
-        const ox = px + (Math.random() - 0.5) * 1.5;
-        const oz = pz + (Math.random() - 0.5) * 1.5;
-        crystal.position.set(ox, 0.3 + Math.random() * 0.2, oz);
-        crystal.rotation.z = (Math.random() - 0.5) * 0.3;
-        crystal.castShadow = true;
-        group.add(crystal);
-        const crystalLight = new THREE.PointLight(0x5599ff, 0.4, 2.5);
-        crystalLight.position.copy(crystal.position);
+        const clusterSize = 1 + Math.floor(Math.random() * 3);
+        const basePath = new THREE.Vector3(px + (Math.random()-0.5), 0, pz + (Math.random()-0.5));
+        for (let i = 0; i < clusterSize; i++) {
+            const crystalGeo = new THREE.ConeGeometry(0.1 + Math.random()*0.1, 0.5 + Math.random() * 0.8, 5);
+            const crystalMat = new THREE.MeshStandardMaterial({
+                color: 0x99ccff, emissive: 0x1133aa, emissiveIntensity: 2.0,
+                roughness: 0.05, metalness: 0.8, transparent: true, opacity: 0.85,
+                envMap: envCamera ? envCamera.renderTarget.texture : null
+            });
+            const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+            crystal.position.set(basePath.x + (Math.random()-0.5)*0.5, 0.2 + Math.random() * 0.2, basePath.z + (Math.random()-0.5)*0.5);
+            crystal.rotation.set((Math.random() - 0.5) * 0.4, Math.random() * Math.PI, (Math.random() - 0.5) * 0.4);
+            crystal.castShadow = true;
+            group.add(crystal);
+        }
+        const crystalLight = new THREE.PointLight(0x4488ff, 0.6, 3.5);
+        crystalLight.position.set(basePath.x, 0.6, basePath.z);
         group.add(crystalLight);
     }
     else if (type === 2) {
-        const stalGeo = new THREE.ConeGeometry(0.08 + Math.random() * 0.06, 0.8 + Math.random() * 0.6, 6);
-        const stalMat = new THREE.MeshStandardMaterial({
-            color: 0x665555, roughness: 0.8, metalness: 0.15
-        });
-        const stalactite = new THREE.Mesh(stalGeo, stalMat);
-        stalactite.position.set(px + (Math.random() - 0.5) * 1.5, WALL_HEIGHT - (0.4 + Math.random() * 0.3), pz + (Math.random() - 0.5) * 1.5);
-        stalactite.rotation.x = Math.PI;
-        stalactite.castShadow = true;
-        group.add(stalactite);
+        const stCount = 2 + Math.floor(Math.random() * 4);
+        for(let i=0; i<stCount; i++) {
+            const stalGeo = new THREE.ConeGeometry(0.1 + Math.random() * 0.1, 1.0 + Math.random() * 1.5, 6);
+            const stalMat = new THREE.MeshStandardMaterial({
+                color: 0x5a6066, roughness: 0.85, metalness: 0.15
+            });
+            const stalactite = new THREE.Mesh(stalGeo, stalMat);
+            stalactite.position.set(px + (Math.random() - 0.5) * 2.0, WALL_HEIGHT - 0.2, pz + (Math.random() - 0.5) * 2.0);
+            stalactite.rotation.x = Math.PI;
+            stalactite.rotation.z = (Math.random() - 0.5) * 0.2;
+            stalactite.castShadow = true;
+            group.add(stalactite);
+            if (Math.random() > 0.5) {
+                const iceGeo = new THREE.ConeGeometry(0.05, 0.4, 5);
+                const iceMat = new THREE.MeshStandardMaterial({
+                    color: 0xccddff, roughness: 0.1, transparent: true, opacity: 0.7
+                });
+                const ice = new THREE.Mesh(iceGeo, iceMat);
+                ice.position.copy(stalactite.position);
+                ice.position.y -= (1.0 + Math.random() * 0.5);
+                ice.rotation.x = Math.PI;
+                group.add(ice);
+            }
+        }
     }
-    else {
-        const snowGeo = new THREE.SphereGeometry(0.5 + Math.random() * 0.3, 8, 6);
+    else if (type === 3) {
+        const snowGeo = new THREE.SphereGeometry(0.8 + Math.random() * 0.6, 12, 8);
         const snowMat = new THREE.MeshStandardMaterial({
-            color: 0xe8eff5, roughness: 0.6, metalness: 0.0
+            color: 0xf0f5fa, roughness: 0.9, metalness: 0.0
         });
         const snow = new THREE.Mesh(snowGeo, snowMat);
-        snow.position.set(px + (Math.random() - 0.5) * 1.2, 0.15, pz + (Math.random() - 0.5) * 1.2);
-        snow.scale.y = 0.3;
+        snow.position.set(px + (Math.random() - 0.5) * 1.5, 0.1, pz + (Math.random() - 0.5) * 1.5);
+        snow.scale.set(1.0, 0.2 + Math.random() * 0.15, 0.8 + Math.random() * 0.4);
+        snow.rotation.y = Math.random() * Math.PI;
         snow.receiveShadow = true;
         group.add(snow);
+    }
+    else {
+        const colGeo = new THREE.CylinderGeometry(0.3, 0.5, WALL_HEIGHT, 8);
+        const colMat = new THREE.MeshStandardMaterial({
+            color: 0x444a50, roughness: 0.9, metalness: 0.1
+        });
+        const col = new THREE.Mesh(colGeo, colMat);
+        col.position.set(px + (Math.random()-0.5), WALL_HEIGHT/2, pz + (Math.random()-0.5));
+        col.castShadow = true;
+        col.receiveShadow = true;
+        group.add(col);
+        const iceColGeo = new THREE.CylinderGeometry(0.32, 0.52, WALL_HEIGHT, 8);
+        const iceColMat = new THREE.MeshStandardMaterial({
+            color: 0xaaccff, roughness: 0.1, transparent: true, opacity: 0.5, metalness: 0.8,
+            envMap: envCamera ? envCamera.renderTarget.texture : null
+        });
+        const iceCol = new THREE.Mesh(iceColGeo, iceColMat);
+        iceCol.position.copy(col.position);
+        group.add(iceCol);
     }
     return group;
 }
@@ -1965,10 +2102,16 @@ function clearAmbientParticles() {
         p.mesh.material.dispose();
     });
     ambientParticles = [];
+    breathParticles.forEach(p => {
+        scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        p.mesh.material.dispose();
+    });
+    breathParticles = [];
 }
 function spawnAmbientParticles() {
     const map = getMapForLevel(currentLevel);
-    const count = 80;
+    const count = currentLevel === 3 ? 350 : 80;
     let color, emissive, size, opacity;
     if (currentLevel === 2) {
         color = 0x44ff66;
@@ -1998,7 +2141,7 @@ function spawnAmbientParticles() {
                 continue;
             const px = gx * GRID_SIZE + (Math.random() - 0.5) * GRID_SIZE * 0.8;
             const pz = gz * GRID_SIZE + (Math.random() - 0.5) * GRID_SIZE * 0.8;
-            const py = 0.5 + Math.random() * (WALL_HEIGHT - 1.0);
+            const py = currentLevel === 3 ? Math.random() * WALL_HEIGHT : 0.5 + Math.random() * (WALL_HEIGHT - 1.0);
             const geo = new THREE.SphereGeometry(size + Math.random() * size, 4, 4);
             const mat = new THREE.MeshBasicMaterial({
                 color: color, transparent: true, opacity: opacity * (0.5 + Math.random() * 0.5)
@@ -2008,14 +2151,15 @@ function spawnAmbientParticles() {
             scene.add(mesh);
             ambientParticles.push({
                 mesh: mesh,
+                isSnow: currentLevel === 3,
                 baseY: py,
                 baseX: px,
                 baseZ: pz,
-                speed: 0.3 + Math.random() * 0.5,
+                speed: currentLevel === 3 ? 1.0 + Math.random() * 1.5 : 0.3 + Math.random() * 0.5,
                 phase: Math.random() * Math.PI * 2,
                 amplitude: 0.1 + Math.random() * 0.25,
-                driftX: (Math.random() - 0.5) * 0.3,
-                driftZ: (Math.random() - 0.5) * 0.3
+                driftX: currentLevel === 3 ? (Math.random() - 0.5) * 2.0 : (Math.random() - 0.5) * 0.3,
+                driftZ: currentLevel === 3 ? (Math.random() - 0.5) * 2.0 : (Math.random() - 0.5) * 0.3
             });
             break;
         }
@@ -2089,7 +2233,6 @@ function buildFuseBox3D(posX, posZ) {
 }
 // --- GENERACIÓN Y GESTIÓN DE FUSIBLES ---
 function spawnFuses() {
-    if (currentLevel === 2) return;
     fuses.forEach(f => {
         scene.remove(f.mesh);
         if (fuseBoxConsole && fuseBoxConsole.group) {
@@ -2106,6 +2249,7 @@ function spawnFuses() {
     fuses = [];
     fusesCollected = 0;
     updateFuseHUD();
+    if (currentLevel === 2) return;
     let spawned = 0;
     let attempts = 0;
     while (spawned < 3 && attempts < 150) {
@@ -2160,11 +2304,12 @@ function spawnFuses() {
 function updateFuseHUD() {
     const fuseCountEl = document.getElementById('fuse-count');
     if (fuseCountEl) {
+        const trackerEl = fuseCountEl.parentElement;
         if (currentLevel === 2) {
-            fuseCountEl.style.display = 'none';
+            if (trackerEl) trackerEl.style.display = 'none';
             return;
         } else {
-            fuseCountEl.style.display = 'block';
+            if (trackerEl) trackerEl.style.display = 'flex';
         }
         fuseCountEl.innerText = `${fusesCollected}/3`;
         if (fusesCollected === 3) {
@@ -2957,6 +3102,7 @@ class BossEnemy {
             this.group.add(this.bossMesh);
         }
         else {
+            this.proceduralParts = [];
             const bodyGeo = new THREE.BoxGeometry(2.5, 3.5, 2.0);
             const bodyMat = new THREE.MeshStandardMaterial({ color: 0x880000, roughness: 0.7, metalness: 0.5 });
             this.bossMesh = new THREE.Mesh(bodyGeo, bodyMat);
@@ -2964,14 +3110,17 @@ class BossEnemy {
             this.bossMesh.castShadow = true;
             this.baseYOffset = 0;
             this.group.add(this.bossMesh);
+            this.proceduralParts.push(this.bossMesh);
             const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
             const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff4400 });
             const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
             leftEye.position.set(-0.4, 2.8, 1.05);
             this.group.add(leftEye);
+            this.proceduralParts.push(leftEye);
             const rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
             rightEye.position.set(0.4, 2.8, 1.05);
             this.group.add(rightEye);
+            this.proceduralParts.push(rightEye);
         }
         this.eyeLight = new THREE.PointLight(0xff2200, 2.0, 10.0);
         this.eyeLight.position.set(0, 3.0, 0.5);
@@ -2986,6 +3135,21 @@ class BossEnemy {
         }
         this.updateHealthBar();
         AudioSynth.playBossRoar();
+    }
+    replaceMeshWithGLB() {
+        if (!cachedBossModel || this.state !== 'ALIVE') return;
+        if (this.proceduralParts) {
+            this.proceduralParts.forEach(p => {
+                this.group.remove(p);
+                if (p.geometry) p.geometry.dispose();
+                if (p.material) p.material.dispose();
+            });
+            this.proceduralParts = null;
+        }
+        this.bossMesh = cachedBossModel.clone(true);
+        this.baseYOffset = bossGLBBaseYOffset;
+        this.bossMesh.position.set(0, this.baseYOffset, 0);
+        this.group.add(this.bossMesh);
     }
     updateHealthBar() {
         if (bossHealthFill) {
@@ -3276,7 +3440,14 @@ function zombiesRemainingCount() {
     const aliveCount = zombies.filter(z => z.state === 'ALIVE').length + spiders.filter(spider => spider.state === 'ALIVE').length;
     zombieCountEl.innerText = aliveCount;
     if (aliveCount === 0 && gameState === 'PLAYING') {
-        showFeedback("SECTOR LIMPIO. ENCUENTRA LOS FUSIBLES Y ACTIVA EL GENERADOR");
+        if (currentLevel === 2) {
+            showFeedback("ZONA DESPEJADA. AVANZANDO...");
+            setTimeout(() => {
+                triggerVictory();
+            }, 2000);
+        } else {
+            showFeedback("SECTOR LIMPIO. ENCUENTRA LOS FUSIBLES Y ACTIVA EL GENERADOR");
+        }
     }
 }
 class Particle {
@@ -3666,8 +3837,15 @@ function tryOpenDoor() {
         const dz = player.position.z - exitPosZ;
         return Math.sqrt(dx * dx + dz * dz) < 4.0; // Rango de tolerancia frente a la compuerta
     })();
-    if ((isCloseToConsole || isCloseToExitDoor) && fuseBoxConsole && !fuseBoxConsole.activated) {
-        if (currentLevel >= 2 && !wiringFixed) {
+    const canActivateExit = currentLevel === 2 ? isCloseToExitDoor : ((isCloseToConsole || isCloseToExitDoor) && fuseBoxConsole && !fuseBoxConsole.activated);
+    if (canActivateExit) {
+        if (currentLevel === 2) {
+            const aliveCount = zombies.filter(z => z.state === 'ALIVE').length + spiders.filter(spider => spider.state === 'ALIVE').length;
+            if (aliveCount > 0) {
+                showFeedback(`DEBES ELIMINAR A TODOS LOS ZOMBIES PARA ESCAPAR (${aliveCount} RESTANTES)`);
+                return;
+            }
+        } else if (currentLevel > 2 && !wiringFixed) {
             if (isCloseToConsole) {
                 openWiringMinigame();
             }
@@ -3678,11 +3856,13 @@ function tryOpenDoor() {
         }
         if (fusesCollected >= 3 || currentLevel === 2) {
             // Activar generador!
-            fuseBoxConsole.activated = true;
-            fuseBoxConsole.led.material.color.setHex(0x00ff41); // Luz a verde
-            fuseBoxConsole.ledLight.color.setHex(0x00ff41);
+            if (fuseBoxConsole) {
+                fuseBoxConsole.activated = true;
+                fuseBoxConsole.led.material.color.setHex(0x00ff41); // Luz a verde
+                fuseBoxConsole.ledLight.color.setHex(0x00ff41);
+            }
             AudioSynth.playPowerRestored();
-            showFeedback("ENERGÍA RESTAURADA. ESCAPE ACTIVADO");
+            showFeedback("ESCAPE DESBLOQUEADO");
             // Desbloquear puerta de salida final
             const exitDoor = colliders.find(c => c.isExit);
             if (exitDoor) {
@@ -4859,13 +5039,67 @@ function animate() {
         // Actualizar partículas ambientales flotantes
         const elapsedTime = clock.getElapsedTime();
         ambientParticles.forEach(p => {
-            p.mesh.position.y = p.baseY + Math.sin(elapsedTime * p.speed + p.phase) * p.amplitude;
-            p.mesh.position.x = p.baseX + Math.sin(elapsedTime * p.speed * 0.7 + p.phase * 1.3) * p.driftX;
-            p.mesh.position.z = p.baseZ + Math.cos(elapsedTime * p.speed * 0.5 + p.phase * 0.8) * p.driftZ;
-            // Pulsación de opacidad sutil
-            p.mesh.material.opacity = p.mesh.material.opacity * 0.99 +
-                (0.15 + 0.2 * Math.abs(Math.sin(elapsedTime * p.speed * 0.3 + p.phase))) * 0.01;
+            if (p.isSnow) {
+                p.mesh.position.y -= p.speed * deltaTime;
+                p.mesh.position.x += Math.sin(elapsedTime * 0.5 + p.phase) * p.driftX * deltaTime;
+                p.mesh.position.z += Math.cos(elapsedTime * 0.6 + p.phase) * p.driftZ * deltaTime;
+                if (p.mesh.position.y < 0) {
+                    p.mesh.position.y = WALL_HEIGHT;
+                    p.mesh.position.x = p.baseX + (Math.random() - 0.5) * 4.0;
+                    p.mesh.position.z = p.baseZ + (Math.random() - 0.5) * 4.0;
+                }
+            } else {
+                p.mesh.position.y = p.baseY + Math.sin(elapsedTime * p.speed + p.phase) * p.amplitude;
+                p.mesh.position.x = p.baseX + Math.sin(elapsedTime * p.speed * 0.7 + p.phase * 1.3) * p.driftX;
+                p.mesh.position.z = p.baseZ + Math.cos(elapsedTime * p.speed * 0.5 + p.phase * 0.8) * p.driftZ;
+                // Pulsación de opacidad sutil
+                p.mesh.material.opacity = p.mesh.material.opacity * 0.99 +
+                    (0.15 + 0.2 * Math.abs(Math.sin(elapsedTime * p.speed * 0.3 + p.phase))) * 0.01;
+            }
         });
+
+        // Efecto de aliento (Nivel 3)
+        if (currentLevel === 3) {
+            breathTimer -= deltaTime;
+            if (breathTimer <= 0) {
+                breathTimer = 2.0 + Math.random() * 3.0; // Respiración cada 2-5 segundos
+                const bCount = 5 + Math.floor(Math.random() * 4);
+                for(let i=0; i<bCount; i++) {
+                    const geo = new THREE.SphereGeometry(0.015 + Math.random() * 0.01, 4, 4);
+                    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 });
+                    const mesh = new THREE.Mesh(geo, mat);
+                    mesh.position.copy(camera.position);
+                    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+                    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+                    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+                    mesh.position.addScaledVector(forward, 0.4 + Math.random() * 0.1);
+                    mesh.position.addScaledVector(right, (Math.random() - 0.5) * 0.1);
+                    mesh.position.addScaledVector(up, -0.15 + (Math.random() - 0.5) * 0.05);
+                    scene.add(mesh);
+                    breathParticles.push({
+                        mesh: mesh,
+                        life: 1.0 + Math.random() * 0.5,
+                        vel: forward.clone().multiplyScalar(0.2 + Math.random() * 0.2).add(up.clone().multiplyScalar(0.1 + Math.random() * 0.1))
+                    });
+                }
+            }
+        }
+        
+        for (let i = breathParticles.length - 1; i >= 0; i--) {
+            const p = breathParticles[i];
+            p.life -= deltaTime;
+            if (p.life <= 0) {
+                scene.remove(p.mesh);
+                p.mesh.geometry.dispose();
+                p.mesh.material.dispose();
+                breathParticles.splice(i, 1);
+            } else {
+                p.mesh.position.addScaledVector(p.vel, deltaTime);
+                p.vel.y += deltaTime * 0.2; 
+                p.mesh.material.opacity = (p.life / 1.5) * 0.15; 
+                p.mesh.scale.multiplyScalar(1.0 + deltaTime * 2.0);
+            }
+        }
         if (typeof dustParticles !== 'undefined' && dustParticles) {
             dustParticles.position.copy(camera.position);
             dustParticles.rotation.y += deltaTime * 0.03;
@@ -4916,6 +5150,12 @@ function animate() {
             particlePool.release(particles[i]);
             particles.splice(i, 1);
         }
+    }
+    frameCount++;
+    if (currentLevel === 3 && envCamera && frameCount % 60 === 0) {
+        // Solo actualizar el reflejo estático de forma infrecuente para no trancar los FPS (una vez por segundo)
+        envCamera.position.copy(camera.position);
+        envCamera.update(renderer, scene);
     }
     // Renderizar escena usando EffectComposer en lugar del renderer normal
     composer.render(deltaTime);

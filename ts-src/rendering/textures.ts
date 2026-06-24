@@ -211,7 +211,7 @@ export function generateWallTexture(type = 0) {
                 ctx.save();
                 ctx.font = 'bold 36px monospace'; ctx.fillStyle = '#22ff55'; ctx.shadowColor = '#22ff55'; ctx.shadowBlur = 10;
                 ctx.fillText('SYS.OK', dx + 30, dy + 60);
-                ctx.font = '20px monospace'; ctx.fillText('TEMP: 42°C', dx + 30, dy + 100); ctx.fillText('PRESS: NML', dx + 30, dy + 130);
+                ctx.font = '20px monospace'; ctx.fillText('TEMP: 42Â°C', dx + 30, dy + 100); ctx.fillText('PRESS: NML', dx + 30, dy + 130);
                 ctx.restore();
             }
 
@@ -1970,7 +1970,7 @@ function generateBloodMessageTexture(message) {
     const longMessage = message.length > 22;
     const fontSize = longMessage ? 80 : 104;
     ctx.font = `400 ${fontSize}px ${BLOOD_MESSAGE_FONT_FAMILY}, "Arial Black", Impact, sans-serif`;
-    // Sombra húmeda y borde oscuro para que parezca sangre sobre metal.
+    // Sombra hÃºmeda y borde oscuro para que parezca sangre sobre metal.
     ctx.shadowColor = 'rgba(15, 0, 0, 0.85)';
     ctx.shadowBlur = 8;
     ctx.lineWidth = longMessage ? 14 : 18;
@@ -1998,7 +1998,7 @@ function generateBloodMessageTexture(message) {
         ctx.arc(x + 4, y + length + 4, 5 + (i % 3), 0, Math.PI * 2);
         ctx.fill();
     }
-    // Salpicaduras pequeñas alrededor del texto.
+    // Salpicaduras pequeÃ±as alrededor del texto.
     ctx.fillStyle = 'rgba(110, 0, 0, 0.55)';
     for (let i = 0; i < 36; i++) {
         const x = 70 + ((i * 151) % 890);
@@ -2128,7 +2128,7 @@ export function generateZombieFaceTexture() {
     const texture = new THREE.CanvasTexture(canvas);
     return texture;
 }
-// --- TEXTURAS ADICIONALES PARA TEMÁTICAS DE NIVELES ---
+// --- TEXTURAS ADICIONALES PARA TEMÃTICAS DE NIVELES ---
 // 1. SELVA (NIVEL 2)
 export function generateJungleWallTexture() {
     const canvas = document.createElement('canvas');
@@ -2416,89 +2416,171 @@ export function generateJungleCeilingTexture() {
     texture.wrapT = THREE.RepeatWrapping;
     return texture;
 }
-// 2. MONTAÑA (NIVEL 3)
+// 2. MONTAÃ‘A (NIVEL 3)
 export function generateMountainWallTexture() {
     const canvas = document.createElement('canvas');
-    const S = 512;
+    const S = 1024;
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
-    // Bright icy base gradient
-    const baseGrad = ctx.createLinearGradient(0, 0, 0, S);
-    baseGrad.addColorStop(0, '#eaf2f8'); // Light snow top
-    baseGrad.addColorStop(0.5, '#cce0f0'); // Ice middle
-    baseGrad.addColorStop(1, '#99badd'); // Darker ice bottom
+
+    // === BASE: Dark granite rock ===
+    const baseGrad = ctx.createLinearGradient(0, 0, S * 0.3, S);
+    baseGrad.addColorStop(0, '#3a3d42');
+    baseGrad.addColorStop(0.3, '#2e3035');
+    baseGrad.addColorStop(0.6, '#3d3f44');
+    baseGrad.addColorStop(1, '#25272b');
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, S, S);
-    // Snow noise texture (Fast approximation)
-    for (let i = 0; i < 8000; i++) {
+
+    // === ROCK GRAIN: Multi-layer noise for realism ===
+    // Fine grain
+    for (let i = 0; i < 25000; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
-        const sz = 1 + Math.random() * 4;
-        const c = 200 + Math.random() * 55;
-        ctx.fillStyle = `rgba(${c},${c},${c},0.4)`;
+        const sz = 1 + Math.random() * 2;
+        const v = 30 + Math.floor(Math.random() * 40);
+        ctx.fillStyle = `rgba(${v},${v + 2},${v + 5},0.35)`;
         ctx.fillRect(x, y, sz, sz);
     }
-    // Ice fissures/cracks (light blue/white)
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    for (let cr = 0; cr < 15; cr++) {
-        ctx.lineWidth = 1 + Math.random() * 3;
+    // Coarse grain
+    for (let i = 0; i < 5000; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        const sz = 3 + Math.random() * 6;
+        const v = 40 + Math.floor(Math.random() * 30);
+        ctx.fillStyle = `rgba(${v},${v + 3},${v + 8},0.2)`;
+        ctx.fillRect(x, y, sz, sz);
+    }
+
+    // === ROCK STRATA: Horizontal sediment layers ===
+    for (let i = 0; i < 12; i++) {
+        const y = Math.random() * S;
+        const thickness = 2 + Math.random() * 8;
+        const v = 35 + Math.floor(Math.random() * 25);
+        ctx.fillStyle = `rgba(${v},${v + 2},${v + 4},0.25)`;
+        ctx.fillRect(0, y, S, thickness);
+    }
+
+    // === DEEP CRACKS with shadow/highlight ===
+    for (let cr = 0; cr < 20; cr++) {
+        ctx.lineWidth = 1 + Math.random() * 2;
+        // Dark shadow crack
+        ctx.strokeStyle = `rgba(10,12,15,${0.4 + Math.random() * 0.3})`;
         ctx.beginPath();
         let cx = Math.random() * S;
         let cy = Math.random() * S;
         ctx.moveTo(cx, cy);
-        const segments = 4 + Math.floor(Math.random() * 5);
+        const segments = 5 + Math.floor(Math.random() * 8);
         for (let s = 0; s < segments; s++) {
-            cx += (Math.random() - 0.5) * 60;
-            cy += Math.random() * 80; // Cracks go mostly down
+            cx += (Math.random() - 0.5) * 50;
+            cy += 20 + Math.random() * 60;
             ctx.lineTo(cx, cy);
         }
         ctx.stroke();
-        // Dark blue shadow next to crack
-        ctx.strokeStyle = 'rgba(100,140,180,0.4)';
-        ctx.lineWidth = 2;
+        // Light highlight edge
+        ctx.strokeStyle = `rgba(80,85,95,0.2)`;
+        ctx.lineWidth = 0.5;
         ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,0.7)';
     }
-    // Large snow patches clinging to the wall
-    for (let sp = 0; sp < 10; sp++) {
+
+    // === ICE VEINS: Thin blue translucent lines ===
+    for (let iv = 0; iv < 8; iv++) {
+        ctx.strokeStyle = `rgba(120,180,220,${0.15 + Math.random() * 0.15})`;
+        ctx.lineWidth = 1 + Math.random() * 2;
+        ctx.beginPath();
+        let vx = Math.random() * S;
+        let vy = Math.random() * S;
+        ctx.moveTo(vx, vy);
+        for (let vs = 0; vs < 6; vs++) {
+            vx += (Math.random() - 0.5) * 40;
+            vy += 15 + Math.random() * 40;
+            ctx.lineTo(vx, vy);
+        }
+        ctx.stroke();
+    }
+
+    // === SNOW ACCUMULATION on ledges (top-heavy) ===
+    for (let sp = 0; sp < 18; sp++) {
         const spx = Math.random() * S;
-        const spy = Math.random() * S;
-        const spw = 100 + Math.random() * 200;
-        const sph = 40 + Math.random() * 80;
+        const spy = Math.random() * S * 0.6; // mostly upper half
+        const spw = 60 + Math.random() * 200;
+        const sph = 15 + Math.random() * 40;
         const sGrad = ctx.createRadialGradient(spx, spy, 0, spx, spy, spw / 2);
-        sGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
-        sGrad.addColorStop(0.5, 'rgba(230,240,250,0.6)');
+        sGrad.addColorStop(0, 'rgba(230,235,245,0.7)');
+        sGrad.addColorStop(0.4, 'rgba(210,220,235,0.4)');
+        sGrad.addColorStop(0.7, 'rgba(190,200,215,0.15)');
         sGrad.addColorStop(1, 'rgba(255,255,255,0)');
         ctx.fillStyle = sGrad;
         ctx.beginPath();
-        ctx.ellipse(spx, spy, spw / 2, sph / 2, Math.random() * 0.2, 0, Math.PI * 2);
+        ctx.ellipse(spx, spy, spw / 2, sph / 2, (Math.random() - 0.5) * 0.3, 0, Math.PI * 2);
         ctx.fill();
     }
-    // Sharp icicles hanging
-    ctx.fillStyle = 'rgba(200,230,255,0.8)';
-    for (let ic = 0; ic < 12; ic++) {
+
+    // === FROST CRYSTALS: Tiny sparkle points ===
+    for (let fc = 0; fc < 150; fc++) {
+        const fx = Math.random() * S;
+        const fy = Math.random() * S;
+        const fr = 1 + Math.random() * 2;
+        ctx.fillStyle = `rgba(200,220,255,${0.3 + Math.random() * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(fx, fy, fr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === ICICLES: More realistic with depth ===
+    for (let ic = 0; ic < 15; ic++) {
         const icx = Math.random() * S;
-        const icy = Math.random() * 100; // Start near top
-        const icw = 10 + Math.random() * 20;
-        const ich = 60 + Math.random() * 150;
+        const icw = 6 + Math.random() * 14;
+        const ich = 40 + Math.random() * 120;
+        // Shadow
+        ctx.fillStyle = 'rgba(40,50,65,0.4)';
+        ctx.beginPath();
+        ctx.moveTo(icx - icw / 2 + 2, 0);
+        ctx.lineTo(icx + icw / 2 + 2, 0);
+        ctx.lineTo(icx + 2, ich + 5);
+        ctx.closePath();
+        ctx.fill();
+        // Body
+        const iceGrad = ctx.createLinearGradient(icx - icw / 2, 0, icx + icw / 2, 0);
+        iceGrad.addColorStop(0, 'rgba(160,195,220,0.6)');
+        iceGrad.addColorStop(0.3, 'rgba(200,225,245,0.8)');
+        iceGrad.addColorStop(0.6, 'rgba(220,240,255,0.9)');
+        iceGrad.addColorStop(1, 'rgba(170,200,225,0.5)');
+        ctx.fillStyle = iceGrad;
         ctx.beginPath();
         ctx.moveTo(icx - icw / 2, 0);
         ctx.lineTo(icx + icw / 2, 0);
-        ctx.lineTo(icx + icw * 0.1, ich * 0.7);
+        ctx.lineTo(icx + icw * 0.05, ich * 0.8);
         ctx.lineTo(icx, ich);
-        ctx.lineTo(icx - icw * 0.1, ich * 0.7);
+        ctx.lineTo(icx - icw * 0.05, ich * 0.8);
         ctx.closePath();
         ctx.fill();
-        // Icicle highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        // Highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.beginPath();
         ctx.moveTo(icx - icw * 0.1, 0);
         ctx.lineTo(icx, 0);
-        ctx.lineTo(icx, ich * 0.9);
+        ctx.lineTo(icx, ich * 0.85);
         ctx.closePath();
         ctx.fill();
     }
+
+    // === LICHEN/MOSS patches ===
+    for (let lc = 0; lc < 8; lc++) {
+        const lx = Math.random() * S;
+        const ly = S * 0.5 + Math.random() * S * 0.5; // lower half
+        const lr = 10 + Math.random() * 25;
+        const mGrad = ctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
+        mGrad.addColorStop(0, 'rgba(45,55,35,0.3)');
+        mGrad.addColorStop(0.6, 'rgba(55,65,40,0.15)');
+        mGrad.addColorStop(1, 'rgba(40,50,30,0)');
+        ctx.fillStyle = mGrad;
+        ctx.beginPath();
+        ctx.arc(lx, ly, lr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -2506,63 +2588,117 @@ export function generateMountainWallTexture() {
 }
 export function generateMountainFloorTexture() {
     const canvas = document.createElement('canvas');
-    const S = 512;
+    const S = 1024;
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
-    // Deep snow base
-    ctx.fillStyle = '#f0f5fa';
+
+    // === BASE: Frozen rock ground ===
+    const baseGrad = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.7);
+    baseGrad.addColorStop(0, '#4a4e55');
+    baseGrad.addColorStop(0.5, '#3a3e44');
+    baseGrad.addColorStop(1, '#2e3238');
+    ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, S, S);
-    // Snow noise (Fast approximation)
-    for (let i = 0; i < 15000; i++) {
+
+    // === ROCK GRAIN ===
+    for (let i = 0; i < 30000; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
-        const sz = 1 + Math.random() * 3;
-        const c = 200 + Math.random() * 55;
-        ctx.fillStyle = `rgba(${c},${c},${c},0.6)`;
+        const sz = 1 + Math.random() * 2;
+        const v = 35 + Math.floor(Math.random() * 45);
+        ctx.fillStyle = `rgba(${v},${v + 2},${v + 5},0.3)`;
         ctx.fillRect(x, y, sz, sz);
     }
-    // Footprints / Indentations in snow
-    for (let fp = 0; fp < 20; fp++) {
-        const fx = Math.random() * S;
-        const fy = Math.random() * S;
-        const fr = 15 + Math.random() * 20;
-        const fGrad = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
-        fGrad.addColorStop(0, 'rgba(150,180,210,0.3)');
-        fGrad.addColorStop(0.6, 'rgba(200,220,240,0.1)');
-        fGrad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = fGrad;
-        ctx.beginPath();
-        ctx.ellipse(fx, fy, fr, fr * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    // Small rocks peeking through snow
-    for (let r = 0; r < 30; r++) {
+
+    // === SCATTERED PEBBLES ===
+    for (let r = 0; r < 60; r++) {
         const rx = Math.random() * S;
         const ry = Math.random() * S;
-        const rSize = 3 + Math.random() * 8;
-        ctx.fillStyle = '#4a5058';
+        const rw = 4 + Math.random() * 12;
+        const rh = 3 + Math.random() * 8;
+        const rv = 30 + Math.floor(Math.random() * 35);
+        ctx.fillStyle = `rgba(${rv},${rv + 3},${rv + 6},0.7)`;
         ctx.beginPath();
-        ctx.arc(rx, ry, rSize, 0, Math.PI * 2);
+        ctx.ellipse(rx, ry, rw, rh, Math.random() * Math.PI, 0, Math.PI * 2);
         ctx.fill();
-        // Snow on top of rock
-        ctx.fillStyle = '#ffffff';
+        // Highlight
+        ctx.fillStyle = `rgba(${rv + 30},${rv + 33},${rv + 36},0.3)`;
         ctx.beginPath();
-        ctx.arc(rx, ry - rSize * 0.3, rSize * 0.8, 0, Math.PI);
+        ctx.ellipse(rx - 1, ry - 1, rw * 0.6, rh * 0.5, Math.random() * Math.PI, 0, Math.PI * 2);
         ctx.fill();
     }
-    // Large snowdrifts (curves)
-    ctx.strokeStyle = 'rgba(200,220,240,0.4)';
-    ctx.lineWidth = 15;
-    ctx.lineCap = 'round';
-    for (let sd = 0; sd < 5; sd++) {
+
+    // === SNOW DRIFTS ===
+    for (let sd = 0; sd < 12; sd++) {
+        const sx = Math.random() * S;
+        const sy = Math.random() * S;
+        const sw = 80 + Math.random() * 250;
+        const sh = 50 + Math.random() * 150;
+        const sGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, sw / 2);
+        sGrad.addColorStop(0, 'rgba(220,228,240,0.75)');
+        sGrad.addColorStop(0.3, 'rgba(200,210,225,0.5)');
+        sGrad.addColorStop(0.6, 'rgba(180,190,210,0.25)');
+        sGrad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = sGrad;
         ctx.beginPath();
-        let sdx = Math.random() * S;
-        let sdy = Math.random() * S;
-        ctx.moveTo(sdx, sdy);
-        ctx.bezierCurveTo(sdx + 100, sdy + 50, sdx + 200, sdy - 50, sdx + 300, sdy + 20);
+        ctx.ellipse(sx, sy, sw / 2, sh / 2, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Snow grain on drifts
+    for (let i = 0; i < 8000; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        const sz = 1 + Math.random() * 2;
+        const c = 190 + Math.floor(Math.random() * 60);
+        ctx.fillStyle = `rgba(${c},${c + 3},${c + 8},0.15)`;
+        ctx.fillRect(x, y, sz, sz);
+    }
+
+    // === ICE POOLS: Frozen puddles ===
+    for (let ip = 0; ip < 5; ip++) {
+        const ix = Math.random() * S;
+        const iy = Math.random() * S;
+        const iw = 30 + Math.random() * 60;
+        const ih = 20 + Math.random() * 40;
+        // Dark edge
+        ctx.strokeStyle = 'rgba(40,50,60,0.4)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(ix, iy, iw, ih, Math.random() * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+        // Ice surface
+        const iGrad = ctx.createRadialGradient(ix, iy, 0, ix, iy, iw);
+        iGrad.addColorStop(0, 'rgba(160,195,220,0.5)');
+        iGrad.addColorStop(0.5, 'rgba(140,175,200,0.35)');
+        iGrad.addColorStop(1, 'rgba(100,140,170,0.1)');
+        ctx.fillStyle = iGrad;
+        ctx.beginPath();
+        ctx.ellipse(ix, iy, iw, ih, Math.random() * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        // Specular highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath();
+        ctx.ellipse(ix - iw * 0.2, iy - ih * 0.2, iw * 0.3, ih * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === FLOOR CRACKS ===
+    for (let fc = 0; fc < 15; fc++) {
+        ctx.strokeStyle = `rgba(20,22,25,${0.2 + Math.random() * 0.2})`;
+        ctx.lineWidth = 0.5 + Math.random() * 1.5;
+        ctx.beginPath();
+        let fcx = Math.random() * S;
+        let fcy = Math.random() * S;
+        ctx.moveTo(fcx, fcy);
+        for (let fs = 0; fs < 4; fs++) {
+            fcx += (Math.random() - 0.5) * 80;
+            fcy += (Math.random() - 0.5) * 80;
+            ctx.lineTo(fcx, fcy);
+        }
         ctx.stroke();
     }
+
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
@@ -2570,45 +2706,107 @@ export function generateMountainFloorTexture() {
 }
 export function generateMountainCeilingTexture() {
     const canvas = document.createElement('canvas');
-    const S = 512;
+    const S = 1024;
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
-    // Frosty sky base
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, S);
-    skyGrad.addColorStop(0, '#dbe5f0');
-    skyGrad.addColorStop(1, '#b0c4de');
-    ctx.fillStyle = skyGrad;
+
+    // === BASE: Dark cavern ceiling ===
+    const baseGrad = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.7);
+    baseGrad.addColorStop(0, '#2a2d32');
+    baseGrad.addColorStop(0.5, '#222528');
+    baseGrad.addColorStop(1, '#1a1c1f');
+    ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, S, S);
-    // Thick snow clouds
-    for (let c = 0; c < 15; c++) {
-        const cx = Math.random() * S;
-        const cy = Math.random() * S;
-        const cr = 80 + Math.random() * 100;
-        const cGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr);
-        cGrad.addColorStop(0, 'rgba(255,255,255,0.8)');
-        cGrad.addColorStop(0.5, 'rgba(240,248,255,0.4)');
-        cGrad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = cGrad;
+
+    // === ROCK GRAIN ===
+    for (let i = 0; i < 20000; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        const sz = 1 + Math.random() * 3;
+        const v = 25 + Math.floor(Math.random() * 35);
+        ctx.fillStyle = `rgba(${v},${v + 2},${v + 4},0.3)`;
+        ctx.fillRect(x, y, sz, sz);
+    }
+
+    // === MINERAL VEINS ===
+    for (let mv = 0; mv < 6; mv++) {
+        const hue = Math.random() > 0.5 ? '140,170,200' : '120,130,150';
+        ctx.strokeStyle = `rgba(${hue},${0.15 + Math.random() * 0.15})`;
+        ctx.lineWidth = 1 + Math.random() * 3;
         ctx.beginPath();
-        ctx.ellipse(cx, cy, cr, cr * 0.6, Math.random() * Math.PI, 0, Math.PI * 2);
+        let mx = Math.random() * S;
+        let my = Math.random() * S;
+        ctx.moveTo(mx, my);
+        for (let ms = 0; ms < 8; ms++) {
+            mx += (Math.random() - 0.5) * 100;
+            my += (Math.random() - 0.5) * 60;
+            ctx.lineTo(mx, my);
+        }
+        ctx.stroke();
+    }
+
+    // === FROST FORMATIONS on ceiling ===
+    for (let ff = 0; ff < 15; ff++) {
+        const fx = Math.random() * S;
+        const fy = Math.random() * S;
+        const fw = 40 + Math.random() * 80;
+        const fh = 30 + Math.random() * 60;
+        const fGrad = ctx.createRadialGradient(fx, fy, 0, fx, fy, fw / 2);
+        fGrad.addColorStop(0, 'rgba(180,200,220,0.3)');
+        fGrad.addColorStop(0.5, 'rgba(150,170,195,0.15)');
+        fGrad.addColorStop(1, 'rgba(130,150,170,0)');
+        ctx.fillStyle = fGrad;
+        ctx.beginPath();
+        ctx.ellipse(fx, fy, fw / 2, fh / 2, Math.random() * Math.PI, 0, Math.PI * 2);
         ctx.fill();
     }
-    // Snowflakes falling (dots)
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    for (let sf = 0; sf < 200; sf++) {
-        const sfx = Math.random() * S;
-        const sfy = Math.random() * S;
-        const sfr = 1 + Math.random() * 2;
+
+    // === STALACTITE SHADOWS ===
+    for (let st = 0; st < 20; st++) {
+        const sx = Math.random() * S;
+        const sy = Math.random() * S;
+        const sw = 3 + Math.random() * 8;
+        const sh = 15 + Math.random() * 40;
+        ctx.fillStyle = `rgba(15,17,20,${0.3 + Math.random() * 0.2})`;
         ctx.beginPath();
-        ctx.arc(sfx, sfy, sfr, 0, Math.PI * 2);
+        ctx.ellipse(sx, sy, sw, sh, Math.random() * 0.5, 0, Math.PI * 2);
         ctx.fill();
     }
+
+    // === ICE DEPOSITS: Bright spots ===
+    for (let id = 0; id < 30; id++) {
+        const dx = Math.random() * S;
+        const dy = Math.random() * S;
+        const dr = 2 + Math.random() * 5;
+        ctx.fillStyle = `rgba(180,210,240,${0.2 + Math.random() * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(dx, dy, dr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === CEILING CRACKS ===
+    for (let cc = 0; cc < 12; cc++) {
+        ctx.strokeStyle = `rgba(10,12,15,${0.3 + Math.random() * 0.3})`;
+        ctx.lineWidth = 0.5 + Math.random() * 2;
+        ctx.beginPath();
+        let ccx = Math.random() * S;
+        let ccy = Math.random() * S;
+        ctx.moveTo(ccx, ccy);
+        for (let cs = 0; cs < 5; cs++) {
+            ccx += (Math.random() - 0.5) * 70;
+            ccy += (Math.random() - 0.5) * 70;
+            ctx.lineTo(ccx, ccy);
+        }
+        ctx.stroke();
+    }
+
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     return texture;
 }
+
 export function generateInfernalWallTexture() {
     const canvas = document.createElement('canvas');
     const S = 512;

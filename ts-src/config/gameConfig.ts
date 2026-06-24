@@ -53,28 +53,28 @@ export const LEVEL_ONE_LAMP_SPACING_MODULO = 5;
 export const LEVEL_ONE_LAMP_MIN_GRID_X = 3;
 export const LEVEL_ONE_LAMP_MIN_GRID_Z = 3;
 // LEVEL 3 settings
-export const LEVEL_THREE_FOG_COLOR = 0x7f8f9f;
-export const LEVEL_THREE_FOG_DENSITY = 0.025;
-export const LEVEL_THREE_HEMI_SKY_COLOR = 0xaab8c8;
-export const LEVEL_THREE_HEMI_GROUND_COLOR = 0x8899aa;
-export const LEVEL_THREE_HEMI_INTENSITY = 0.35;
-export const LEVEL_THREE_TONE_EXPOSURE = 0.9;
+export const LEVEL_THREE_FOG_COLOR = 0x2a3848;
+export const LEVEL_THREE_FOG_DENSITY = 0.045;
+export const LEVEL_THREE_HEMI_SKY_COLOR = 0x4a5a6a;
+export const LEVEL_THREE_HEMI_GROUND_COLOR = 0x1a2530;
+export const LEVEL_THREE_HEMI_INTENSITY = 0.2;
+export const LEVEL_THREE_TONE_EXPOSURE = 0.75;
 export const LEVEL_THREE_PARTICLE_COLOR = 0xffffff;
-export const LEVEL_THREE_PARTICLE_EMISSIVE = 0x8888aa;
-export const LEVEL_THREE_PARTICLE_SIZE = 0.035;
-export const LEVEL_THREE_PARTICLE_OPACITY = 0.25;
-export const LEVEL_THREE_LAMP_SPAWN_CHANCE = 0.08;
+export const LEVEL_THREE_PARTICLE_EMISSIVE = 0xddeeff;
+export const LEVEL_THREE_PARTICLE_SIZE = 0.025;
+export const LEVEL_THREE_PARTICLE_OPACITY = 0.6;
+export const LEVEL_THREE_LAMP_SPAWN_CHANCE = 0.12;
 export const LEVEL_THREE_LAMP_MIN_GRID_X = 3;
 export const LEVEL_THREE_LAMP_MIN_GRID_Z = 3;
-export const LEVEL_THREE_LAMP_RED_CHANCE = 0.35;
-export const LEVEL_THREE_LAMP_RED_COLOR = 0xff0000;
-export const LEVEL_THREE_LAMP_ORANGE_COLOR = 0xffaa44;
-export const LEVEL_THREE_LAMP_INTENSITY = 1.2;
-export const LEVEL_THREE_LAMP_DIM_INTENSITY = 0.1;
-export const LEVEL_THREE_LAMP_DISTANCE = 4;
-export const LEVEL_THREE_LAMP_DECAY = 1.0;
-export const LEVEL_THREE_LAMP_RED_MATERIAL_COLOR = 0x880000;
-export const LEVEL_THREE_LAMP_ORANGE_MATERIAL_COLOR = 0xe59400;
+export const LEVEL_THREE_LAMP_BLUE_CHANCE = 0.5;
+export const LEVEL_THREE_LAMP_BLUE_COLOR = 0x55aaff;
+export const LEVEL_THREE_LAMP_WHITE_COLOR = 0xcceeff;
+export const LEVEL_THREE_LAMP_INTENSITY = 1.5;
+export const LEVEL_THREE_LAMP_DIM_INTENSITY = 0.2;
+export const LEVEL_THREE_LAMP_DISTANCE = 5;
+export const LEVEL_THREE_LAMP_DECAY = 1.2;
+export const LEVEL_THREE_LAMP_BLUE_MATERIAL_COLOR = 0x114488;
+export const LEVEL_THREE_LAMP_WHITE_MATERIAL_COLOR = 0x88aabb;
 export const FLASHLIGHT_FLICKER_CYCLE_SECONDS = 66;
 export const FLASHLIGHT_FLICKER_START_SECONDS = 60;
 export const FLASHLIGHT_FLICKER_SECONDS = 0.5;
@@ -148,7 +148,7 @@ export const MAP2 = [
     [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
     [1, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1],
     [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 2, 1],
+    [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ];
 export const MAP3 = [
