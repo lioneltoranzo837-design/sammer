@@ -3066,29 +3066,110 @@ export function generateBarkTexture() {
 
 export function generateLeafTexture() {
     const canvas = document.createElement('canvas');
-    const S = 512;
+    const S = 1024;
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
 
-    // Base dark green
-    ctx.fillStyle = '#0f2910';
-    ctx.fillRect(0, 0, S, S);
+    ctx.clearRect(0, 0, S, S);
 
-    // Leaf blotches
-    for (let i = 0; i < 1500; i++) {
+    for (let i = 0; i < 400; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
-        const r = 5 + Math.random() * 15;
+        const angle = Math.random() * Math.PI * 2;
+        const scale = 30 + Math.random() * 50;
 
-        const g = 30 + Math.floor(Math.random() * 60);
-        ctx.fillStyle = `rgba(10, ${g}, 15, 0.6)`;
-
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        
+        ctx.fillStyle = `rgb(${10 + Math.random() * 20}, ${80 + Math.random() * 100}, ${10 + Math.random() * 20})`;
         ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.moveTo(0, -scale);
+        ctx.bezierCurveTo(scale * 0.8, -scale * 0.2, scale * 0.5, scale * 0.8, 0, scale);
+        ctx.bezierCurveTo(-scale * 0.5, scale * 0.8, -scale * 0.8, -scale * 0.2, 0, -scale);
         ctx.fill();
+
+        ctx.strokeStyle = `rgba(150, 255, 100, 0.4)`;
+        ctx.lineWidth = scale * 0.05;
+        ctx.beginPath();
+        ctx.moveTo(0, -scale * 0.8);
+        ctx.lineTo(0, scale * 0.9);
+        ctx.stroke();
+
+        ctx.restore();
     }
 
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = 4;
+    return texture;
+}
+
+export function generateGrassBladeTexture() {
+    const canvas = document.createElement('canvas');
+    const S = 256;
+    canvas.width = S;
+    canvas.height = S;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.clearRect(0, 0, S, S);
+    
+    for (let i = 0; i < 7; i++) {
+        const rootX = S * 0.1 + Math.random() * S * 0.8;
+        const rootY = S;
+        const tipX = rootX + (Math.random() - 0.5) * S * 0.6;
+        const tipY = Math.random() * S * 0.2;
+        const width = 8 + Math.random() * 16;
+        
+        const gGrad = ctx.createLinearGradient(0, rootY, 0, tipY);
+        gGrad.addColorStop(0, '#0f2f0f');
+        gGrad.addColorStop(1, '#5cdf30');
+        
+        ctx.fillStyle = gGrad;
+        ctx.beginPath();
+        ctx.moveTo(rootX - width / 2, rootY);
+        ctx.quadraticCurveTo(rootX, (rootY + tipY) / 2, tipX, tipY);
+        ctx.quadraticCurveTo(rootX + width, (rootY + tipY) / 2, rootX + width / 2, rootY);
+        ctx.fill();
+        
+        ctx.strokeStyle = 'rgba(200, 255, 150, 0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(rootX, rootY);
+        ctx.quadraticCurveTo(rootX, (rootY + tipY) / 2, tipX, tipY);
+        ctx.stroke();
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    return texture;
+}
+
+export function generateCloudTexture() {
+    const canvas = document.createElement('canvas');
+    const S = 1024;
+    canvas.width = S;
+    canvas.height = S;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.clearRect(0, 0, S, S);
+    
+    for (let i = 0; i < 150; i++) {
+        const cx = Math.random() * S;
+        const cy = Math.random() * S;
+        const cr = 40 + Math.random() * 160;
+        
+        const cGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr);
+        cGrad.addColorStop(0, `rgba(255, 255, 255, ${0.1 + Math.random() * 0.2})`);
+        cGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        
+        ctx.fillStyle = cGrad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, cr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;

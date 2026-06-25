@@ -55,9 +55,13 @@ let decorations = []; // Objetos decorativos 3D ambientales
 let fuseBoxConsole = null; // Estructura 3D del generador final
 let barkMaterial = null;
 let leafMaterial = null;
+let leafMaterialShader = null;
 let sunLight = null;
 let sunMesh = null;
 let grassMaterial = null;
+let grassInstancedMesh = null;
+let grassMaterialShader = null;
+let cloudMesh = null;
 // Variables de Progresión y Nuevas Armas
 let currentLevel = 1;
 let activeMap = MAP;
@@ -1350,8 +1354,28 @@ function buildMap3D() {
                             leafMaterial = new THREE.MeshStandardMaterial({
                                 map: leafTex,
                                 normalMap: leafNorm,
-                                roughnessMap: leafRough
+                                roughnessMap: leafRough,
+                                alphaTest: 0.3,
+                                side: THREE.DoubleSide,
+                                transparent: true
                             });
+                            leafMaterial.onBeforeCompile = (shader) => {
+                                shader.uniforms.time = { value: 0 };
+                                shader.vertexShader = `
+                                    uniform float time;
+                                    ` + shader.vertexShader;
+                                shader.vertexShader = shader.vertexShader.replace(
+                                    `#include <begin_vertex>`,
+                                    `
+                                    #include <begin_vertex>
+                                    float sway = sin(time * 2.5 + position.x * 0.5 + position.z * 0.5) * 0.5;
+                                    float strength = (position.y + 2.0) / 4.0;
+                                    transformed.x -= sway * strength * 0.8 + (strength * 0.5);
+                                    transformed.z += cos(time * 1.5 + position.x) * strength * 0.2;
+                                    `
+                                );
+                                leafMaterialShader = shader;
+                            };
                         }
 
                         // Tronco
@@ -1637,6 +1661,19 @@ function clearCurrentMap() {
         });
         fuseBoxConsole = null;
     }
+    if (grassInstancedMesh) {
+        scene.remove(grassInstancedMesh);
+        if (grassInstancedMesh.geometry) grassInstancedMesh.geometry.dispose();
+        if (grassInstancedMesh.material) grassInstancedMesh.material.dispose();
+        grassInstancedMesh = null;
+        grassMaterialShader = null;
+    }
+    if (cloudMesh) {
+        scene.remove(cloudMesh);
+        if (cloudMesh.geometry) cloudMesh.geometry.dispose();
+        if (cloudMesh.material) cloudMesh.material.dispose();
+        cloudMesh = null;
+    }
     colliders = [];
     interactiveDoors = [];
 }
@@ -1826,10 +1863,103 @@ function updateLevelEnvironment() {
     }
     clearDecorations();
     spawnLevelDecorations();
+    if (currentLevel === 2) {
+        spawnDynamicGrass();
+        spawnDynamicClouds();
+    }
     clearAmbientParticles();
     spawnAmbientParticles();
 }
 // --- DECORACIONES 3D AMBIENTALES ---
+function spawnDynamicGrass() {
+    const map = getMapForLevel(currentLevel);
+    let floorCells = [];
+    for (let z = 0; z < map.length; z++) {
+        for (let x = 0; x < map[z].length; x++) {
+            if (map[z][x] !== 1 || currentLevel === 2) {
+                floorCells.push({x: x * GRID_SIZE, z: z * GRID_SIZE});
+            }
+        }
+    }
+
+    const bladesPerCell = 60;
+    const totalBlades = floorCells.length * bladesPerCell;
+
+    const grassGeo = new THREE.PlaneGeometry(0.3, 0.6, 1, 4);
+    grassGeo.translate(0, 0.3, 0);
+
+    const tex = typeof generateGrassBladeTexture !== 'undefined' ? generateGrassBladeTexture() : null;
+    const grassMat = new THREE.MeshStandardMaterial({
+        map: tex,
+        alphaTest: 0.5,
+        side: THREE.DoubleSide,
+        color: 0x2a7a1a,
+        roughness: 0.9
+    });
+
+    grassMat.onBeforeCompile = (shader) => {
+        shader.uniforms.time = { value: 0 };
+        shader.vertexShader = `
+            uniform float time;
+            ` + shader.vertexShader;
+        shader.vertexShader = shader.vertexShader.replace(
+            `#include <begin_vertex>`,
+            `
+            #include <begin_vertex>
+            float sway = sin(time * 3.0 + position.x * 0.5 + position.z * 0.5) * 0.5;
+            float strength = position.y / 0.6;
+            transformed.x -= sway * strength * 0.8 + (strength * 0.5);
+            transformed.z += cos(time * 2.0 + position.x) * strength * 0.2;
+            `
+        );
+        grassMaterialShader = shader;
+    };
+
+    grassInstancedMesh = new THREE.InstancedMesh(grassGeo, grassMat, totalBlades);
+    grassInstancedMesh.name = "map_grass";
+    grassInstancedMesh.receiveShadow = true;
+    grassInstancedMesh.castShadow = false;
+
+    const dummy = new THREE.Object3D();
+    let idx = 0;
+    for (const cell of floorCells) {
+        for (let i = 0; i < bladesPerCell; i++) {
+            dummy.position.set(
+                cell.x + (Math.random() - 0.5) * GRID_SIZE,
+                0,
+                cell.z + (Math.random() - 0.5) * GRID_SIZE
+            );
+            dummy.rotation.y = Math.random() * Math.PI;
+            dummy.scale.setScalar(0.4 + Math.random() * 0.4);
+            dummy.updateMatrix();
+            grassInstancedMesh.setMatrixAt(idx++, dummy.matrix);
+        }
+    }
+    
+    scene.add(grassInstancedMesh);
+}
+
+function spawnDynamicClouds() {
+    const cloudGeo = new THREE.PlaneGeometry(GRID_SIZE * 20, GRID_SIZE * 20);
+    const tex = typeof generateCloudTexture !== 'undefined' ? generateCloudTexture() : null;
+    if (tex) {
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(4, 4);
+    }
+    const cloudMat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        opacity: 0.7,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    });
+    cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+    cloudMesh.rotation.x = Math.PI / 2;
+    cloudMesh.position.set(GRID_SIZE * 10, WALL_HEIGHT + 3, GRID_SIZE * 10);
+    scene.add(cloudMesh);
+}
+
 function clearDecorations() {
     decorations.forEach(d => {
         scene.remove(d);
@@ -1950,23 +2080,20 @@ function createFacilityDecoration(px, pz) {
 function createJungleDecoration(px, pz) {
     const group = new THREE.Group();
     const type = Math.floor(Math.random() * 4);
-    if (type === 0) {
-        const bushGeo = new THREE.SphereGeometry(0.5 + Math.random() * 0.3, 8, 6);
-        const bushMat = new THREE.MeshStandardMaterial({
-            color: 0x2a5a1e, roughness: 0.95, metalness: 0.0
-        });
-        const bush = new THREE.Mesh(bushGeo, bushMat);
-        bush.position.set(px + (Math.random() - 0.5) * 1.8, 0.35, pz + (Math.random() - 0.5) * 1.8);
-        bush.scale.y = 0.7;
-        bush.castShadow = true;
-        bush.receiveShadow = true;
-        group.add(bush);
-        const topGeo = new THREE.SphereGeometry(0.3, 6, 6);
-        const topMat = new THREE.MeshStandardMaterial({ color: 0x44882e, roughness: 0.9 });
-        const top = new THREE.Mesh(topGeo, topMat);
-        top.position.copy(bush.position);
-        top.position.y += 0.3;
-        group.add(top);
+    if (type === 0 && leafMaterial) {
+        const bushGroup = new THREE.Group();
+        const bushCount = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < bushCount; i++) {
+            const bushGeo = new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.4, 1);
+            const bush = new THREE.Mesh(bushGeo, leafMaterial);
+            bush.position.set((Math.random() - 0.5) * 1.0, 0.3 + Math.random() * 0.4, (Math.random() - 0.5) * 1.0);
+            bush.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            bush.castShadow = true;
+            bush.receiveShadow = true;
+            bushGroup.add(bush);
+        }
+        bushGroup.position.set(px + (Math.random() - 0.5) * 1.8, 0, pz + (Math.random() - 0.5) * 1.8);
+        group.add(bushGroup);
     }
     else if (type === 1) {
         const stemGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.35, 6);
@@ -4229,7 +4356,11 @@ async function startGame() {
     player.ammoReserve = WEAPONS.shotgun.reserve;
     player.clipMax = WEAPONS.shotgun.clipMax;
     document.getElementById('weapon-name').innerText = WEAPONS.shotgun.name;
-    player.position.set(GRID_SIZE * 1.0, 1.8, GRID_SIZE * 1.0);
+    if (currentLevel === 2) {
+        player.position.set(GRID_SIZE * 10.0, 1.8, GRID_SIZE * 10.0);
+    } else {
+        player.position.set(GRID_SIZE * 1.0, 1.8, GRID_SIZE * 1.0);
+    }
     player.yaw = 0;
     player.pitch = 0;
     player.isReloading = false;
@@ -4467,7 +4598,11 @@ async function startNextLevel() {
         door.state = 'CLOSED';
         door.isOpen = false;
     });
-    player.position.set(GRID_SIZE * 1.0, 1.8, GRID_SIZE * 1.0);
+    if (currentLevel === 2) {
+        player.position.set(GRID_SIZE * 10.0, 1.8, GRID_SIZE * 10.0);
+    } else {
+        player.position.set(GRID_SIZE * 1.0, 1.8, GRID_SIZE * 1.0);
+    }
     camera.position.copy(player.position);
     // Limpiar partículas y proyectiles
     clearTransientParticles();
@@ -4921,6 +5056,15 @@ function animate() {
     drawBiomonitor(deltaTime);
     if (typeof grassMaterial !== 'undefined' && grassMaterial) {
         grassMaterial.uniforms.time.value = performance.now() * 0.002;
+    }
+    if (grassMaterialShader) {
+        grassMaterialShader.uniforms.time.value = performance.now() * 0.001;
+    }
+    if (leafMaterialShader) {
+        leafMaterialShader.uniforms.time.value = performance.now() * 0.001;
+    }
+    if (cloudMesh && cloudMesh.material.map) {
+        cloudMesh.material.map.offset.x -= deltaTime * 0.02;
     }
     if (gameState === 'PLAYING') {
         updateFlashlightFlicker(deltaTime);
