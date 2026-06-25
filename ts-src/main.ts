@@ -1678,20 +1678,20 @@ function updateLevelEnvironment() {
         }
     }
     else if (currentLevel === 4) {
-        fogColor = 0x1a0505;
-        fogDensity = 0.02;
+        fogColor = 0x210404; // Deep dark red
+        fogDensity = 0.035; // Thicker fog for heat illusion
         wallTex = generateInfernalWallTexture();
         wallHazardTex = generateInfernalWallTexture();
         wallBloodTex = generateInfernalWallTexture();
         floorTex = generateInfernalFloorTexture();
         ceilingTex = generateInfernalCeilingTexture();
-        hemiSkyColor = 0x441111;
-        hemiGroundColor = 0x220505;
-        hemiIntensity = 0.6;
-        toneExposure = 0.9;
+        hemiSkyColor = 0x551111;
+        hemiGroundColor = 0x330000;
+        hemiIntensity = 0.8;
+        toneExposure = 0.8; // Darker base so emissive lava pops
         if (bloomPass) {
-            bloomPass.threshold = 0.6;
-            bloomPass.strength = 0.9;
+            bloomPass.threshold = 0.3; // Catch the glowing cracks
+            bloomPass.strength = 1.8; // Intense lava glow!
         }
     }
     else {
@@ -1754,6 +1754,14 @@ function updateLevelEnvironment() {
     }
     if (wallMaterialStandard) {
         wallMaterialStandard.map = wallTex;
+        if (currentLevel === 4) {
+            wallMaterialStandard.emissiveMap = wallTex;
+            wallMaterialStandard.emissive = new THREE.Color(0xff4400);
+            wallMaterialStandard.emissiveIntensity = 1.8;
+        } else {
+            wallMaterialStandard.emissiveMap = null;
+            wallMaterialStandard.emissive.setHex(0x000000);
+        }
         if (typeof createNormalMapFromCanvas !== 'undefined') {
             wallMaterialStandard.normalMap = createNormalMapFromCanvas(wallTex, currentLevel === 2 ? 1.0 : 3.0);
             wallMaterialStandard.roughnessMap = createRoughnessMapFromCanvas(wallTex, 1.2, 0.1);
@@ -1762,6 +1770,14 @@ function updateLevelEnvironment() {
     }
     if (wallMaterialHazard) {
         wallMaterialHazard.map = wallHazardTex;
+        if (currentLevel === 4) {
+            wallMaterialHazard.emissiveMap = wallHazardTex;
+            wallMaterialHazard.emissive = new THREE.Color(0xff4400);
+            wallMaterialHazard.emissiveIntensity = 1.8;
+        } else {
+            wallMaterialHazard.emissiveMap = null;
+            wallMaterialHazard.emissive.setHex(0x000000);
+        }
         if (typeof createNormalMapFromCanvas !== 'undefined') {
             wallMaterialHazard.normalMap = createNormalMapFromCanvas(wallHazardTex, currentLevel === 2 ? 1.0 : 2.5);
             wallMaterialHazard.roughnessMap = createRoughnessMapFromCanvas(wallHazardTex, 1.0, 0.2);
@@ -1770,6 +1786,14 @@ function updateLevelEnvironment() {
     }
     if (wallMaterialBlood) {
         wallMaterialBlood.map = wallBloodTex;
+        if (currentLevel === 4) {
+            wallMaterialBlood.emissiveMap = wallBloodTex;
+            wallMaterialBlood.emissive = new THREE.Color(0xff4400);
+            wallMaterialBlood.emissiveIntensity = 1.8;
+        } else {
+            wallMaterialBlood.emissiveMap = null;
+            wallMaterialBlood.emissive.setHex(0x000000);
+        }
         if (typeof createNormalMapFromCanvas !== 'undefined') {
             wallMaterialBlood.normalMap = createNormalMapFromCanvas(wallBloodTex, currentLevel === 2 ? 1.0 : 3.0);
             wallMaterialBlood.roughnessMap = createRoughnessMapFromCanvas(wallBloodTex, 2.0, -0.2);
@@ -1778,6 +1802,14 @@ function updateLevelEnvironment() {
     }
     if (floorMaterial) {
         floorMaterial.map = floorTex;
+        if (currentLevel === 4) {
+            floorMaterial.emissiveMap = floorTex;
+            floorMaterial.emissive = new THREE.Color(0xff4400);
+            floorMaterial.emissiveIntensity = 1.5;
+        } else {
+            floorMaterial.emissiveMap = null;
+            floorMaterial.emissive.setHex(0x000000);
+        }
         if (typeof createNormalMapFromCanvas !== 'undefined') {
             floorMaterial.normalMap = createNormalMapFromCanvas(floorTex, currentLevel === 2 ? 1.5 : 2.5);
             floorMaterial.roughnessMap = createRoughnessMapFromCanvas(floorTex, currentLevel === 2 ? 1.8 : 1.5, currentLevel === 2 ? 0.2 : 0.2);
@@ -2249,7 +2281,7 @@ function spawnFuses() {
     fuses = [];
     fusesCollected = 0;
     updateFuseHUD();
-    if (currentLevel === 2) return;
+    if (currentLevel === 2 || currentLevel === 4) return;
     let spawned = 0;
     let attempts = 0;
     while (spawned < 3 && attempts < 150) {
@@ -2305,7 +2337,7 @@ function updateFuseHUD() {
     const fuseCountEl = document.getElementById('fuse-count');
     if (fuseCountEl) {
         const trackerEl = fuseCountEl.parentElement;
-        if (currentLevel === 2) {
+        if (currentLevel === 2 || currentLevel === 4) {
             if (trackerEl) trackerEl.style.display = 'none';
             return;
         } else {

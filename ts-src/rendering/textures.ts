@@ -2809,7 +2809,7 @@ export function generateMountainCeilingTexture() {
 
 export function generateInfernalWallTexture() {
     const canvas = document.createElement('canvas');
-    const S = 512;
+    const S = 1024;
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
@@ -2820,51 +2820,51 @@ export function generateInfernalWallTexture() {
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, S, S);
     // Noise texture: dark red/black speckles
-    for (let i = 0; i < 8000; i++) {
+    for (let i = 0; i < 30000; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
-        const sz = 1 + Math.random() * 3;
+        const sz = 1 + Math.random() * 5;
         const v = Math.floor(Math.random() * 20);
         ctx.fillStyle = `rgba(${40 + v},${10 + v},${5 + v},0.5)`;
         ctx.fillRect(x, y, sz, sz);
     }
-    // Lava cracks: 12 cracks going mostly downward
-    for (let c = 0; c < 12; c++) {
+    // Lava cracks: 24 cracks going mostly downward
+    for (let c = 0; c < 24; c++) {
         let cx = Math.random() * S;
         let cy = Math.random() * S * 0.3;
-        const segments = 8 + Math.floor(Math.random() * 6);
+        const segments = 10 + Math.floor(Math.random() * 8);
         // Shadow crack (darker, offset)
         ctx.strokeStyle = 'rgba(80, 10, 0, 0.6)';
-        ctx.lineWidth = 3 + Math.random() * 2;
+        ctx.lineWidth = 6 + Math.random() * 4;
         ctx.beginPath();
-        ctx.moveTo(cx + 2, cy + 2);
-        let scx = cx + 2, scy = cy + 2;
+        ctx.moveTo(cx + 4, cy + 4);
+        let scx = cx + 4, scy = cy + 4;
         for (let s = 0; s < segments; s++) {
-            scx += (Math.random() - 0.5) * 40;
-            scy += 20 + Math.random() * 30;
+            scx += (Math.random() - 0.5) * 80;
+            scy += 40 + Math.random() * 60;
             ctx.lineTo(scx, scy);
         }
         ctx.stroke();
         // Main lava crack
-        ctx.strokeStyle = 'rgba(255, 80, 0, 0.8)';
-        ctx.lineWidth = 1.5 + Math.random() * 2;
+        ctx.strokeStyle = 'rgba(255, 80, 0, 0.9)';
+        ctx.lineWidth = 3 + Math.random() * 3;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         for (let s = 0; s < segments; s++) {
-            cx += (Math.random() - 0.5) * 40;
-            cy += 20 + Math.random() * 30;
+            cx += (Math.random() - 0.5) * 80;
+            cy += 40 + Math.random() * 60;
             ctx.lineTo(cx, cy);
         }
         ctx.stroke();
     }
-    // Glowing lava patches: 8 radial gradients
-    for (let p = 0; p < 8; p++) {
+    // Glowing lava patches: 16 radial gradients
+    for (let p = 0; p < 16; p++) {
         const px = Math.random() * S;
         const py = Math.random() * S;
-        const pr = 20 + Math.random() * 40;
+        const pr = 40 + Math.random() * 80;
         const pGrad = ctx.createRadialGradient(px, py, 0, px, py, pr);
-        pGrad.addColorStop(0, 'rgba(255, 100, 0, 0.7)');
-        pGrad.addColorStop(0.5, 'rgba(200, 50, 0, 0.3)');
+        pGrad.addColorStop(0, 'rgba(255, 120, 0, 0.8)');
+        pGrad.addColorStop(0.5, 'rgba(200, 50, 0, 0.4)');
         pGrad.addColorStop(1, 'rgba(100, 20, 0, 0)');
         ctx.fillStyle = pGrad;
         ctx.beginPath();
@@ -2872,12 +2872,12 @@ export function generateInfernalWallTexture() {
         ctx.fill();
     }
     // Rock formations: dark irregular shapes for depth
-    for (let r = 0; r < 10; r++) {
+    for (let r = 0; r < 20; r++) {
         const rx = Math.random() * S;
         const ry = Math.random() * S;
-        const rw = 30 + Math.random() * 60;
-        const rh = 20 + Math.random() * 40;
-        ctx.fillStyle = `rgba(${5 + Math.floor(Math.random() * 10)},${2 + Math.floor(Math.random() * 5)},${Math.floor(Math.random() * 3)},0.6)`;
+        const rw = 60 + Math.random() * 120;
+        const rh = 40 + Math.random() * 80;
+        ctx.fillStyle = `rgba(${5 + Math.floor(Math.random() * 10)},${2 + Math.floor(Math.random() * 5)},${Math.floor(Math.random() * 3)},0.8)`;
         ctx.beginPath();
         ctx.moveTo(rx, ry);
         ctx.lineTo(rx + rw * 0.3, ry - rh * 0.5);
@@ -2895,7 +2895,7 @@ export function generateInfernalWallTexture() {
 }
 export function generateInfernalFloorTexture() {
     const canvas = document.createElement('canvas');
-    const S = 512;
+    const S = 1024;
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
@@ -2903,62 +2903,62 @@ export function generateInfernalFloorTexture() {
     ctx.fillStyle = '#0a0606';
     ctx.fillRect(0, 0, S, S);
     // Noise: dark gray/red speckles
-    for (let i = 0; i < 8000; i++) {
+    for (let i = 0; i < 30000; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
-        const sz = 1 + Math.random() * 3;
+        const sz = 1 + Math.random() * 5;
         const v = Math.floor(Math.random() * 15);
         ctx.fillStyle = `rgba(${20 + v},${8 + v},${5 + v},0.5)`;
         ctx.fillRect(x, y, sz, sz);
     }
-    // Cracks: network of glowing orange/red lava veins (18 cracks)
-    for (let c = 0; c < 18; c++) {
+    // Cracks: network of glowing orange/red lava veins (36 cracks)
+    for (let c = 0; c < 36; c++) {
         let cx = Math.random() * S;
         let cy = Math.random() * S;
-        const segments = 6 + Math.floor(Math.random() * 8);
+        const segments = 10 + Math.floor(Math.random() * 12);
         const angle = Math.random() * Math.PI * 2;
         const dx = Math.cos(angle);
         const dy = Math.sin(angle);
         // Glow under crack
-        ctx.strokeStyle = 'rgba(200, 60, 0, 0.25)';
-        ctx.lineWidth = 6 + Math.random() * 4;
+        ctx.strokeStyle = 'rgba(200, 60, 0, 0.4)';
+        ctx.lineWidth = 12 + Math.random() * 8;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         let gcx = cx, gcy = cy;
         for (let s = 0; s < segments; s++) {
-            gcx += dx * (15 + Math.random() * 25) + (Math.random() - 0.5) * 20;
-            gcy += dy * (15 + Math.random() * 25) + (Math.random() - 0.5) * 20;
+            gcx += dx * (30 + Math.random() * 50) + (Math.random() - 0.5) * 40;
+            gcy += dy * (30 + Math.random() * 50) + (Math.random() - 0.5) * 40;
             ctx.lineTo(gcx, gcy);
         }
         ctx.stroke();
         // Main crack line
-        ctx.strokeStyle = `rgba(255, ${60 + Math.floor(Math.random() * 40)}, 0, 0.8)`;
-        ctx.lineWidth = 1 + Math.random() * 2;
+        ctx.strokeStyle = `rgba(255, ${60 + Math.floor(Math.random() * 60)}, 0, 0.9)`;
+        ctx.lineWidth = 2 + Math.random() * 4;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         let mcx = cx, mcy = cy;
         for (let s = 0; s < segments; s++) {
-            mcx += dx * (15 + Math.random() * 25) + (Math.random() - 0.5) * 20;
-            mcy += dy * (15 + Math.random() * 25) + (Math.random() - 0.5) * 20;
+            mcx += dx * (30 + Math.random() * 50) + (Math.random() - 0.5) * 40;
+            mcy += dy * (30 + Math.random() * 50) + (Math.random() - 0.5) * 40;
             ctx.lineTo(mcx, mcy);
         }
         ctx.stroke();
     }
     // Ember spots: small bright orange/yellow dots
-    for (let e = 0; e < 60; e++) {
+    for (let e = 0; e < 120; e++) {
         const ex = Math.random() * S;
         const ey = Math.random() * S;
-        const er = 1 + Math.random() * 3;
+        const er = 2 + Math.random() * 6;
         const eGrad = ctx.createRadialGradient(ex, ey, 0, ex, ey, er * 3);
-        eGrad.addColorStop(0, `rgba(255, ${200 + Math.floor(Math.random() * 55)}, 0, 0.9)`);
-        eGrad.addColorStop(0.4, 'rgba(255, 120, 0, 0.4)');
+        eGrad.addColorStop(0, `rgba(255, ${200 + Math.floor(Math.random() * 55)}, 0, 1.0)`);
+        eGrad.addColorStop(0.4, 'rgba(255, 120, 0, 0.6)');
         eGrad.addColorStop(1, 'rgba(150, 30, 0, 0)');
         ctx.fillStyle = eGrad;
         ctx.beginPath();
         ctx.arc(ex, ey, er * 3, 0, Math.PI * 2);
         ctx.fill();
         // Bright core
-        ctx.fillStyle = 'rgba(255, 255, 150, 0.9)';
+        ctx.fillStyle = 'rgba(255, 255, 200, 1.0)';
         ctx.beginPath();
         ctx.arc(ex, ey, er * 0.5, 0, Math.PI * 2);
         ctx.fill();
@@ -2970,7 +2970,7 @@ export function generateInfernalFloorTexture() {
 }
 export function generateInfernalCeilingTexture() {
     const canvas = document.createElement('canvas');
-    const S = 512;
+    const S = 1024;
     canvas.width = S;
     canvas.height = S;
     const ctx = canvas.getContext('2d');
