@@ -151,7 +151,7 @@ export const MAP2 = [
     [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ];
-export const MAP3 = [];
+export const MAP3: number[][] = [];
 for (let i = 0; i < 185; i++) {
     if (i === 0) {
         // Pared trasera de inicio

@@ -64,6 +64,7 @@ let grassMaterialShader = null;
 let cloudMesh = null;
 // Variables de Progresión y Nuevas Armas
 let currentLevel = 1;
+let builtMapLevel = null;
 
 let mapChunks = []; // Array para guardar mallas del mapa y su coordenada Z
 let activeMap = MAP;
@@ -126,6 +127,7 @@ let playerFlashlight;
 let flashlightCycleTimer = 0;
 let flashlightUserEnabled = true;
 let dustParticles;
+const FLASHLIGHT_BASE_INTENSITY = 2.5;
 
 // Estado del juego
 let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER, VICTORY
@@ -149,6 +151,9 @@ async function initEngine() {
     clock = new THREE.Clock();
     // Renderizador con mejoras de calidad gráfica
     renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    // Three r128 reads shader link logs synchronously. In production that query
+    // can stall for seconds; opt back in with ?debugShaders=1 while developing.
+    renderer.debug.checkShaderErrors = new URLSearchParams(window.location.search).has('debugShaders');
     adaptiveResolutionState = createAdaptiveResolutionState(window.devicePixelRatio);
     renderer.setPixelRatio(adaptiveResolutionState.scale);
     const initialViewport = getRenderViewport(window.innerWidth, window.innerHeight);
@@ -192,7 +197,7 @@ async function initEngine() {
     hemisphereLight = new THREE.HemisphereLight(0x111122, 0x080810, 0.1);
     scene.add(hemisphereLight);
     // Linterna acoplada a la cámara del jugador (SpotLight) - Potente y amplio rango
-    playerFlashlight = new THREE.SpotLight(0xfff9e6, 2.5, 30, Math.PI / 4.5, 0.8, 1.5);
+    playerFlashlight = new THREE.SpotLight(0xfff9e6, 0, 30, Math.PI / 4.5, 0.8, 1.5);
     playerFlashlight.castShadow = true;
     playerFlashlight.shadow.mapSize.width = 1024;
     playerFlashlight.shadow.mapSize.height = 1024;
@@ -207,7 +212,9 @@ async function initEngine() {
     flashTarget.position.set(0, 0.58, -1);
     camera.add(flashTarget);
     playerFlashlight.target = flashTarget;
-    playerFlashlight.visible = false;
+    // Keep the light visible so the shader light topology never changes.
+    // Turning it on, off, and flickering only changes its intensity.
+    playerFlashlight.visible = true;
 
     // --- POLVO ATMOSFÉRICO ---
     const particleCount = 2500;
@@ -288,51 +295,64 @@ async function initEngine() {
     });
 
     zombieFaceTexture = generateZombieFaceTexture();
-    // Carga del modelo de zombie GLB original en segundo plano
-    try {
-        console.log("Iniciando carga de modelo de zombie GLB original en segundo plano...");
-        const gltfLoader = new THREE.GLTFLoader();
-        gltfLoader.load('assets/Meshy_AI_1_0613035518_texture.glb', (gltf) => {
-            cachedZombieModel = gltf.scene;
-            // Pre-calcular la escala y el offset de Y para optimizar instanciación
-            cachedZombieModel.updateMatrixWorld(true);
-            const box = new THREE.Box3().setFromObject(cachedZombieModel);
-            const size = box.getSize(new THREE.Vector3());
-            // Proteger contra altura 0 o NaN
-            let height = size.y;
-            if (isNaN(height) || height < 0.01) {
-                height = 1.8;
-            }
-            zombieGLBScaleFactor = 1.8 / height;
-            if (isNaN(zombieGLBScaleFactor) || !isFinite(zombieGLBScaleFactor)) {
-                zombieGLBScaleFactor = 1.0;
-            }
-            // Aplicar escala al modelo base
-            cachedZombieModel.scale.set(zombieGLBScaleFactor, zombieGLBScaleFactor, zombieGLBScaleFactor);
-            cachedZombieModel.updateMatrixWorld(true);
-            // Calcular el offset
-            const boxScaled = new THREE.Box3().setFromObject(cachedZombieModel);
-            zombieGLBBaseYOffset = -boxScaled.min.y;
-            if (isNaN(zombieGLBBaseYOffset) || !isFinite(zombieGLBBaseYOffset)) {
-                zombieGLBBaseYOffset = 0.0;
-            }
-            console.log(`Modelo de zombie GLB original cargado y pre-escalado. Altura original: ${height}, Factor de escala: ${zombieGLBScaleFactor}, Offset Y: ${zombieGLBBaseYOffset}`);
-        }, undefined, (err) => {
-            console.error("Error al cargar el zombie GLB original, se usará el modelo procedimental de respaldo:", err);
-        });
-    }
-    catch (err) {
-        console.error("Error al inicializar el cargador GLTF:", err);
-    }
+    freeStartBtn.disabled = true;
+    const zombieModelReady = new Promise((resolve) => {
+        // Carga del modelo de zombie GLB original en segundo plano
+        try {
+            console.log("Iniciando carga de modelo de zombie GLB original en segundo plano...");
+            const gltfLoader = new THREE.GLTFLoader();
+            gltfLoader.load('assets/Meshy_AI_1_0613035518_texture.glb', (gltf) => {
+                cachedZombieModel = gltf.scene;
+                // Pre-calcular la escala y el offset de Y para optimizar instanciación
+                cachedZombieModel.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(cachedZombieModel);
+                const size = box.getSize(new THREE.Vector3());
+                // Proteger contra altura 0 o NaN
+                let height = size.y;
+                if (isNaN(height) || height < 0.01) {
+                    height = 1.8;
+                }
+                zombieGLBScaleFactor = 1.8 / height;
+                if (isNaN(zombieGLBScaleFactor) || !isFinite(zombieGLBScaleFactor)) {
+                    zombieGLBScaleFactor = 1.0;
+                }
+                // Aplicar escala al modelo base
+                cachedZombieModel.scale.set(zombieGLBScaleFactor, zombieGLBScaleFactor, zombieGLBScaleFactor);
+                cachedZombieModel.updateMatrixWorld(true);
+                // Calcular el offset
+                const boxScaled = new THREE.Box3().setFromObject(cachedZombieModel);
+                zombieGLBBaseYOffset = -boxScaled.min.y;
+                if (isNaN(zombieGLBBaseYOffset) || !isFinite(zombieGLBBaseYOffset)) {
+                    zombieGLBBaseYOffset = 0.0;
+                }
+                console.log(`Modelo de zombie GLB original cargado y pre-escalado. Altura original: ${height}, Factor de escala: ${zombieGLBScaleFactor}, Offset Y: ${zombieGLBBaseYOffset}`);
+                resolve();
+            }, undefined, (err) => {
+                resolve();
+                console.error("Error al cargar el zombie GLB original, se usará el modelo procedimental de respaldo:", err);
+            });
+        }
+        catch (err) {
+            console.error("Error al inicializar el cargador GLTF:", err);
+            resolve();
+        }
+    });
     // El jefe se carga bajo demanda al entrar al nivel 4.
     // Construir el mapa
     buildMap3D();
     await addBloodWallMessages(scene);
     // Ensamblar arma
     buildWeapon3D();
+    await zombieModelReady;
+    // Warm the first gameplay scene behind the menu. The pristine entities are
+    // reused on JUGAR so the first combat frame has no new shader programs.
+    spawnFuses();
+    spawnZombies();
+    renderer.compile(scene, camera);
     // Manejo de eventos
     window.addEventListener('resize', onWindowResize);
     setupControls();
+    freeStartBtn.disabled = false;
     // Bucle de renderizado
     animate();
 }
@@ -1263,6 +1283,7 @@ function buildLevelOneMazeLamp(posX, posZ) {
 }
 
 function buildMap3D() {
+    builtMapLevel = currentLevel;
     const activeMap = getMapForLevel(currentLevel);
     const wallGeo = new THREE.BoxGeometry(GRID_SIZE, WALL_HEIGHT, GRID_SIZE);
     for (let z = 0; z < activeMap.length; z++) {
@@ -1666,6 +1687,7 @@ function clearCurrentMap() {
     colliders = [];
     interactiveDoors = [];
     mapChunks = [];
+    builtMapLevel = null;
 }
 function updateLevelEnvironment() {
     activeMap = getMapForLevel(currentLevel);
@@ -2402,8 +2424,6 @@ function spawnFuses() {
             }
             catch (e) { }
         }
-        if (f.light)
-            scene.remove(f.light);
     });
     fuses = [];
     fusesCollected = 0;
@@ -2445,12 +2465,8 @@ function spawnFuses() {
             bottomCap.position.y = -0.22;
             fuseGroup.add(bottomCap);
             scene.add(fuseGroup);
-            const light = new THREE.Group();
-            light.position.set(px, 0.8, pz);
-            scene.add(light);
             fuses.push({
                 mesh: fuseGroup,
-                light: light,
                 gridX: x,
                 gridZ: z,
                 angle: Math.random() * Math.PI * 2,
@@ -3931,18 +3947,24 @@ function showFeedback(text) {
 }
 function toggleFlashlight() {
     if (playerFlashlight) {
-        flashlightUserEnabled = !playerFlashlight.visible;
+        flashlightUserEnabled = !flashlightUserEnabled;
         if (flashlightUserEnabled)
             flashlightCycleTimer = 0;
-        playerFlashlight.visible = flashlightUserEnabled;
+        setFlashlightOutput(flashlightUserEnabled);
         showFeedback(flashlightUserEnabled ? "LINTERNA: ENCENDIDA" : "LINTERNA: APAGADA");
     }
+}
+function setFlashlightOutput(enabled) {
+    if (!playerFlashlight)
+        return;
+    playerFlashlight.visible = true;
+    playerFlashlight.intensity = enabled ? FLASHLIGHT_BASE_INTENSITY : 0;
 }
 function updateFlashlightFlicker(deltaTime) {
     if (!playerFlashlight)
         return;
     if (!flashlightUserEnabled) {
-        playerFlashlight.visible = false;
+        setFlashlightOutput(false);
         return;
     }
     flashlightCycleTimer = (flashlightCycleTimer + deltaTime) % FLASHLIGHT_FLICKER_CYCLE_SECONDS;
@@ -3952,13 +3974,13 @@ function updateFlashlightFlicker(deltaTime) {
     const fullyOff = flashlightCycleTimer >= offStart && flashlightCycleTimer < secondFlickerStart;
     const flickerBeforeOn = flashlightCycleTimer >= secondFlickerStart;
     if (fullyOff) {
-        playerFlashlight.visible = false;
+        setFlashlightOutput(false);
     }
     else if (flickerBeforeOff || flickerBeforeOn) {
-        playerFlashlight.visible = Math.floor(flashlightCycleTimer * FLASHLIGHT_FLICKER_RATE) % 2 === 0;
+        setFlashlightOutput(Math.floor(flashlightCycleTimer * FLASHLIGHT_FLICKER_RATE) % 2 === 0);
     }
     else {
-        playerFlashlight.visible = true;
+        setFlashlightOutput(true);
     }
 }
 // --- ACCIÓN: INTERACTUAR ---
@@ -4316,6 +4338,8 @@ function reload() {
 // --- FLUJO DE ESTADOS DE JUEGO ---
 async function startGame() {
     AudioSynth.init();
+    const shouldRebuildInitialMap = builtMapLevel !== 1;
+    const shouldReuseInitialEntities = !shouldRebuildInitialMap && gameState === 'MENU' && zombies.length > 0 && fuses.length === 3;
     // Restablecer variables de progresión y tienda
     currentLevel = 1;
     supplyPoints = 0;
@@ -4324,11 +4348,14 @@ async function startGame() {
     wiringFixed = false;
     clearSpiders();
     document.getElementById('level-display').innerText = `SECTOR C-14   |   NIVEL ${currentLevel}`;
-    // Reconstruir el mapa para el Nivel 1
-    clearCurrentMap();
-    updateLevelEnvironment();
-    buildMap3D();
-    await addBloodWallMessages(scene, currentLevel);
+    // Level 1 is already built and compiled behind the start menu. Reusing it
+    // avoids invalidating programs and recompiling shaders on JUGAR or retry.
+    if (shouldRebuildInitialMap) {
+        clearCurrentMap();
+        updateLevelEnvironment();
+        buildMap3D();
+        await addBloodWallMessages(scene, currentLevel);
+    }
     // Restablecer textos de victoria original en el overlay
     const titleEl = victoryOverlay.querySelector('.victory-title');
     const subtitleEl = victoryOverlay.querySelector('.subtitle');
@@ -4371,8 +4398,7 @@ async function startGame() {
     camera.rotation.set(0, 0, 0);
     flashlightCycleTimer = 0;
     flashlightUserEnabled = true;
-    if (playerFlashlight)
-        playerFlashlight.visible = true;
+    setFlashlightOutput(true);
     // Resetea compuerta salida
     const exitDoor = colliders.find(c => c.isExit);
     if (exitDoor && exitDoor.mesh) {
@@ -4406,10 +4432,12 @@ async function startGame() {
     clearTransientParticles();
     acidProjectiles.forEach(p => scene.remove(p.mesh));
     acidProjectiles = [];
-    // Spawnear fusibles
-    spawnFuses();
-    // Spawneo de zombis
-    spawnZombies();
+    if (!shouldReuseInitialEntities) {
+        // Spawnear fusibles
+        spawnFuses();
+        // Spawneo de zombis
+        spawnZombies();
+    }
     updateHUD();
     gameState = 'PLAYING';
     menuOverlay.classList.remove('active');
@@ -5127,7 +5155,6 @@ function animate() {
             fuse.mesh.position.y = fuse.baseY + Math.sin(fuse.angle) * 0.15;
             fuse.mesh.rotation.y += deltaTime * 1.5;
             fuse.mesh.rotation.x = Math.sin(fuse.angle * 0.5) * 0.1;
-            fuse.light.intensity = 1.0 + Math.sin(fuse.angle * 4) * 0.35;
             // Emitir chispas eléctricas azules procedimentales
             if (eventOccursForDelta(FUSE_SPARK_RATE, deltaTime, Math.random())) {
                 const sparkPos = fuse.mesh.position.clone();
@@ -5144,7 +5171,6 @@ function animate() {
             if (dist < 1.3) {
                 // ¡Recogido!
                 scene.remove(fuse.mesh);
-                scene.remove(fuse.light);
                 fuses.splice(i, 1);
                 fusesCollected++;
                 updateFuseHUD();
