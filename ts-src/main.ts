@@ -64,6 +64,8 @@ let grassMaterialShader = null;
 let cloudMesh = null;
 // Variables de Progresión y Nuevas Armas
 let currentLevel = 1;
+
+let mapChunks = []; // Array para guardar mallas del mapa y su coordenada Z
 let activeMap = MAP;
 let supplyPoints = 0;
 let unlockedWeapons = { shotgun: true, glock: false, m4: false };
@@ -1309,6 +1311,7 @@ function buildMap3D() {
                 floorMesh.position.set(posX, 0, posZ);
                 floorMesh.receiveShadow = true;
                 scene.add(floorMesh);
+                mapChunks.push({ zIndex: z, mesh: floorMesh });
                 // Techo (excepto en la jungla)
                 if (currentLevel !== 2) {
                     const ceilGeo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE);
@@ -1318,6 +1321,36 @@ function buildMap3D() {
                     ceilMesh.position.set(posX, WALL_HEIGHT, posZ);
                     ceilMesh.receiveShadow = true;
                     scene.add(ceilMesh);
+                    mapChunks.push({ zIndex: z, mesh: ceilMesh });
+                    
+                    // Luces bioluminiscentes en techo (Nivel 3)
+                    if (currentLevel === 3 && Math.random() < 0.02) {
+                        const bioGroup = new THREE.Group();
+                        bioGroup.name = "map_ceiling_light";
+                        
+                        // Hongo emisivo en el techo
+                        const spotGeo = new THREE.SphereGeometry(0.1 + Math.random() * 0.15, 6, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+                        const spotMat = new THREE.MeshStandardMaterial({
+                            color: 0x44ffaa, emissive: 0x22cc66, emissiveIntensity: 1.2,
+                            roughness: 0.2
+                        });
+                        const spot = new THREE.Mesh(spotGeo, spotMat);
+                        spot.position.set(posX + (Math.random() - 0.5) * 1.5, WALL_HEIGHT - 0.05, posZ + (Math.random() - 0.5) * 1.5);
+                        spot.rotation.x = Math.PI; // Mirando hacia abajo
+                        bioGroup.add(spot);
+                        
+                        // Luz real
+                        const bioLight = new THREE.Group(); // Eliminado PointLight
+                        bioLight.position.copy(spot.position);
+                        bioLight.position.y -= 0.1;
+                        bioGroup.add(bioLight);
+                        
+                        scene.add(bioGroup);
+                        mapChunks.push({ zIndex: z, mesh: bioGroup });
+                        
+                        // Add to array for cleanup if needed? Wait, clearCurrentMap clears by name 'map_ceiling' but not 'map_ceiling_light'. I should name it 'map_ceiling'.
+                        bioGroup.name = "map_ceiling";
+                    }
                 }
             }
             // Paredes
@@ -1406,6 +1439,7 @@ function buildMap3D() {
                         }
 
                         scene.add(treeGroup);
+                        mapChunks.push({ zIndex: z, mesh: treeGroup });
                     }
                     collisionMesh = null; // Árboles manejados manualmente
                 } else {
@@ -1424,54 +1458,8 @@ function buildMap3D() {
                     wall.castShadow = true;
                     wall.receiveShadow = true;
                     scene.add(wall);
+                    mapChunks.push({ zIndex: z, mesh: wall });
                     collisionMesh = wall;
-
-                    if (currentLevel === 3) {
-                        const checkAndSpawnSnow = (dx, dz) => {
-                            if (z + dz >= 0 && z + dz < activeMap.length && x + dx >= 0 && x + dx < activeMap[0].length) {
-                                if (activeMap[z + dz][x + dx] !== 1) { 
-                                    const sGroup = new THREE.Group();
-                                    sGroup.name = "map_snow"; // Nombrarlo para que clearCurrentMap lo borre!
-                                    const parts = 4 + Math.floor(Math.random() * 3);
-                                    for(let i=0; i<parts; i++) {
-                                        const h = WALL_HEIGHT * (0.4 + Math.random() * 0.5);
-                                        const r = 0.15 + Math.random() * 0.15; // Mucho más fino (radio pequeño)
-                                        const snowG = new THREE.DodecahedronGeometry(r, 1);
-                                        if (!globalSnowMaterial) {
-                                            globalSnowMaterial = new THREE.MeshStandardMaterial({
-                                                color: 0xebf2f8, roughness: 0.85, metalness: 0.2,
-                                                envMap: envCamera ? envCamera.renderTarget.texture : null
-                                            });
-                                        }
-                                        const sm = new THREE.Mesh(snowG, globalSnowMaterial);
-                                        // Posicionarlo casi incrustado en la pared
-                                        const offsetX = dx * (GRID_SIZE / 2 - 0.1) + (Math.random()-0.5) * 0.1;
-                                        const offsetZ = dz * (GRID_SIZE / 2 - 0.1) + (Math.random()-0.5) * 0.1;
-                                        const distSideX = (dz !== 0) ? (Math.random()-0.5)*(GRID_SIZE*0.9) : 0;
-                                        const distSideZ = (dx !== 0) ? (Math.random()-0.5)*(GRID_SIZE*0.9) : 0;
-                                        sm.position.set(posX + offsetX + distSideX, (h / 2) + Math.random() * 0.2, posZ + offsetZ + distSideZ);
-                                        sm.scale.y = h / r;
-                                        sm.rotation.set(0, Math.random() * Math.PI, 0); // No rotar en X/Z para que no sobresalgan picos
-                                        if (dx !== 0) {
-                                            sm.scale.x = 0.2; // Aplastar la nieve contra la pared
-                                            sm.scale.z = 1.8; // Estirar a lo largo de la pared
-                                        } else {
-                                            sm.scale.z = 0.2;
-                                            sm.scale.x = 1.8;
-                                        }
-                                        sm.castShadow = false; // Sin sombras extra FPS
-                                        sm.receiveShadow = false; // Sin sombras extra FPS
-                                        sGroup.add(sm);
-                                    }
-                                    scene.add(sGroup);
-                                }
-                            }
-                        };
-                        checkAndSpawnSnow(1, 0);
-                        checkAndSpawnSnow(-1, 0);
-                        checkAndSpawnSnow(0, 1);
-                        checkAndSpawnSnow(0, -1);
-                    }
                 }
 
                 // Guardar colisionadores
@@ -1530,6 +1518,7 @@ function buildMap3D() {
                         maxZ: posZ + 0.2
                     });
                     buildFuseBox3D(posX, posZ);
+                    // Las cajas de fusibles no se ocultan dinámicamente porque son críticas
                 }
             }
             else if (type === 3) {
@@ -1676,6 +1665,7 @@ function clearCurrentMap() {
     }
     colliders = [];
     interactiveDoors = [];
+    mapChunks = [];
 }
 function updateLevelEnvironment() {
     activeMap = getMapForLevel(currentLevel);
@@ -1710,8 +1700,8 @@ function updateLevelEnvironment() {
         hemiIntensity = LEVEL_THREE_HEMI_INTENSITY;
         toneExposure = LEVEL_THREE_TONE_EXPOSURE;
         if (bloomPass) {
-            bloomPass.threshold = 0.45;
-            bloomPass.strength = 1.4; // Max graphics glowing bloom
+            bloomPass.threshold = 0.3; // Catch bioluminescent glow
+            bloomPass.strength = 1.6; // Intense mushroom/crystal glow
         }
     }
     else if (currentLevel === 4) {
@@ -1749,7 +1739,7 @@ function updateLevelEnvironment() {
         }
     }
 
-    if (currentLevel === 2 || currentLevel === 3) {
+    if (currentLevel === 2) {
         if (!sunLight) {
             sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
             sunLight.position.set(60, 100, 60);
@@ -1765,13 +1755,8 @@ function updateLevelEnvironment() {
             sunLight.shadow.bias = -0.001;
             scene.add(sunLight);
         }
-        if (currentLevel === 2) {
-            sunLight.color.setHex(0x778899);
-            sunLight.intensity = 0.5;
-        } else {
-            sunLight.color.setHex(0x88aacc);
-            sunLight.intensity = 0.3; // Moonlight for level 3
-        }
+        sunLight.color.setHex(0x778899);
+        sunLight.intensity = 0.5;
     } else if (sunLight) {
         scene.remove(sunLight);
         sunLight.dispose();
@@ -1992,8 +1977,12 @@ function spawnLevelDecorations() {
             const posZ = z * GRID_SIZE;
             if (x < 3 && z < 3)
                 continue;
-            if (x > 13 && z > 13)
+            
+            // Limitación original era x>13,z>13 (para 16x16). Ahora dejamos que crezcan a lo largo del mapa
+            // Pero limitamos la densidad drásticamente
+            if (currentLevel === 3 && Math.random() > 0.05)
                 continue;
+
             let group;
             if (currentLevel === 1) {
                 group = createFacilityDecoration(posX, posZ);
@@ -2002,11 +1991,12 @@ function spawnLevelDecorations() {
                 group = createJungleDecoration(posX, posZ);
             }
             else if (currentLevel === 3) {
-                group = createMountainDecoration(posX, posZ);
+                group = createCaveDecoration(posX, posZ);
             }
             if (group) {
                 scene.add(group);
                 decorations.push(group);
+                mapChunks.push({ zIndex: z, mesh: group });
                 spawned++;
             }
         }
@@ -2038,7 +2028,7 @@ function createFacilityDecoration(px, pz) {
         const drip = new THREE.Mesh(dripGeo, dripMat);
         drip.position.set(barrel.position.x + 0.35, 0.15, barrel.position.z);
         group.add(drip);
-        const dripLight = new THREE.PointLight(0x44ff22, 0.3, 1.5);
+        const dripLight = new THREE.Group();
         dripLight.position.copy(drip.position);
         group.add(dripLight);
     }
@@ -2112,7 +2102,7 @@ function createJungleDecoration(px, pz) {
         const cap = new THREE.Mesh(capGeo, capMat);
         cap.position.set(ox, 0.35, oz);
         group.add(cap);
-        const mushroomLight = new THREE.PointLight(glowColor, 0.5, 3.0);
+        const mushroomLight = new THREE.Group();
         mushroomLight.position.set(ox, 0.35, oz);
         group.add(mushroomLight);
     }
@@ -2143,113 +2133,123 @@ function createJungleDecoration(px, pz) {
     }
     return group;
 }
-function createMountainDecoration(px, pz) {
+function createCaveDecoration(px, pz) {
     const group = new THREE.Group();
     const type = Math.floor(Math.random() * 5);
+    
     if (type === 0) {
+        // Tipo 0 — Estalagmitas con colisión
+        const stalagmiteCount = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < stalagmiteCount; i++) {
+            const h = 1.0 + Math.random() * 2.0;
+            const r = 0.3 + Math.random() * 0.3;
+            const stalGeo = new THREE.ConeGeometry(r, h, 6);
+            const stalMat = new THREE.MeshStandardMaterial({
+                color: 0x3a3530, roughness: 0.95, metalness: 0.05
+            });
+            const stalagmite = new THREE.Mesh(stalGeo, stalMat);
+            const ox = px + (Math.random() - 0.5) * 1.5;
+            const oz = pz + (Math.random() - 0.5) * 1.5;
+            stalagmite.position.set(ox, h / 2, oz);
+            stalagmite.rotation.set((Math.random() - 0.5) * 0.2, Math.random() * Math.PI, (Math.random() - 0.5) * 0.2);
+            stalagmite.castShadow = true;
+            stalagmite.receiveShadow = true;
+            group.add(stalagmite);
+            
+            // Añadir colisionador
+            const bbox = new THREE.Box3().setFromObject(stalagmite);
+            colliders.push({ isTree: true, mesh: stalagmite, box: bbox });
+        }
+    }
+    else if (type === 1) {
+        // Tipo 1 — Hongos bioluminiscentes
+        const clusterSize = 2 + Math.floor(Math.random() * 4);
+        const basePath = new THREE.Vector3(px + (Math.random() - 0.5), 0, pz + (Math.random() - 0.5));
+        for (let i = 0; i < clusterSize; i++) {
+            const h = 0.2 + Math.random() * 0.4;
+            const stemGeo = new THREE.CylinderGeometry(0.02, 0.04, h, 5);
+            const stemMat = new THREE.MeshStandardMaterial({ color: 0x112211, roughness: 0.9 });
+            const stem = new THREE.Mesh(stemGeo, stemMat);
+            const ox = basePath.x + (Math.random() - 0.5) * 0.8;
+            const oz = basePath.z + (Math.random() - 0.5) * 0.8;
+            stem.position.set(ox, h / 2, oz);
+            stem.rotation.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
+            group.add(stem);
+            
+            const capGeo = new THREE.SphereGeometry(0.08 + Math.random() * 0.08, 6, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+            const capMat = new THREE.MeshStandardMaterial({
+                color: 0x44ff88, emissive: 0x11aa44, emissiveIntensity: 1.5,
+                roughness: 0.3, metalness: 0.1
+            });
+            const cap = new THREE.Mesh(capGeo, capMat);
+            cap.position.copy(stem.position);
+            cap.position.y += h / 2;
+            cap.rotation.copy(stem.rotation);
+            group.add(cap);
+        }
+        const mushroomLight = new THREE.Group();
+        mushroomLight.position.set(basePath.x, 0.5, basePath.z);
+        group.add(mushroomLight);
+    }
+    else if (type === 2) {
+        // Tipo 2 — Estalactitas colgando del techo
+        const stCount = 3 + Math.floor(Math.random() * 5);
+        for(let i = 0; i < stCount; i++) {
+            const stalGeo = new THREE.ConeGeometry(0.2 + Math.random() * 0.2, 1.0 + Math.random() * 2.0, 6);
+            const stalMat = new THREE.MeshStandardMaterial({
+                color: 0x252220, roughness: 0.9, metalness: 0.1
+            });
+            const stalactite = new THREE.Mesh(stalGeo, stalMat);
+            stalactite.position.set(px + (Math.random() - 0.5) * 2.0, WALL_HEIGHT, pz + (Math.random() - 0.5) * 2.0);
+            stalactite.rotation.x = Math.PI;
+            stalactite.rotation.z = (Math.random() - 0.5) * 0.2;
+            stalactite.rotation.y = Math.random() * Math.PI;
+            stalactite.castShadow = true;
+            group.add(stalactite);
+        }
+    }
+    else if (type === 3) {
+        // Tipo 3 — Rocas sueltas en el suelo con colisión
         const rockCount = 2 + Math.floor(Math.random() * 3);
         for (let i = 0; i < rockCount; i++) {
-            const rockGeo = new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.4, 1);
+            const rockGeo = new THREE.DodecahedronGeometry(0.4 + Math.random() * 0.4, 0);
             const rockMat = new THREE.MeshStandardMaterial({
-                color: 0x4a4f55, roughness: 0.95, metalness: 0.1
+                color: 0x3a3025, roughness: 0.95, metalness: 0.05
             });
             const rock = new THREE.Mesh(rockGeo, rockMat);
             const ox = px + (Math.random() - 0.5) * 1.5;
             const oz = pz + (Math.random() - 0.5) * 1.5;
-            rock.position.set(ox, 0.2 + Math.random() * 0.1, oz);
-            rock.scale.y = 0.5 + Math.random() * 0.5;
+            rock.position.set(ox, 0.1 + Math.random() * 0.2, oz);
+            rock.scale.y = 0.5 + Math.random() * 0.3;
             rock.rotation.set(Math.random(), Math.random(), Math.random());
             rock.castShadow = true;
             rock.receiveShadow = true;
             group.add(rock);
-            if (Math.random() > 0.3) {
-                const snowGeo = new THREE.SphereGeometry(0.25, 6, 6, 0, Math.PI * 2, 0, Math.PI / 2);
-                const snowMat = new THREE.MeshStandardMaterial({
-                    color: 0xebf2f8, roughness: 0.8, metalness: 0.0
-                });
-                const snow = new THREE.Mesh(snowGeo, snowMat);
-                snow.position.copy(rock.position);
-                snow.position.y += 0.25 * rock.scale.y;
-                group.add(snow);
-            }
+            
+            // Añadir colisionador
+            const bbox = new THREE.Box3().setFromObject(rock);
+            colliders.push({ isTree: true, mesh: rock, box: bbox });
         }
     }
-    else if (type === 1) {
-        const clusterSize = 1 + Math.floor(Math.random() * 3);
-        const basePath = new THREE.Vector3(px + (Math.random()-0.5), 0, pz + (Math.random()-0.5));
-        for (let i = 0; i < clusterSize; i++) {
-            const crystalGeo = new THREE.ConeGeometry(0.1 + Math.random()*0.1, 0.5 + Math.random() * 0.8, 5);
+    else {
+        // Tipo 4 — Cristales minerales en el suelo
+        const crystalCount = 1 + Math.floor(Math.random() * 3);
+        const basePath = new THREE.Vector3(px + (Math.random() - 0.5), 0, pz + (Math.random() - 0.5));
+        for (let i = 0; i < crystalCount; i++) {
+            const crystalGeo = new THREE.ConeGeometry(0.15 + Math.random() * 0.1, 0.6 + Math.random() * 0.8, 5);
             const crystalMat = new THREE.MeshStandardMaterial({
-                color: 0x99ccff, emissive: 0x1133aa, emissiveIntensity: 2.0,
-                roughness: 0.05, metalness: 0.8, transparent: true, opacity: 0.85,
-                envMap: envCamera ? envCamera.renderTarget.texture : null
+                color: 0x55ffaa, emissive: 0x114422, emissiveIntensity: 1.2,
+                roughness: 0.1, metalness: 0.8, transparent: true, opacity: 0.85
             });
             const crystal = new THREE.Mesh(crystalGeo, crystalMat);
-            crystal.position.set(basePath.x + (Math.random()-0.5)*0.5, 0.2 + Math.random() * 0.2, basePath.z + (Math.random()-0.5)*0.5);
+            crystal.position.set(basePath.x + (Math.random() - 0.5) * 0.5, 0.3 + Math.random() * 0.2, basePath.z + (Math.random() - 0.5) * 0.5);
             crystal.rotation.set((Math.random() - 0.5) * 0.4, Math.random() * Math.PI, (Math.random() - 0.5) * 0.4);
             crystal.castShadow = true;
             group.add(crystal);
         }
-        const crystalLight = new THREE.PointLight(0x4488ff, 0.6, 3.5);
-        crystalLight.position.set(basePath.x, 0.6, basePath.z);
+        const crystalLight = new THREE.Group();
+        crystalLight.position.set(basePath.x, 0.5, basePath.z);
         group.add(crystalLight);
-    }
-    else if (type === 2) {
-        const stCount = 2 + Math.floor(Math.random() * 4);
-        for(let i=0; i<stCount; i++) {
-            const stalGeo = new THREE.ConeGeometry(0.1 + Math.random() * 0.1, 1.0 + Math.random() * 1.5, 6);
-            const stalMat = new THREE.MeshStandardMaterial({
-                color: 0x5a6066, roughness: 0.85, metalness: 0.15
-            });
-            const stalactite = new THREE.Mesh(stalGeo, stalMat);
-            stalactite.position.set(px + (Math.random() - 0.5) * 2.0, WALL_HEIGHT - 0.2, pz + (Math.random() - 0.5) * 2.0);
-            stalactite.rotation.x = Math.PI;
-            stalactite.rotation.z = (Math.random() - 0.5) * 0.2;
-            stalactite.castShadow = true;
-            group.add(stalactite);
-            if (Math.random() > 0.5) {
-                const iceGeo = new THREE.ConeGeometry(0.05, 0.4, 5);
-                const iceMat = new THREE.MeshStandardMaterial({
-                    color: 0xccddff, roughness: 0.1, transparent: true, opacity: 0.7
-                });
-                const ice = new THREE.Mesh(iceGeo, iceMat);
-                ice.position.copy(stalactite.position);
-                ice.position.y -= (1.0 + Math.random() * 0.5);
-                ice.rotation.x = Math.PI;
-                group.add(ice);
-            }
-        }
-    }
-    else if (type === 3) {
-        const snowGeo = new THREE.SphereGeometry(0.8 + Math.random() * 0.6, 12, 8);
-        const snowMat = new THREE.MeshStandardMaterial({
-            color: 0xf0f5fa, roughness: 0.9, metalness: 0.0
-        });
-        const snow = new THREE.Mesh(snowGeo, snowMat);
-        snow.position.set(px + (Math.random() - 0.5) * 1.5, 0.1, pz + (Math.random() - 0.5) * 1.5);
-        snow.scale.set(1.0, 0.2 + Math.random() * 0.15, 0.8 + Math.random() * 0.4);
-        snow.rotation.y = Math.random() * Math.PI;
-        snow.receiveShadow = true;
-        group.add(snow);
-    }
-    else {
-        const colGeo = new THREE.CylinderGeometry(0.3, 0.5, WALL_HEIGHT, 8);
-        const colMat = new THREE.MeshStandardMaterial({
-            color: 0x444a50, roughness: 0.9, metalness: 0.1
-        });
-        const col = new THREE.Mesh(colGeo, colMat);
-        col.position.set(px + (Math.random()-0.5), WALL_HEIGHT/2, pz + (Math.random()-0.5));
-        col.castShadow = true;
-        col.receiveShadow = true;
-        group.add(col);
-        const iceColGeo = new THREE.CylinderGeometry(0.32, 0.52, WALL_HEIGHT, 8);
-        const iceColMat = new THREE.MeshStandardMaterial({
-            color: 0xaaccff, roughness: 0.1, transparent: true, opacity: 0.5, metalness: 0.8,
-            envMap: envCamera ? envCamera.renderTarget.texture : null
-        });
-        const iceCol = new THREE.Mesh(iceColGeo, iceColMat);
-        iceCol.position.copy(col.position);
-        group.add(iceCol);
     }
     return group;
 }
@@ -2270,7 +2270,7 @@ function clearAmbientParticles() {
 }
 function spawnAmbientParticles() {
     const map = getMapForLevel(currentLevel);
-    const count = currentLevel === 3 ? 350 : 80;
+    const count = currentLevel === 3 ? 200 : 80;
     let color, emissive, size, opacity;
     if (currentLevel === 2) {
         color = 0x44ff66;
@@ -2300,7 +2300,7 @@ function spawnAmbientParticles() {
                 continue;
             const px = gx * GRID_SIZE + (Math.random() - 0.5) * GRID_SIZE * 0.8;
             const pz = gz * GRID_SIZE + (Math.random() - 0.5) * GRID_SIZE * 0.8;
-            const py = currentLevel === 3 ? Math.random() * WALL_HEIGHT : 0.5 + Math.random() * (WALL_HEIGHT - 1.0);
+            const py = 0.5 + Math.random() * (WALL_HEIGHT - 1.0);
             const geo = new THREE.SphereGeometry(size + Math.random() * size, 4, 4);
             const mat = new THREE.MeshBasicMaterial({
                 color: color, transparent: true, opacity: opacity * (0.5 + Math.random() * 0.5)
@@ -2310,15 +2310,15 @@ function spawnAmbientParticles() {
             scene.add(mesh);
             ambientParticles.push({
                 mesh: mesh,
-                isSnow: currentLevel === 3,
+                isSnow: false,
                 baseY: py,
                 baseX: px,
                 baseZ: pz,
-                speed: currentLevel === 3 ? 1.0 + Math.random() * 1.5 : 0.3 + Math.random() * 0.5,
+                speed: currentLevel === 3 ? 0.2 + Math.random() * 0.3 : 0.3 + Math.random() * 0.5,
                 phase: Math.random() * Math.PI * 2,
-                amplitude: 0.1 + Math.random() * 0.25,
-                driftX: currentLevel === 3 ? (Math.random() - 0.5) * 2.0 : (Math.random() - 0.5) * 0.3,
-                driftZ: currentLevel === 3 ? (Math.random() - 0.5) * 2.0 : (Math.random() - 0.5) * 0.3
+                amplitude: currentLevel === 3 ? 0.3 + Math.random() * 0.5 : 0.1 + Math.random() * 0.25,
+                driftX: (Math.random() - 0.5) * 0.3,
+                driftZ: (Math.random() - 0.5) * 0.3
             });
             break;
         }
@@ -2353,7 +2353,7 @@ function buildFuseBox3D(posX, posZ) {
     const led = new THREE.Mesh(ledGeo, ledMat);
     led.position.set(0, 1.0, 0.31);
     group.add(led);
-    const ledLight = new THREE.PointLight(0xff0000, 0.6, 2.5);
+    const ledLight = new THREE.Group();
     ledLight.position.set(0, 1.0, 0.35);
     group.add(ledLight);
     let wiringLed = null;
@@ -2371,7 +2371,7 @@ function buildFuseBox3D(posX, posZ) {
         wiringLed = new THREE.Mesh(wLedGeo, wLedMat);
         wiringLed.position.set(0.55, 1.05, 0.18);
         group.add(wiringLed);
-        wiringLedLight = new THREE.PointLight(0xffaa00, 0.8, 2.0);
+        wiringLedLight = new THREE.Group();
         wiringLedLight.position.set(0.55, 1.05, 0.22);
         group.add(wiringLedLight);
     }
@@ -2445,7 +2445,7 @@ function spawnFuses() {
             bottomCap.position.y = -0.22;
             fuseGroup.add(bottomCap);
             scene.add(fuseGroup);
-            const light = new THREE.PointLight(0x00d9ff, 1.5, 4);
+            const light = new THREE.Group();
             light.position.set(px, 0.8, pz);
             scene.add(light);
             fuses.push({
@@ -2738,7 +2738,7 @@ class Zombie {
             });
             this.group.add(this.zombieMesh);
             const eyeColor = this.type === 'SPITTER' ? 0x39ff14 : (this.type === 'RUNNER' ? 0xff4400 : 0xffea00);
-            this.eyeLight = new THREE.PointLight(eyeColor, 0.7, 4.0);
+            this.eyeLight = new THREE.Group();
             this.eyeLight.position.set(0, 1.5, 0.2);
             this.group.add(this.eyeLight);
         }
@@ -2791,7 +2791,7 @@ class Zombie {
             this.rightEye = new THREE.Mesh(eyeGeo, eyeMat.clone());
             this.rightEye.position.set(0.12, 0.05, 0.23);
             this.head.add(this.rightEye);
-            this.eyeLight = new THREE.PointLight(eyeColor, 0.6, 4.0);
+            this.eyeLight = new THREE.Group();
             this.eyeLight.position.set(0, 0.05, 0.25);
             this.head.add(this.eyeLight);
             const armGeo = new THREE.BoxGeometry(0.16, 0.16, 0.8);
@@ -2907,7 +2907,7 @@ class Zombie {
         const projMat = new THREE.MeshBasicMaterial({ color: 0x39ff14 });
         const projMesh = new THREE.Mesh(projGeo, projMat);
         projMesh.position.copy(startPos);
-        const projLight = new THREE.PointLight(0x39ff14, 1.5, 3);
+        const projLight = new THREE.Group();
         projMesh.add(projLight);
         scene.add(projMesh);
         const targetPos = camera.position.clone();
@@ -3099,7 +3099,7 @@ class CeilingSpider {
                 this.hitMeshes.push(leg);
             }
         }
-        this.eyeLight = new THREE.PointLight(0xff2200, 0.6, 3.5);
+        this.eyeLight = new THREE.Group();
         this.eyeLight.position.set(0, 0.0, 0.55);
         this.group.add(this.eyeLight);
         scene.add(this.group);
@@ -3162,7 +3162,7 @@ class CeilingSpider {
         const projMat = new THREE.MeshBasicMaterial({ color: 0xddeeff });
         const projMesh = new THREE.Mesh(projGeo, projMat);
         projMesh.position.copy(startPos);
-        const projLight = new THREE.PointLight(0xbfdcff, 1.0, 2.5);
+        const projLight = new THREE.Group();
         projMesh.add(projLight);
         scene.add(projMesh);
         const targetPos = camera.position.clone();
@@ -3281,10 +3281,10 @@ class BossEnemy {
             this.group.add(rightEye);
             this.proceduralParts.push(rightEye);
         }
-        this.eyeLight = new THREE.PointLight(0xff2200, 2.0, 10.0);
-        this.eyeLight.position.set(0, 3.0, 0.5);
+        this.eyeLight = new THREE.Group();
+        this.eyeLight.position.set(0, 2.8, 0.5);
         this.group.add(this.eyeLight);
-        this.auraLight = new THREE.PointLight(0xff5500, 1.5, 8.0);
+        this.auraLight = new THREE.Group();
         this.auraLight.position.set(0, 0.5, 0);
         this.group.add(this.auraLight);
         scene.add(this.group);
@@ -3429,7 +3429,7 @@ class BossEnemy {
         const projMat = new THREE.MeshBasicMaterial({ color: 0x39ff14 });
         const projMesh = new THREE.Mesh(projGeo, projMat);
         projMesh.position.copy(startPos);
-        const projLight = new THREE.PointLight(0x39ff14, 2.5, 5);
+        const projLight = new THREE.Group();
         projMesh.add(projLight);
         scene.add(projMesh);
         const targetPos = camera.position.clone();
@@ -3567,8 +3567,11 @@ function spawnZombies() {
     }
     let spawned = 0;
     let attempts = 0;
-    const zombiesToSpawn = 6 + currentLevel * 2;
-    while (spawned < zombiesToSpawn && attempts < 200) {
+    let zombiesToSpawn = 6 + currentLevel * 2;
+    if (currentLevel === 3) {
+        zombiesToSpawn = 30;
+    }
+    while (spawned < zombiesToSpawn && attempts < 1000) {
         attempts++;
         const z = Math.floor(Math.random() * activeMap.length);
         const x = Math.floor(Math.random() * activeMap[z].length);
@@ -4018,7 +4021,7 @@ function tryOpenDoor() {
             if (fuseBoxConsole) {
                 fuseBoxConsole.activated = true;
                 fuseBoxConsole.led.material.color.setHex(0x00ff41); // Luz a verde
-                fuseBoxConsole.ledLight.color.setHex(0x00ff41);
+                if (fuseBoxConsole.ledLight.color) fuseBoxConsole.ledLight.color.setHex(0x00ff41);
             }
             AudioSynth.playPowerRestored();
             showFeedback("ESCAPE DESBLOQUEADO");
@@ -4381,7 +4384,7 @@ async function startGame() {
     if (fuseBoxConsole) {
         fuseBoxConsole.activated = false;
         fuseBoxConsole.led.material.color.setHex(0xff0000);
-        fuseBoxConsole.ledLight.color.setHex(0xff0000);
+        if (fuseBoxConsole.ledLight.color) fuseBoxConsole.ledLight.color.setHex(0xff0000);
         // Limpiar fusibles montados
         for (let k = 0; k < 3; k++) {
             try {
@@ -4582,7 +4585,7 @@ async function startNextLevel() {
     if (fuseBoxConsole) {
         fuseBoxConsole.activated = false;
         fuseBoxConsole.led.material.color.setHex(0xff0000);
-        fuseBoxConsole.ledLight.color.setHex(0xff0000);
+        if (fuseBoxConsole.ledLight.color) fuseBoxConsole.ledLight.color.setHex(0xff0000);
         for (let k = 0; k < 3; k++) {
             try {
                 const fuseMesh = fuseBoxConsole.group.getObjectByName(`mounted_fuse_${k}`);
@@ -4775,7 +4778,7 @@ function checkWiringVictory() {
         AudioSynth.playPowerRestored();
         if (fuseBoxConsole && fuseBoxConsole.wiringLed) {
             fuseBoxConsole.wiringLed.material.color.setHex(0x00ff41);
-            fuseBoxConsole.wiringLedLight.color.setHex(0x00ff41);
+            if (fuseBoxConsole.wiringLedLight.color) fuseBoxConsole.wiringLedLight.color.setHex(0x00ff41);
             fuseBoxConsole.wiringLedLight.intensity = 0.8;
         }
         setTimeout(() => {
@@ -5042,6 +5045,16 @@ function drawBiomonitor(deltaTime) {
 // --- BUCLE DE RENDERIZADO PRINCIPAL (ANIMATE) ---
 function animate() {
     requestAnimationFrame(animate);
+    
+    // Chunk visibility logic: Show roughly 40 blocks ahead and 10 behind
+    const playerZ = Math.floor(player.position.z / GRID_SIZE);
+    mapChunks.forEach(chunk => {
+        const isVisible = (chunk.zIndex >= playerZ - 10 && chunk.zIndex <= playerZ + 40);
+        if (chunk.mesh.visible !== isVisible) {
+            chunk.mesh.visible = isVisible;
+        }
+    });
+
     const frameDelta = clock.getDelta();
     const previousRenderScale = adaptiveResolutionState.scale;
     adaptiveResolutionState = sampleAdaptiveResolution(
@@ -5102,7 +5115,7 @@ function animate() {
             }
             else {
                 fuseBoxConsole.wiringLed.material.color.setHex(0x00ff41);
-                fuseBoxConsole.wiringLedLight.color.setHex(0x00ff41);
+                if (fuseBoxConsole.wiringLedLight.color) fuseBoxConsole.wiringLedLight.color.setHex(0x00ff41);
                 fuseBoxConsole.wiringLedLight.intensity = 0.8;
             }
         }
@@ -5234,32 +5247,7 @@ function animate() {
             }
         });
 
-        // Efecto de aliento (Nivel 3)
-        if (currentLevel === 3) {
-            breathTimer -= deltaTime;
-            if (breathTimer <= 0) {
-                breathTimer = 2.0 + Math.random() * 3.0; // Respiración cada 2-5 segundos
-                const bCount = 5 + Math.floor(Math.random() * 4);
-                for(let i=0; i<bCount; i++) {
-                    const geo = new THREE.SphereGeometry(0.015 + Math.random() * 0.01, 4, 4);
-                    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 });
-                    const mesh = new THREE.Mesh(geo, mat);
-                    mesh.position.copy(camera.position);
-                    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-                    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-                    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
-                    mesh.position.addScaledVector(forward, 0.4 + Math.random() * 0.1);
-                    mesh.position.addScaledVector(right, (Math.random() - 0.5) * 0.1);
-                    mesh.position.addScaledVector(up, -0.15 + (Math.random() - 0.5) * 0.05);
-                    scene.add(mesh);
-                    breathParticles.push({
-                        mesh: mesh,
-                        life: 1.0 + Math.random() * 0.5,
-                        vel: forward.clone().multiplyScalar(0.2 + Math.random() * 0.2).add(up.clone().multiplyScalar(0.1 + Math.random() * 0.1))
-                    });
-                }
-            }
-        }
+        // No breath effect in cave
         
         for (let i = breathParticles.length - 1; i >= 0; i--) {
             const p = breathParticles[i];

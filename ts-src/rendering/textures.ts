@@ -2424,160 +2424,159 @@ export function generateMountainWallTexture() {
     canvas.height = S;
     const ctx = canvas.getContext('2d');
 
-    // === BASE: Dark granite rock ===
+    // === BASE: Dark brown-gray irregular cave rock ===
     const baseGrad = ctx.createLinearGradient(0, 0, S * 0.3, S);
-    baseGrad.addColorStop(0, '#3a3d42');
-    baseGrad.addColorStop(0.3, '#2e3035');
-    baseGrad.addColorStop(0.6, '#3d3f44');
-    baseGrad.addColorStop(1, '#25272b');
+    baseGrad.addColorStop(0, '#3a3530');
+    baseGrad.addColorStop(0.25, '#302b26');
+    baseGrad.addColorStop(0.5, '#352f2a');
+    baseGrad.addColorStop(0.75, '#2a2522');
+    baseGrad.addColorStop(1, '#252220');
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, S, S);
 
-    // === ROCK GRAIN: Multi-layer noise for realism ===
-    // Fine grain
-    for (let i = 0; i < 25000; i++) {
+    // Secondary color variation patches for uneven rock
+    for (let p = 0; p < 20; p++) {
+        const px = Math.random() * S;
+        const py = Math.random() * S;
+        const pr = 60 + Math.random() * 150;
+        const pGrad = ctx.createRadialGradient(px, py, 0, px, py, pr);
+        const pv = 30 + Math.floor(Math.random() * 20);
+        pGrad.addColorStop(0, `rgba(${pv + 10},${pv + 5},${pv},0.3)`);
+        pGrad.addColorStop(1, `rgba(${pv},${pv - 2},${pv - 5},0)`);
+        ctx.fillStyle = pGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === ROCK GRAIN: Heavy multi-layer noise ===
+    // Fine grain — earthy brown-gray particles
+    for (let i = 0; i < 30000; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
         const sz = 1 + Math.random() * 2;
-        const v = 30 + Math.floor(Math.random() * 40);
-        ctx.fillStyle = `rgba(${v},${v + 2},${v + 5},0.35)`;
+        const r = 35 + Math.floor(Math.random() * 30);
+        const g = 28 + Math.floor(Math.random() * 25);
+        const b = 22 + Math.floor(Math.random() * 20);
+        ctx.fillStyle = `rgba(${r},${g},${b},0.35)`;
         ctx.fillRect(x, y, sz, sz);
     }
-    // Coarse grain
-    for (let i = 0; i < 5000; i++) {
+    // Coarse grain — larger rock speckles
+    for (let i = 0; i < 6000; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
         const sz = 3 + Math.random() * 6;
-        const v = 40 + Math.floor(Math.random() * 30);
-        ctx.fillStyle = `rgba(${v},${v + 3},${v + 8},0.2)`;
+        const r = 40 + Math.floor(Math.random() * 25);
+        const g = 35 + Math.floor(Math.random() * 20);
+        const b = 28 + Math.floor(Math.random() * 18);
+        ctx.fillStyle = `rgba(${r},${g},${b},0.2)`;
         ctx.fillRect(x, y, sz, sz);
     }
 
-    // === ROCK STRATA: Horizontal sediment layers ===
-    for (let i = 0; i < 12; i++) {
+    // === HORIZONTAL SEDIMENT LAYERS ===
+    for (let i = 0; i < 16; i++) {
         const y = Math.random() * S;
-        const thickness = 2 + Math.random() * 8;
-        const v = 35 + Math.floor(Math.random() * 25);
-        ctx.fillStyle = `rgba(${v},${v + 2},${v + 4},0.25)`;
+        const thickness = 2 + Math.random() * 10;
+        const r = 50 + Math.floor(Math.random() * 30);
+        const g = 40 + Math.floor(Math.random() * 20);
+        const b = 30 + Math.floor(Math.random() * 15);
+        ctx.fillStyle = `rgba(${r},${g},${b},${0.15 + Math.random() * 0.15})`;
         ctx.fillRect(0, y, S, thickness);
+        // Wavy variation on some layers
+        if (Math.random() > 0.5) {
+            ctx.beginPath();
+            ctx.moveTo(0, y + thickness);
+            for (let wx = 0; wx < S; wx += 20) {
+                ctx.lineTo(wx, y + thickness + Math.sin(wx * 0.02) * 3 + (Math.random() - 0.5) * 2);
+            }
+            ctx.lineTo(S, y);
+            ctx.lineTo(0, y);
+            ctx.closePath();
+            ctx.fillStyle = `rgba(${r - 10},${g - 8},${b - 5},0.1)`;
+            ctx.fill();
+        }
     }
 
-    // === DEEP CRACKS with shadow/highlight ===
-    for (let cr = 0; cr < 20; cr++) {
-        ctx.lineWidth = 1 + Math.random() * 2;
+    // === DEEP CRACKS with dark shadows ===
+    for (let cr = 0; cr < 25; cr++) {
+        ctx.lineWidth = 1 + Math.random() * 2.5;
         // Dark shadow crack
-        ctx.strokeStyle = `rgba(10,12,15,${0.4 + Math.random() * 0.3})`;
+        ctx.strokeStyle = `rgba(8,6,4,${0.4 + Math.random() * 0.35})`;
         ctx.beginPath();
         let cx = Math.random() * S;
         let cy = Math.random() * S;
         ctx.moveTo(cx, cy);
         const segments = 5 + Math.floor(Math.random() * 8);
         for (let s = 0; s < segments; s++) {
-            cx += (Math.random() - 0.5) * 50;
-            cy += 20 + Math.random() * 60;
+            cx += (Math.random() - 0.5) * 55;
+            cy += 20 + Math.random() * 65;
             ctx.lineTo(cx, cy);
         }
         ctx.stroke();
-        // Light highlight edge
-        ctx.strokeStyle = `rgba(80,85,95,0.2)`;
+        // Subtle highlight edge (shifted slightly right)
+        ctx.strokeStyle = `rgba(60,55,48,0.15)`;
         ctx.lineWidth = 0.5;
-        ctx.stroke();
-    }
-
-    // === ICE VEINS: Thin blue translucent lines ===
-    for (let iv = 0; iv < 8; iv++) {
-        ctx.strokeStyle = `rgba(120,180,220,${0.15 + Math.random() * 0.15})`;
-        ctx.lineWidth = 1 + Math.random() * 2;
         ctx.beginPath();
-        let vx = Math.random() * S;
-        let vy = Math.random() * S;
-        ctx.moveTo(vx, vy);
-        for (let vs = 0; vs < 6; vs++) {
-            vx += (Math.random() - 0.5) * 40;
-            vy += 15 + Math.random() * 40;
-            ctx.lineTo(vx, vy);
+        cx = Math.random() * S;
+        cy = Math.random() * S;
+        ctx.moveTo(cx + 1, cy + 1);
+        for (let s = 0; s < segments; s++) {
+            cx += (Math.random() - 0.5) * 55;
+            cy += 20 + Math.random() * 65;
+            ctx.lineTo(cx + 1, cy + 1);
         }
         ctx.stroke();
     }
 
-    // === SNOW ACCUMULATION on ledges (top-heavy) ===
-    for (let sp = 0; sp < 18; sp++) {
-        const spx = Math.random() * S;
-        const spy = Math.random() * S * 0.6; // mostly upper half
-        const spw = 60 + Math.random() * 200;
-        const sph = 15 + Math.random() * 40;
-        const sGrad = ctx.createRadialGradient(spx, spy, 0, spx, spy, spw / 2);
-        sGrad.addColorStop(0, 'rgba(230,235,245,0.7)');
-        sGrad.addColorStop(0.4, 'rgba(210,220,235,0.4)');
-        sGrad.addColorStop(0.7, 'rgba(190,200,215,0.15)');
-        sGrad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = sGrad;
-        ctx.beginPath();
-        ctx.ellipse(spx, spy, spw / 2, sph / 2, (Math.random() - 0.5) * 0.3, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // === FROST CRYSTALS: Tiny sparkle points ===
-    for (let fc = 0; fc < 150; fc++) {
-        const fx = Math.random() * S;
-        const fy = Math.random() * S;
-        const fr = 1 + Math.random() * 2;
-        ctx.fillStyle = `rgba(200,220,255,${0.3 + Math.random() * 0.5})`;
-        ctx.beginPath();
-        ctx.arc(fx, fy, fr, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    // === ICICLES: More realistic with depth ===
-    for (let ic = 0; ic < 15; ic++) {
-        const icx = Math.random() * S;
-        const icw = 6 + Math.random() * 14;
-        const ich = 40 + Math.random() * 120;
-        // Shadow
-        ctx.fillStyle = 'rgba(40,50,65,0.4)';
-        ctx.beginPath();
-        ctx.moveTo(icx - icw / 2 + 2, 0);
-        ctx.lineTo(icx + icw / 2 + 2, 0);
-        ctx.lineTo(icx + 2, ich + 5);
-        ctx.closePath();
-        ctx.fill();
-        // Body
-        const iceGrad = ctx.createLinearGradient(icx - icw / 2, 0, icx + icw / 2, 0);
-        iceGrad.addColorStop(0, 'rgba(160,195,220,0.6)');
-        iceGrad.addColorStop(0.3, 'rgba(200,225,245,0.8)');
-        iceGrad.addColorStop(0.6, 'rgba(220,240,255,0.9)');
-        iceGrad.addColorStop(1, 'rgba(170,200,225,0.5)');
-        ctx.fillStyle = iceGrad;
-        ctx.beginPath();
-        ctx.moveTo(icx - icw / 2, 0);
-        ctx.lineTo(icx + icw / 2, 0);
-        ctx.lineTo(icx + icw * 0.05, ich * 0.8);
-        ctx.lineTo(icx, ich);
-        ctx.lineTo(icx - icw * 0.05, ich * 0.8);
-        ctx.closePath();
-        ctx.fill();
-        // Highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
-        ctx.beginPath();
-        ctx.moveTo(icx - icw * 0.1, 0);
-        ctx.lineTo(icx, 0);
-        ctx.lineTo(icx, ich * 0.85);
-        ctx.closePath();
-        ctx.fill();
-    }
-
-    // === LICHEN/MOSS patches ===
-    for (let lc = 0; lc < 8; lc++) {
+    // === MOSS PATCHES: Dark green-brown on lower portions ===
+    for (let lc = 0; lc < 14; lc++) {
         const lx = Math.random() * S;
-        const ly = S * 0.5 + Math.random() * S * 0.5; // lower half
-        const lr = 10 + Math.random() * 25;
+        const ly = S * 0.45 + Math.random() * S * 0.55; // lower ~55%
+        const lr = 15 + Math.random() * 45;
         const mGrad = ctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
-        mGrad.addColorStop(0, 'rgba(45,55,35,0.3)');
-        mGrad.addColorStop(0.6, 'rgba(55,65,40,0.15)');
-        mGrad.addColorStop(1, 'rgba(40,50,30,0)');
+        const mg = 40 + Math.floor(Math.random() * 30);
+        mGrad.addColorStop(0, `rgba(${mg - 15},${mg + 10},${mg - 20},0.35)`);
+        mGrad.addColorStop(0.4, `rgba(${mg - 10},${mg + 5},${mg - 18},0.2)`);
+        mGrad.addColorStop(0.7, `rgba(${mg - 12},${mg},${mg - 15},0.1)`);
+        mGrad.addColorStop(1, 'rgba(30,40,25,0)');
         ctx.fillStyle = mGrad;
         ctx.beginPath();
-        ctx.arc(lx, ly, lr, 0, Math.PI * 2);
+        ctx.ellipse(lx, ly, lr, lr * 0.7, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Small moss dots clustered around patches
+    for (let md = 0; md < 200; md++) {
+        const mx = Math.random() * S;
+        const my = S * 0.5 + Math.random() * S * 0.5;
+        const ms = 1 + Math.random() * 3;
+        ctx.fillStyle = `rgba(${25 + Math.floor(Math.random() * 20)},${45 + Math.floor(Math.random() * 25)},${20 + Math.floor(Math.random() * 15)},${0.15 + Math.random() * 0.2})`;
+        ctx.fillRect(mx, my, ms, ms);
+    }
+
+    // === MOISTURE / WETNESS STREAKS dripping down ===
+    for (let ws = 0; ws < 12; ws++) {
+        const wx = Math.random() * S;
+        const wy = Math.random() * S * 0.3; // start near top
+        const wLen = 150 + Math.random() * 400;
+        const wWidth = 8 + Math.random() * 25;
+        const wGrad = ctx.createLinearGradient(wx, wy, wx + (Math.random() - 0.5) * 20, wy + wLen);
+        wGrad.addColorStop(0, 'rgba(20,18,15,0.35)');
+        wGrad.addColorStop(0.3, 'rgba(25,22,18,0.25)');
+        wGrad.addColorStop(0.7, 'rgba(22,20,16,0.15)');
+        wGrad.addColorStop(1, 'rgba(30,28,24,0)');
+        ctx.fillStyle = wGrad;
+        ctx.beginPath();
+        ctx.ellipse(wx, wy + wLen / 2, wWidth / 2, wLen / 2, (Math.random() - 0.5) * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    // Wet sheen spots (subtle lighter reflections)
+    for (let wr = 0; wr < 30; wr++) {
+        const rx = Math.random() * S;
+        const ry = Math.random() * S;
+        const rr = 3 + Math.random() * 8;
+        ctx.fillStyle = `rgba(55,50,45,${0.1 + Math.random() * 0.15})`;
+        ctx.beginPath();
+        ctx.arc(rx, ry, rr, 0, Math.PI * 2);
         ctx.fill();
     }
 
@@ -2593,110 +2592,156 @@ export function generateMountainFloorTexture() {
     canvas.height = S;
     const ctx = canvas.getContext('2d');
 
-    // === BASE: Frozen rock ground ===
+    // === BASE: Reddish-brown earth ===
     const baseGrad = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.7);
-    baseGrad.addColorStop(0, '#4a4e55');
-    baseGrad.addColorStop(0.5, '#3a3e44');
-    baseGrad.addColorStop(1, '#2e3238');
+    baseGrad.addColorStop(0, '#5a3020');
+    baseGrad.addColorStop(0.3, '#4d2818');
+    baseGrad.addColorStop(0.6, '#422215');
+    baseGrad.addColorStop(1, '#3a1a10');
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, S, S);
 
-    // === ROCK GRAIN ===
-    for (let i = 0; i < 30000; i++) {
+    // Color variation patches for uneven dirt
+    for (let p = 0; p < 15; p++) {
+        const px = Math.random() * S;
+        const py = Math.random() * S;
+        const pr = 80 + Math.random() * 180;
+        const pGrad = ctx.createRadialGradient(px, py, 0, px, py, pr);
+        const rv = 60 + Math.floor(Math.random() * 30);
+        pGrad.addColorStop(0, `rgba(${rv},${rv - 20},${rv - 35},0.25)`);
+        pGrad.addColorStop(1, `rgba(${rv - 10},${rv - 25},${rv - 40},0)`);
+        ctx.fillStyle = pGrad;
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // === DIRT GRAIN: Heavy multi-layer noise ===
+    // Fine grain — brown/red earth particles
+    for (let i = 0; i < 40000; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
         const sz = 1 + Math.random() * 2;
-        const v = 35 + Math.floor(Math.random() * 45);
-        ctx.fillStyle = `rgba(${v},${v + 2},${v + 5},0.3)`;
+        const r = 50 + Math.floor(Math.random() * 45);
+        const g = 25 + Math.floor(Math.random() * 30);
+        const b = 12 + Math.floor(Math.random() * 20);
+        ctx.fillStyle = `rgba(${r},${g},${b},0.3)`;
+        ctx.fillRect(x, y, sz, sz);
+    }
+    // Coarser dirt clumps
+    for (let i = 0; i < 8000; i++) {
+        const x = Math.random() * S;
+        const y = Math.random() * S;
+        const sz = 2 + Math.random() * 5;
+        const r = 55 + Math.floor(Math.random() * 35);
+        const g = 30 + Math.floor(Math.random() * 25);
+        const b = 15 + Math.floor(Math.random() * 18);
+        ctx.fillStyle = `rgba(${r},${g},${b},0.2)`;
         ctx.fillRect(x, y, sz, sz);
     }
 
-    // === SCATTERED PEBBLES ===
-    for (let r = 0; r < 60; r++) {
+    // === SCATTERED PEBBLES/STONES ===
+    for (let r = 0; r < 65; r++) {
         const rx = Math.random() * S;
         const ry = Math.random() * S;
-        const rw = 4 + Math.random() * 12;
-        const rh = 3 + Math.random() * 8;
-        const rv = 30 + Math.floor(Math.random() * 35);
-        ctx.fillStyle = `rgba(${rv},${rv + 3},${rv + 6},0.7)`;
+        const rw = 4 + Math.random() * 14;
+        const rh = 3 + Math.random() * 10;
+        const rv = 45 + Math.floor(Math.random() * 40);
+        const gv = rv - 5 + Math.floor(Math.random() * 10);
+        const bv = rv - 10 + Math.floor(Math.random() * 8);
+        // Shadow underneath
+        ctx.fillStyle = `rgba(20,12,8,0.35)`;
+        ctx.beginPath();
+        ctx.ellipse(rx + 2, ry + 2, rw, rh, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+        // Stone body
+        ctx.fillStyle = `rgba(${rv},${gv},${bv},0.75)`;
         ctx.beginPath();
         ctx.ellipse(rx, ry, rw, rh, Math.random() * Math.PI, 0, Math.PI * 2);
         ctx.fill();
         // Highlight
-        ctx.fillStyle = `rgba(${rv + 30},${rv + 33},${rv + 36},0.3)`;
+        ctx.fillStyle = `rgba(${rv + 25},${gv + 20},${bv + 15},0.3)`;
         ctx.beginPath();
-        ctx.ellipse(rx - 1, ry - 1, rw * 0.6, rh * 0.5, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.ellipse(rx - 1, ry - 1, rw * 0.5, rh * 0.4, Math.random() * Math.PI, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // === SNOW DRIFTS ===
-    for (let sd = 0; sd < 12; sd++) {
-        const sx = Math.random() * S;
-        const sy = Math.random() * S;
-        const sw = 80 + Math.random() * 250;
-        const sh = 50 + Math.random() * 150;
-        const sGrad = ctx.createRadialGradient(sx, sy, 0, sx, sy, sw / 2);
-        sGrad.addColorStop(0, 'rgba(220,228,240,0.75)');
-        sGrad.addColorStop(0.3, 'rgba(200,210,225,0.5)');
-        sGrad.addColorStop(0.6, 'rgba(180,190,210,0.25)');
-        sGrad.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = sGrad;
-        ctx.beginPath();
-        ctx.ellipse(sx, sy, sw / 2, sh / 2, Math.random() * Math.PI, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    // Snow grain on drifts
-    for (let i = 0; i < 8000; i++) {
-        const x = Math.random() * S;
-        const y = Math.random() * S;
-        const sz = 1 + Math.random() * 2;
-        const c = 190 + Math.floor(Math.random() * 60);
-        ctx.fillStyle = `rgba(${c},${c + 3},${c + 8},0.15)`;
-        ctx.fillRect(x, y, sz, sz);
-    }
-
-    // === ICE POOLS: Frozen puddles ===
-    for (let ip = 0; ip < 5; ip++) {
-        const ix = Math.random() * S;
-        const iy = Math.random() * S;
-        const iw = 30 + Math.random() * 60;
-        const ih = 20 + Math.random() * 40;
-        // Dark edge
-        ctx.strokeStyle = 'rgba(40,50,60,0.4)';
+    // === DARK WATER PUDDLES ===
+    for (let ip = 0; ip < 7; ip++) {
+        const ix = 50 + Math.random() * (S - 100);
+        const iy = 50 + Math.random() * (S - 100);
+        const iw = 25 + Math.random() * 55;
+        const ih = 18 + Math.random() * 35;
+        // Dark wet rim
+        ctx.strokeStyle = 'rgba(15,10,8,0.5)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.ellipse(ix, iy, iw, ih, Math.random() * 0.5, 0, Math.PI * 2);
+        ctx.ellipse(ix, iy, iw + 3, ih + 3, Math.random() * 0.4, 0, Math.PI * 2);
         ctx.stroke();
-        // Ice surface
-        const iGrad = ctx.createRadialGradient(ix, iy, 0, ix, iy, iw);
-        iGrad.addColorStop(0, 'rgba(160,195,220,0.5)');
-        iGrad.addColorStop(0.5, 'rgba(140,175,200,0.35)');
-        iGrad.addColorStop(1, 'rgba(100,140,170,0.1)');
-        ctx.fillStyle = iGrad;
+        // Dark reflective water surface
+        const wGrad = ctx.createRadialGradient(ix, iy, 0, ix, iy, iw);
+        wGrad.addColorStop(0, 'rgba(12,10,8,0.7)');
+        wGrad.addColorStop(0.5, 'rgba(18,14,10,0.55)');
+        wGrad.addColorStop(0.8, 'rgba(25,18,12,0.35)');
+        wGrad.addColorStop(1, 'rgba(35,22,15,0.1)');
+        ctx.fillStyle = wGrad;
         ctx.beginPath();
-        ctx.ellipse(ix, iy, iw, ih, Math.random() * 0.5, 0, Math.PI * 2);
+        ctx.ellipse(ix, iy, iw, ih, Math.random() * 0.4, 0, Math.PI * 2);
         ctx.fill();
-        // Specular highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
+        // Subtle specular highlight
+        ctx.fillStyle = 'rgba(80,70,60,0.2)';
         ctx.beginPath();
-        ctx.ellipse(ix - iw * 0.2, iy - ih * 0.2, iw * 0.3, ih * 0.2, 0, 0, Math.PI * 2);
+        ctx.ellipse(ix - iw * 0.2, iy - ih * 0.25, iw * 0.25, ih * 0.15, 0, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // === FLOOR CRACKS ===
-    for (let fc = 0; fc < 15; fc++) {
-        ctx.strokeStyle = `rgba(20,22,25,${0.2 + Math.random() * 0.2})`;
-        ctx.lineWidth = 0.5 + Math.random() * 1.5;
+    // === FOOTPRINT-LIKE DEPRESSIONS ===
+    for (let fp = 0; fp < 8; fp++) {
+        const fx = Math.random() * S;
+        const fy = Math.random() * S;
+        const fw = 8 + Math.random() * 12;
+        const fh = 14 + Math.random() * 20;
+        const angle = Math.random() * Math.PI * 2;
+        // Depressed area (darker)
+        ctx.fillStyle = `rgba(30,18,10,${0.25 + Math.random() * 0.15})`;
+        ctx.beginPath();
+        ctx.ellipse(fx, fy, fw, fh, angle, 0, Math.PI * 2);
+        ctx.fill();
+        // Toe area
+        ctx.fillStyle = `rgba(28,16,8,${0.2 + Math.random() * 0.1})`;
+        ctx.beginPath();
+        ctx.ellipse(
+            fx + Math.cos(angle) * fh * 0.8,
+            fy + Math.sin(angle) * fh * 0.8,
+            fw * 0.7, fw * 0.5, angle, 0, Math.PI * 2
+        );
+        ctx.fill();
+    }
+
+    // === CRACKS IN DRIED MUD ===
+    for (let fc = 0; fc < 20; fc++) {
+        ctx.strokeStyle = `rgba(20,12,6,${0.3 + Math.random() * 0.25})`;
+        ctx.lineWidth = 0.5 + Math.random() * 2;
         ctx.beginPath();
         let fcx = Math.random() * S;
         let fcy = Math.random() * S;
         ctx.moveTo(fcx, fcy);
-        for (let fs = 0; fs < 4; fs++) {
-            fcx += (Math.random() - 0.5) * 80;
-            fcy += (Math.random() - 0.5) * 80;
+        const segs = 3 + Math.floor(Math.random() * 5);
+        for (let fs = 0; fs < segs; fs++) {
+            fcx += (Math.random() - 0.5) * 90;
+            fcy += (Math.random() - 0.5) * 90;
             ctx.lineTo(fcx, fcy);
         }
         ctx.stroke();
+        // Branching sub-cracks
+        if (Math.random() > 0.4) {
+            ctx.strokeStyle = `rgba(25,15,8,${0.15 + Math.random() * 0.15})`;
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.moveTo(fcx, fcy);
+            ctx.lineTo(fcx + (Math.random() - 0.5) * 50, fcy + (Math.random() - 0.5) * 50);
+            ctx.stroke();
+        }
     }
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -2713,49 +2758,48 @@ export function generateMountainCeilingTexture() {
 
     // === BASE: Dark cavern ceiling ===
     const baseGrad = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.7);
-    baseGrad.addColorStop(0, '#2a2d32');
-    baseGrad.addColorStop(0.5, '#222528');
-    baseGrad.addColorStop(1, '#1a1c1f');
+    baseGrad.addColorStop(0, '#1a1815');
+    baseGrad.addColorStop(0.5, '#151310');
+    baseGrad.addColorStop(1, '#0f0e0c');
     ctx.fillStyle = baseGrad;
     ctx.fillRect(0, 0, S, S);
 
     // === ROCK GRAIN ===
-    for (let i = 0; i < 20000; i++) {
+    for (let i = 0; i < 15000; i++) {
         const x = Math.random() * S;
         const y = Math.random() * S;
         const sz = 1 + Math.random() * 3;
-        const v = 25 + Math.floor(Math.random() * 35);
-        ctx.fillStyle = `rgba(${v},${v + 2},${v + 4},0.3)`;
+        const v = 15 + Math.floor(Math.random() * 15);
+        ctx.fillStyle = `rgba(${v},${v - 2},${v - 4},0.2)`;
         ctx.fillRect(x, y, sz, sz);
     }
 
-    // === MINERAL VEINS ===
-    for (let mv = 0; mv < 6; mv++) {
-        const hue = Math.random() > 0.5 ? '140,170,200' : '120,130,150';
-        ctx.strokeStyle = `rgba(${hue},${0.15 + Math.random() * 0.15})`;
+    // === MOISTURE STAINS ===
+    for (let mv = 0; mv < 12; mv++) {
+        ctx.strokeStyle = `rgba(30,30,25,${0.1 + Math.random() * 0.15})`;
         ctx.lineWidth = 1 + Math.random() * 3;
         ctx.beginPath();
         let mx = Math.random() * S;
         let my = Math.random() * S;
         ctx.moveTo(mx, my);
-        for (let ms = 0; ms < 8; ms++) {
-            mx += (Math.random() - 0.5) * 100;
-            my += (Math.random() - 0.5) * 60;
+        for (let ms = 0; ms < 5; ms++) {
+            mx += (Math.random() - 0.5) * 80;
+            my += (Math.random() - 0.5) * 80;
             ctx.lineTo(mx, my);
         }
         ctx.stroke();
     }
 
-    // === FROST FORMATIONS on ceiling ===
-    for (let ff = 0; ff < 15; ff++) {
+    // === BIOLUMINESCENT PATCHES ===
+    for (let ff = 0; ff < 12; ff++) {
         const fx = Math.random() * S;
         const fy = Math.random() * S;
         const fw = 40 + Math.random() * 80;
         const fh = 30 + Math.random() * 60;
         const fGrad = ctx.createRadialGradient(fx, fy, 0, fx, fy, fw / 2);
-        fGrad.addColorStop(0, 'rgba(180,200,220,0.3)');
-        fGrad.addColorStop(0.5, 'rgba(150,170,195,0.15)');
-        fGrad.addColorStop(1, 'rgba(130,150,170,0)');
+        fGrad.addColorStop(0, 'rgba(50,255,120,0.3)');
+        fGrad.addColorStop(0.5, 'rgba(30,150,100,0.15)');
+        fGrad.addColorStop(1, 'rgba(10,50,30,0)');
         ctx.fillStyle = fGrad;
         ctx.beginPath();
         ctx.ellipse(fx, fy, fw / 2, fh / 2, Math.random() * Math.PI, 0, Math.PI * 2);
@@ -2763,32 +2807,32 @@ export function generateMountainCeilingTexture() {
     }
 
     // === STALACTITE SHADOWS ===
-    for (let st = 0; st < 20; st++) {
+    for (let st = 0; st < 25; st++) {
         const sx = Math.random() * S;
         const sy = Math.random() * S;
-        const sw = 3 + Math.random() * 8;
-        const sh = 15 + Math.random() * 40;
-        ctx.fillStyle = `rgba(15,17,20,${0.3 + Math.random() * 0.2})`;
+        const sw = 5 + Math.random() * 10;
+        const sh = 20 + Math.random() * 50;
+        ctx.fillStyle = `rgba(5,5,5,${0.4 + Math.random() * 0.4})`;
         ctx.beginPath();
         ctx.ellipse(sx, sy, sw, sh, Math.random() * 0.5, 0, Math.PI * 2);
         ctx.fill();
     }
 
-    // === ICE DEPOSITS: Bright spots ===
-    for (let id = 0; id < 30; id++) {
+    // === GLOWING SPORES (Bright green/cyan dots) ===
+    for (let id = 0; id < 150; id++) {
         const dx = Math.random() * S;
         const dy = Math.random() * S;
-        const dr = 2 + Math.random() * 5;
-        ctx.fillStyle = `rgba(180,210,240,${0.2 + Math.random() * 0.3})`;
+        const dr = 1 + Math.random() * 3;
+        ctx.fillStyle = `rgba(100,255,150,${0.3 + Math.random() * 0.5})`;
         ctx.beginPath();
         ctx.arc(dx, dy, dr, 0, Math.PI * 2);
         ctx.fill();
     }
 
     // === CEILING CRACKS ===
-    for (let cc = 0; cc < 12; cc++) {
-        ctx.strokeStyle = `rgba(10,12,15,${0.3 + Math.random() * 0.3})`;
-        ctx.lineWidth = 0.5 + Math.random() * 2;
+    for (let cc = 0; cc < 15; cc++) {
+        ctx.strokeStyle = `rgba(5,5,5,${0.4 + Math.random() * 0.4})`;
+        ctx.lineWidth = 1 + Math.random() * 3;
         ctx.beginPath();
         let ccx = Math.random() * S;
         let ccy = Math.random() * S;

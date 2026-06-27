@@ -52,29 +52,29 @@ export const LEVEL_ONE_LAMP_DECAY = 2.2;
 export const LEVEL_ONE_LAMP_SPACING_MODULO = 5;
 export const LEVEL_ONE_LAMP_MIN_GRID_X = 3;
 export const LEVEL_ONE_LAMP_MIN_GRID_Z = 3;
-// LEVEL 3 settings
-export const LEVEL_THREE_FOG_COLOR = 0x2a3848;
-export const LEVEL_THREE_FOG_DENSITY = 0.045;
-export const LEVEL_THREE_HEMI_SKY_COLOR = 0x4a5a6a;
-export const LEVEL_THREE_HEMI_GROUND_COLOR = 0x1a2530;
-export const LEVEL_THREE_HEMI_INTENSITY = 0.2;
-export const LEVEL_THREE_TONE_EXPOSURE = 0.75;
-export const LEVEL_THREE_PARTICLE_COLOR = 0xffffff;
-export const LEVEL_THREE_PARTICLE_EMISSIVE = 0xddeeff;
-export const LEVEL_THREE_PARTICLE_SIZE = 0.025;
+// LEVEL 3 settings (Cueva Oscura Bioluminiscente)
+export const LEVEL_THREE_FOG_COLOR = 0x080a06;
+export const LEVEL_THREE_FOG_DENSITY = 0.06;
+export const LEVEL_THREE_HEMI_SKY_COLOR = 0x112211;
+export const LEVEL_THREE_HEMI_GROUND_COLOR = 0x1a0f08;
+export const LEVEL_THREE_HEMI_INTENSITY = 0.15;
+export const LEVEL_THREE_TONE_EXPOSURE = 0.6;
+export const LEVEL_THREE_PARTICLE_COLOR = 0x44ff88;
+export const LEVEL_THREE_PARTICLE_EMISSIVE = 0x22cc66;
+export const LEVEL_THREE_PARTICLE_SIZE = 0.03;
 export const LEVEL_THREE_PARTICLE_OPACITY = 0.6;
-export const LEVEL_THREE_LAMP_SPAWN_CHANCE = 0.12;
-export const LEVEL_THREE_LAMP_MIN_GRID_X = 3;
-export const LEVEL_THREE_LAMP_MIN_GRID_Z = 3;
-export const LEVEL_THREE_LAMP_BLUE_CHANCE = 0.5;
-export const LEVEL_THREE_LAMP_BLUE_COLOR = 0x55aaff;
-export const LEVEL_THREE_LAMP_WHITE_COLOR = 0xcceeff;
-export const LEVEL_THREE_LAMP_INTENSITY = 1.5;
-export const LEVEL_THREE_LAMP_DIM_INTENSITY = 0.2;
-export const LEVEL_THREE_LAMP_DISTANCE = 5;
-export const LEVEL_THREE_LAMP_DECAY = 1.2;
-export const LEVEL_THREE_LAMP_BLUE_MATERIAL_COLOR = 0x114488;
-export const LEVEL_THREE_LAMP_WHITE_MATERIAL_COLOR = 0x88aabb;
+export const LEVEL_THREE_LAMP_SPAWN_CHANCE = 0.15;
+export const LEVEL_THREE_LAMP_MIN_GRID_X = 2;
+export const LEVEL_THREE_LAMP_MIN_GRID_Z = 2;
+export const LEVEL_THREE_LAMP_BLUE_CHANCE = 0.6;
+export const LEVEL_THREE_LAMP_BLUE_COLOR = 0x33ff88;
+export const LEVEL_THREE_LAMP_WHITE_COLOR = 0x44ffaa;
+export const LEVEL_THREE_LAMP_INTENSITY = 1.8;
+export const LEVEL_THREE_LAMP_DIM_INTENSITY = 0.3;
+export const LEVEL_THREE_LAMP_DISTANCE = 6;
+export const LEVEL_THREE_LAMP_DECAY = 1.0;
+export const LEVEL_THREE_LAMP_BLUE_MATERIAL_COLOR = 0x115533;
+export const LEVEL_THREE_LAMP_WHITE_MATERIAL_COLOR = 0x55aa77;
 export const FLASHLIGHT_FLICKER_CYCLE_SECONDS = 66;
 export const FLASHLIGHT_FLICKER_START_SECONDS = 60;
 export const FLASHLIGHT_FLICKER_SECONDS = 0.5;
@@ -151,24 +151,26 @@ export const MAP2 = [
     [1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 1],
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ];
-export const MAP3 = [
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
-    [1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1],
-    [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 1],
-    [1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1],
-    [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 0, 1],
-    [1, 0, 1, 3, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 1],
-    [1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 3, 1, 1, 1, 1],
-    [1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0, 1],
-    [1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1],
-    [1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1],
-    [1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1],
-    [1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1],
-    [1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1],
-    [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2],
-    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-];
+export const MAP3 = [];
+for (let i = 0; i < 185; i++) {
+    if (i === 0) {
+        // Pared trasera de inicio
+        MAP3.push([1, 1, 1, 1, 1]);
+    } else if (i === 184) {
+        // Pared final con la salida en el medio
+        MAP3.push([1, 1, 2, 1, 1]);
+    } else {
+        // Paredes a los lados, túnel central (ancho 3 para dar algo de espacio a esquivar)
+        // Puedes agregar irregularidades ocasionales
+        if (i % 15 === 0) {
+            MAP3.push([1, 0, 0, 1, 1]); // Rocas salientes
+        } else if (i % 17 === 0) {
+            MAP3.push([1, 1, 0, 0, 1]); // Rocas salientes
+        } else {
+            MAP3.push([1, 0, 0, 0, 1]);
+        }
+    }
+}
 export const MAP4_BOSS = [
     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
     [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
