@@ -1,15 +1,29 @@
 import { useWebSocketImplementation, SimplePool } from 'nostr-tools/pool';
 import { finalizeEvent, getPublicKey, verifyEvent } from 'nostr-tools/pure';
-import { nip47 } from 'nostr-tools';
+import { nip19, nip47 } from 'nostr-tools';
 import { decrypt } from 'nostr-tools/nip04';
 import { getSatoshisAmountFromBolt11 } from 'nostr-tools/nip57';
 import WebSocket from 'ws';
 
 useWebSocketImplementation(WebSocket);
 
-const ENTRY_FEE_SATS = 100;
+const DEFAULT_ENTRY_FEE_SATS = 100;
 const JACKPOT_LEDGER_KIND = 30078;
 const SCORE_RELAYS = ['wss://relay.damus.io', 'wss://relay.nostr.band', 'wss://nos.lol'];
+
+function resolveEntryFeeSats() {
+    const raw = (process.env.SAMMER_ENTRY_FEE_SATS || process.env.ENTRY_FEE_SATS || '').trim();
+    if (!raw) {
+        return DEFAULT_ENTRY_FEE_SATS;
+    }
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error(`Invalid entry fee sats (SAMMER_ENTRY_FEE_SATS / ENTRY_FEE_SATS): ${raw}`);
+    }
+    return parsed;
+}
+
+const ENTRY_FEE_SATS = resolveEntryFeeSats();
 
 function getRequiredEnv(name) {
     const value = process.env[name]?.trim();
@@ -23,8 +37,40 @@ function hexToBytes(hex) {
     return Uint8Array.from(Buffer.from(hex, 'hex'));
 }
 
+function decodeSecretKey(input) {
+    const trimmed = input.trim();
+    if (trimmed.startsWith('nsec1')) {
+        const decoded = nip19.decode(trimmed);
+        if (decoded.type !== 'nsec' || !(decoded.data instanceof Uint8Array)) {
+            throw new Error('Invalid nsec: expected 32-byte secret key');
+        }
+        return decoded.data;
+    }
+    const bytes = hexToBytes(trimmed);
+    if (bytes.length !== 32) {
+        throw new Error(`Invalid secret key hex: expected 32 bytes, got ${bytes.length}`);
+    }
+    return bytes;
+}
+
+function decodePubkey(input) {
+    const trimmed = input.trim();
+    if (trimmed.startsWith('npub1')) {
+        const decoded = nip19.decode(trimmed);
+        if (decoded.type !== 'npub' || typeof decoded.data !== 'string') {
+            throw new Error('Invalid npub: expected 32-byte pubkey');
+        }
+        return decoded.data;
+    }
+    const bytes = hexToBytes(trimmed);
+    if (bytes.length !== 32) {
+        throw new Error(`Invalid pubkey hex: expected 32 bytes, got ${bytes.length}`);
+    }
+    return bytes.toString('hex');
+}
+
 function getServerSignerSecretKey() {
-    return hexToBytes(getRequiredEnv('SAMMER_SERVER_SIGNER_NSEC_HEX'));
+    return decodeSecretKey(getRequiredEnv('SAMMER_SERVER_SIGNER_NSEC_HEX'));
 }
 
 function getServerSignerPubkey() {
@@ -32,7 +78,7 @@ function getServerSignerPubkey() {
 }
 
 function getGamePubkey() {
-    return getRequiredEnv('SAMMER_GAME_PUBKEY');
+    return decodePubkey(getRequiredEnv('SAMMER_GAME_PUBKEY'));
 }
 
 function getGameNwcConnection() {
@@ -197,11 +243,11 @@ export async function verifyEntryReceipt(receiptId, expectedPlayerPubkey) {
     }
 
     if (amountTag !== String(ENTRY_FEE_SATS * 1000)) {
-        throw new Error('Receipt amount is not the expected 100-sat entry fee.');
+        throw new Error(`Receipt amount is not the expected ${ENTRY_FEE_SATS}-sat entry fee.`);
     }
 
     if (getSatoshisAmountFromBolt11(bolt11) !== ENTRY_FEE_SATS) {
-        throw new Error('Bolt11 amount does not match the 100-sat entry fee.');
+        throw new Error(`Bolt11 amount does not match the ${ENTRY_FEE_SATS}-sat entry fee.`);
     }
 
     if (expectedPlayerPubkey && playerPubkey !== expectedPlayerPubkey) {

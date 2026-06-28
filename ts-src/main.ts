@@ -79,7 +79,9 @@ const NOSTR_SCORE_RELAYS = [
     'wss://relay.nostr.band',
     'wss://nos.lol'
 ];
-const ENTRY_FEE_SATS = 100;
+const DEFAULT_ENTRY_FEE_SATS = 100;
+let entryFeeSats = DEFAULT_ENTRY_FEE_SATS;
+let gameLightningAddress = '';
 const JACKPOT_LEDGER_KIND = 30078;
 const STARTUP_LEADERBOARD_LIMIT = 5;
 const showStartZapAccess = Boolean(SHOW_START_ZAP_ACCESS);
@@ -92,7 +94,7 @@ let draggingWireIdx = -1;
 let mousePos = { x: 0, y: 0 };
 let leftSockets = [];
 let rightSockets = [];
-let entryGateState = createEntryGateState(ENTRY_FEE_SATS);
+let entryGateState = createEntryGateState(entryFeeSats);
 let lunaNegraSession = null;
 let currentJackpotSats = 0;
 let jackpotBackendConfigured = false;
@@ -528,6 +530,7 @@ function updateEntryGateUI() {
         startBtn.disabled = !startUnlocked;
     if (entryGatePayBtn) {
         entryGatePayBtn.disabled = !playerNostrPubkey || entryGateState.status === 'paying' || entryGateState.status === 'verifying';
+        entryGatePayBtn.textContent = `PAGAR ${entryFeeSats} SATS`;
     }
     if (entryGateVerifyBtn) {
         entryGateVerifyBtn.disabled = !entryGateState.invoice || entryGateState.status === 'paying' || entryGateState.status === 'verifying';
@@ -553,7 +556,7 @@ function updateEntryGateUI() {
         return;
     }
     if (entryGateState.status === 'paying') {
-        setEntryGateStatus('GENERANDO FACTURA ZAP DE 100 SATS...', 'loading');
+        setEntryGateStatus(`GENERANDO FACTURA ZAP DE ${entryFeeSats} SATS...`, 'loading');
         return;
     }
     if (entryGateState.status === 'verifying') {
@@ -564,10 +567,10 @@ function updateEntryGateUI() {
         setEntryGateStatus(entryGateState.lastError, 'error');
         return;
     }
-    setEntryGateStatus('PAGA 100 SATS PARA DESBLOQUEAR LA OPERACIÓN', 'idle');
+    setEntryGateStatus(`PAGA ${entryFeeSats} SATS PARA DESBLOQUEAR LA OPERACIÓN`, 'idle');
 }
 function resetEntryGateState() {
-    entryGateState = createEntryGateState(ENTRY_FEE_SATS);
+    entryGateState = createEntryGateState(entryFeeSats);
     pendingEntryZapRequest = null;
     pendingEntryZapProviderPubkey = '';
     pendingEntryZapSessionId = '';
@@ -828,6 +831,23 @@ function parseJackpotLedgerEvents(events) {
         type: event.tags.find((tag) => tag[0] === 'type')?.[1] === 'jackpot-claim' ? 'jackpot-claim' : 'entry-loss'
     }));
 }
+async function fetchLnurlPayConfig(lightningAddress) {
+    const [name, domain] = lightningAddress.split('@');
+    if (!name || !domain) {
+        throw new Error(`Lightning address inválida: ${lightningAddress}`);
+    }
+    const lnurlUrl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString();
+    const response = await fetch(lnurlUrl);
+    const lnurlData = await response.json();
+    if (!lnurlData?.allowsNostr || !lnurlData?.callback || !lnurlData?.nostrPubkey) {
+        throw new Error('El proveedor LNURL del juego no soporta zaps Nostr.');
+    }
+    return {
+        callback: lnurlData.callback,
+        providerPubkey: lnurlData.nostrPubkey,
+    };
+}
+
 async function loadZapConfigurationForPubkey(targetPubkey) {
     const pool = new window.NostrTools.SimplePool();
     try {
@@ -844,17 +864,10 @@ async function loadZapConfigurationForPubkey(targetPubkey) {
         if (!profile.lud16 || typeof profile.lud16 !== 'string' || !profile.lud16.includes('@')) {
             throw new Error('El perfil del juego no publica un lud16 válido para zaps.');
         }
-        const [name, domain] = profile.lud16.split('@');
-        const lnurlUrl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString();
-        const response = await fetch(lnurlUrl);
-        const lnurlData = await response.json();
-        if (!lnurlData?.allowsNostr || !lnurlData?.callback || !lnurlData?.nostrPubkey) {
-            throw new Error('El proveedor LNURL del juego no soporta zaps Nostr.');
-        }
+        const lnurlConfig = await fetchLnurlPayConfig(profile.lud16);
         return {
-            callback: lnurlData.callback,
+            ...lnurlConfig,
             profileEvent,
-            providerPubkey: lnurlData.nostrPubkey,
         };
     }
     finally {
@@ -864,6 +877,9 @@ async function loadZapConfigurationForPubkey(targetPubkey) {
     }
 }
 async function loadGameZapConfiguration() {
+    if (gameLightningAddress) {
+        return fetchLnurlPayConfig(gameLightningAddress);
+    }
     return loadZapConfigurationForPubkey(NOSTR_GAME_PUBKEY);
 }
 function signUnsignedNostrEvent(unsignedEvent) {
@@ -913,6 +929,15 @@ async function loadCurrentJackpot() {
         }
         jackpotBackendConfigured = Boolean(payload.configured);
         currentJackpotSats = Number.isFinite(payload.currentPotSats) ? payload.currentPotSats : 0;
+        const statusFeeSats = Number(payload.entryFeeSats);
+        if (Number.isFinite(statusFeeSats) && statusFeeSats > 0 && statusFeeSats !== entryFeeSats) {
+            entryFeeSats = statusFeeSats;
+            entryGateState = createEntryGateState(entryFeeSats);
+        }
+        const statusLightning = typeof payload.lightningAddress === 'string' ? payload.lightningAddress.trim() : '';
+        if (statusLightning && statusLightning !== gameLightningAddress) {
+            gameLightningAddress = statusLightning;
+        }
         updateEntryGateUI();
     }
     catch (error) {
@@ -937,7 +962,7 @@ async function requestEntryInvoice() {
             throw new Error('El bundle Nostr actual no soporta NIP-57.');
         }
         const zapConfig = await loadGameZapConfiguration();
-        const amountMillisats = ENTRY_FEE_SATS * 1000;
+        const amountMillisats = entryFeeSats * 1000;
         const zapRequest = window.NostrTools.nip57.makeZapRequest({
             amount: amountMillisats,
             comment: 'Sammer entry fee',
@@ -954,7 +979,7 @@ async function requestEntryInvoice() {
         pendingEntryZapProviderPubkey = zapConfig.providerPubkey;
         pendingEntryZapSessionId = `${playerNostrPubkey}-${Date.now()}`;
         entryGateState.invoice = invoiceData.pr;
-        entryGateState.invoiceAmountSats = ENTRY_FEE_SATS;
+        entryGateState.invoiceAmountSats = entryFeeSats;
         entryGateState.status = 'invoice-ready';
         if (window.webln) {
             try {
@@ -1007,10 +1032,10 @@ function isMatchingEntryReceipt(receipt) {
     const invoiceTag = receipt.tags.find((tag) => tag[0] === 'bolt11')?.[1] || '';
     const receiptAmount = window.NostrTools.nip57.getSatoshisAmountFromBolt11(invoiceTag);
     return recipientTag === NOSTR_GAME_PUBKEY
-        && amountTag === String(ENTRY_FEE_SATS * 1000)
+        && amountTag === String(entryFeeSats * 1000)
         && invoiceTag === entryGateState.invoice
         && description.id === pendingEntryZapRequest.id
-        && receiptAmount === ENTRY_FEE_SATS;
+        && receiptAmount === entryFeeSats;
 }
 function isMatchingPayoutReceipt(receipt, signedZapRequest, invoice, winnerPubkey, providerPubkey, amountSats) {
     if (receipt.pubkey !== providerPubkey) {
@@ -1161,7 +1186,7 @@ function handlePaidStart() {
             victoryOverlay.classList.remove('active');
             menuOverlay.classList.add('active');
         }
-        showFeedback('PAGA 100 SATS PARA INICIAR');
+        showFeedback(`PAGA ${entryFeeSats} SATS PARA INICIAR`);
         updateEntryGateUI();
         return;
     }

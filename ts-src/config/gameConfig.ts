@@ -37,7 +37,7 @@ export const BOSS_ROAR_RATE = 0.3007525075287223; // eventos/segundo desde p=0.0
 export const FUSE_SPARK_RATE = 5.002896249256134; // eventos/segundo desde p=0.08 a 60 FPS
 export const PARTICLE_GRAVITY = -18; // unidades/segundo²; conserva -0.005 por frame a 60 FPS
 export const GAME_PAYOUT_NWC_URI = '';
-export const SHOW_START_ZAP_ACCESS = false;
+export const SHOW_START_ZAP_ACCESS = true;
 export const SHOW_START_NOSTR_LEADERBOARD = true;
 export const SHOW_START_LUNA_NEGRA_SECTION = false;
 export const LUNA_NEGRA_BASE_URL = 'https://moon21.vercel.app';
