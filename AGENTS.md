@@ -78,19 +78,19 @@ The "JUGAR GRATIS" / "JUGAR POR EL POZO" button (`#free-start-btn`) is dual-purp
 
 The old "INICIAR OPERACIÓN" button (`#start-btn`) was removed. The old "VERIFICAR ZAP" button (`#entry-verify-btn`) is hidden — verification is now automatic.
 
-### Backend Ledger
+### Backend Ledger and Pot Balance
 `api/_lib/jackpot.js` maintains a ledger on Nostr relays using `kind 30078` events signed by the server signer key:
-- `entry-loss` events add sats to the pot (published when a paid run dies).
-- `jackpot-claim` events reset the pot to zero (published when a winner claims).
-- `computePotFromLedger()` sums the ledger to calculate the current pot.
+- `entry-loss` events record a paid-run death.
+- `jackpot-claim` events record a winner payout.
+- `computePotFromLedger()` sums the ledger as an audit trail and fallback value.
 
-The pot itself lives in a Lightning wallet (Alby Hub, LNbits, or similar) configured via `SAMMER_GAME_NWC_URI`. The backend does not custody sats directly; it uses NWC to instruct the wallet to pay invoices.
+The visible pot comes from `/api/jackpot/status`. That endpoint now prefers the live wallet balance from `SAMMER_GAME_NWC_URI` via NWC `get_balance` (`fetchWalletBalanceSats()`), and falls back to the ledger total only if wallet balance lookup fails. The response includes `currentPotSats` (display value), `walletBalanceSats` (live NWC balance, nullable), and `ledgerPotSats` (Nostr ledger total). This is important because historical paid entries may exist in the Lightning wallet even if old `entry-loss` ledger events failed to publish.
 
 ### Key Files
 - `ts-src/main.ts` — Frontend entry gate UI, zap generation, auto-verification, leaderboard, score publishing.
 - `ts-src/nostr/paymentGate.ts` — `EntryGateState` interface, `createEntryGateState()`, `canStartPaidRun()`, `computeCurrentJackpot()`.
-- `api/_lib/jackpot.js` — Backend ledger, zap verification, NWC payout, entry fee resolver, key decoders.
-- `api/jackpot/status.js` — Returns `{ configured, currentPotSats, entryFeeSats, lightningAddress }`.
+- `api/_lib/jackpot.js` — Backend ledger, zap verification, NWC payout, NWC balance lookup, entry fee resolver, key decoders.
+- `api/jackpot/status.js` — Returns `{ configured, currentPotSats, walletBalanceSats, ledgerPotSats, entryFeeSats, lightningAddress }`.
 - `api/jackpot/verify-zap.js` — Verifies a zap receipt against the ledger.
 - `api/jackpot/report-loss.js` — Records an entry-loss event when a paid run dies.
 - `api/jackpot/claim.js` — Pays out the pot to a winner via NWC (currently wired to boss victory proof).

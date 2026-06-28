@@ -1127,8 +1127,7 @@ async function attemptVerifyOnce() {
             return;
         }
         stopAutoVerification();
-        entryGateState.isPaid = true;
-        entryGateState.status = 'paid';
+        entryGateState.status = 'verifying';
         entryGateState.verifiedReceiptId = matchingReceipt.id;
         updateEntryGateUI();
         const verifyResponse = await fetch('/api/jackpot/verify-zap', {
@@ -1140,6 +1139,9 @@ async function attemptVerifyOnce() {
         if (!verifyResponse.ok || !verifyPayload.ok) {
             throw new Error(verifyPayload.error || 'El backend no pudo verificar el zap de entrada.');
         }
+        entryGateState.isPaid = true;
+        entryGateState.status = 'paid';
+        updateEntryGateUI();
         await loadCurrentJackpot();
         showFeedback('ENTRADA VERIFICADA');
     }
@@ -1236,6 +1238,8 @@ function handlePaidStart() {
             deathOverlay.classList.remove('active');
             victoryOverlay.classList.remove('active');
             menuOverlay.classList.add('active');
+            void loadStartupLeaderboard();
+            void loadCurrentJackpot();
         }
         showFeedback(`PAGA ${entryFeeSats} SATS PARA INICIAR`);
         updateEntryGateUI();

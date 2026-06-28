@@ -1,7 +1,7 @@
 import { useWebSocketImplementation, SimplePool } from 'nostr-tools/pool';
 import { finalizeEvent, getPublicKey, verifyEvent } from 'nostr-tools/pure';
 import { nip19, nip47 } from 'nostr-tools';
-import { decrypt } from 'nostr-tools/nip04';
+import { decrypt, encrypt } from 'nostr-tools/nip04';
 import { getSatoshisAmountFromBolt11 } from 'nostr-tools/nip57';
 import WebSocket from 'ws';
 
@@ -164,6 +164,22 @@ export function parseLedgerEvent(event) {
 }
 
 export async function fetchGameZapConfig() {
+    const lightningAddress = (process.env.SAMMER_GAME_LIGHTNING_ADDRESS || '').trim();
+
+    if (lightningAddress) {
+        const [name, domain] = lightningAddress.split('@');
+        const lnurlUrl = new URL(`/.well-known/lnurlp/${name}`, `https://${domain}`).toString();
+        const response = await fetch(lnurlUrl);
+        const payload = await response.json();
+        if (!payload?.allowsNostr || !payload?.nostrPubkey) {
+            throw new Error('Game LNURL endpoint does not support Nostr zaps.');
+        }
+
+        return {
+            providerPubkey: payload.nostrPubkey,
+        };
+    }
+
     const pool = createPool();
 
     try {
@@ -384,6 +400,50 @@ export async function sendNwcPayInvoice(invoice) {
         }
 
         return parsed.result;
+    } finally {
+        pool.close(connection.relays);
+    }
+}
+
+export async function fetchWalletBalanceSats() {
+    const connection = getGameNwcConnection();
+    const secretKey = hexToBytes(connection.secret);
+    const clientPubkey = getPublicKey(secretKey);
+
+    const payload = JSON.stringify({ method: 'get_balance', params: {} });
+    const encryptedContent = encrypt(secretKey, connection.pubkey, payload);
+    const requestEvent = finalizeEvent({
+        kind: 23194,
+        created_at: Math.round(Date.now() / 1000),
+        content: encryptedContent,
+        tags: [['p', connection.pubkey]],
+    }, secretKey);
+
+    const pool = createPool();
+
+    try {
+        await Promise.allSettled(pool.publish(connection.relays, requestEvent));
+        const responses = await pool.querySync(connection.relays, {
+            kinds: [23195],
+            authors: [connection.pubkey],
+            '#p': [clientPubkey],
+            limit: 20,
+        });
+        const matchingResponse = (responses || [])
+            .sort((left, right) => right.created_at - left.created_at)
+            .find((response) => response.tags.some((tag) => tag[0] === 'e' && tag[1] === requestEvent.id));
+
+        if (!matchingResponse) {
+            throw new Error('NWC wallet did not return a get_balance response.');
+        }
+
+        const decrypted = decrypt(secretKey, connection.pubkey, matchingResponse.content);
+        const parsed = JSON.parse(decrypted);
+        if (parsed.error) {
+            throw new Error(parsed.error.message || 'NWC wallet rejected the get_balance request.');
+        }
+
+        return Math.floor((parsed.result?.balance || 0) / 1000);
     } finally {
         pool.close(connection.relays);
     }
