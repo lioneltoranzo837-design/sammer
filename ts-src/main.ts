@@ -101,6 +101,10 @@ let jackpotBackendConfigured = false;
 let pendingEntryZapRequest = null;
 let pendingEntryZapProviderPubkey = '';
 let pendingEntryZapSessionId = '';
+let pendingVerificationTimer = 0;
+let pendingVerificationDeadline = 0;
+const ENTRY_VERIFICATION_INTERVAL_MS = 2500;
+const ENTRY_VERIFICATION_TIMEOUT_MS = 5 * 60 * 1000;
 let isMouseDown = false;
 let autoFireTimer = 0;
 let acidProjectiles = [];
@@ -529,11 +533,14 @@ function updateEntryGateUI() {
     if (startBtn)
         startBtn.disabled = !startUnlocked;
     if (entryGatePayBtn) {
-        entryGatePayBtn.disabled = !playerNostrPubkey || entryGateState.status === 'paying' || entryGateState.status === 'verifying';
-        entryGatePayBtn.textContent = `PAGAR ${entryFeeSats} SATS`;
-    }
-    if (entryGateVerifyBtn) {
-        entryGateVerifyBtn.disabled = !entryGateState.invoice || entryGateState.status === 'paying' || entryGateState.status === 'verifying';
+        entryGatePayBtn.disabled = !playerNostrPubkey || entryGateState.status === 'paying' || entryGateState.status === 'verifying' || entryGateState.status === 'paid';
+        if (entryGateState.status === 'verifying') {
+            entryGatePayBtn.textContent = 'ESPERANDO PAGO...';
+        } else if (entryGateState.status === 'paid') {
+            entryGatePayBtn.textContent = 'ENTRADA VERIFICADA';
+        } else {
+            entryGatePayBtn.textContent = `PAGAR ${entryFeeSats} SATS`;
+        }
     }
     if (entryGateInvoiceOutput) {
         entryGateInvoiceOutput.value = entryGateState.invoice;
@@ -552,7 +559,7 @@ function updateEntryGateUI() {
         return;
     }
     if (entryGateState.status === 'invoice-ready') {
-        setEntryGateStatus('PAGA LA FACTURA Y LUEGO VERIFICA EL ZAP.', 'loading');
+        setEntryGateStatus('FACTURA LISTA. ESPERANDO DETECCIÓN DE PAGO...', 'loading');
         return;
     }
     if (entryGateState.status === 'paying') {
@@ -570,6 +577,7 @@ function updateEntryGateUI() {
     setEntryGateStatus(`PAGA ${entryFeeSats} SATS PARA DESBLOQUEAR LA OPERACIÓN`, 'idle');
 }
 function resetEntryGateState() {
+    stopAutoVerification();
     entryGateState = createEntryGateState(entryFeeSats);
     pendingEntryZapRequest = null;
     pendingEntryZapProviderPubkey = '';
@@ -981,6 +989,7 @@ async function requestEntryInvoice() {
         entryGateState.invoice = invoiceData.pr;
         entryGateState.invoiceAmountSats = entryFeeSats;
         entryGateState.status = 'invoice-ready';
+        updateEntryGateUI();
         if (window.webln) {
             try {
                 await window.webln.enable();
@@ -991,6 +1000,7 @@ async function requestEntryInvoice() {
             }
         }
         showFeedback('FACTURA ZAP GENERADA');
+        startAutoVerification();
     }
     catch (error) {
         console.error('Entry invoice error:', error);
@@ -1058,16 +1068,38 @@ function isMatchingPayoutReceipt(receipt, signedZapRequest, invoice, winnerPubke
         && description.id === signedZapRequest.id
         && receiptAmount === amountSats;
 }
-async function verifyEntryReceipt() {
-    if (!entryGateState.invoice) {
+function stopAutoVerification() {
+    if (pendingVerificationTimer) {
+        clearInterval(pendingVerificationTimer);
+        pendingVerificationTimer = 0;
+    }
+    pendingVerificationDeadline = 0;
+}
+
+function startAutoVerification() {
+    stopAutoVerification();
+    entryGateState.status = 'verifying';
+    entryGateState.lastError = '';
+    pendingVerificationDeadline = Date.now() + ENTRY_VERIFICATION_TIMEOUT_MS;
+    updateEntryGateUI();
+    void attemptVerifyOnce();
+    pendingVerificationTimer = setInterval(() => {
+        void attemptVerifyOnce();
+    }, ENTRY_VERIFICATION_INTERVAL_MS);
+}
+
+async function attemptVerifyOnce() {
+    if (entryGateState.status !== 'verifying' || !entryGateState.invoice) {
+        stopAutoVerification();
+        return;
+    }
+    if (Date.now() > pendingVerificationDeadline) {
+        stopAutoVerification();
         entryGateState.status = 'error';
-        entryGateState.lastError = 'GENERA UNA FACTURA ZAP ANTES DE VERIFICAR.';
+        entryGateState.lastError = 'TIEMPO AGOTADO ESPERANDO EL PAGO. VOLVÉ A GENERAR LA FACTURA.';
         updateEntryGateUI();
         return;
     }
-    entryGateState.status = 'verifying';
-    entryGateState.lastError = '';
-    updateEntryGateUI();
     const pool = new window.NostrTools.SimplePool();
     try {
         const receipts = await pool.querySync(NOSTR_SCORE_RELAYS, {
@@ -1079,11 +1111,13 @@ async function verifyEntryReceipt() {
             .sort((left, right) => right.created_at - left.created_at)
             .find((receipt) => isMatchingEntryReceipt(receipt));
         if (!matchingReceipt) {
-            throw new Error('Todavía no apareció un recibo zap válido en los relays.');
+            return;
         }
+        stopAutoVerification();
         entryGateState.isPaid = true;
         entryGateState.status = 'paid';
         entryGateState.verifiedReceiptId = matchingReceipt.id;
+        updateEntryGateUI();
         const verifyResponse = await fetch('/api/jackpot/verify-zap', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -1098,16 +1132,20 @@ async function verifyEntryReceipt() {
     }
     catch (error) {
         console.error('Verify entry receipt error:', error);
+        stopAutoVerification();
         entryGateState.status = 'error';
         entryGateState.lastError = error.message || 'NO SE PUDO VERIFICAR EL ZAP';
-    }
-    finally {
         if (typeof pool.close === 'function') {
             pool.close(NOSTR_SCORE_RELAYS);
         }
         updateEntryGateUI();
+        return;
+    }
+    if (typeof pool.close === 'function') {
+        pool.close(NOSTR_SCORE_RELAYS);
     }
 }
+
 async function createBossVictoryProof() {
     if (!playerNostrPubkey || !entryGateState.verifiedReceiptId) {
         throw new Error('Missing verified paid run for boss victory proof.');
@@ -4916,9 +4954,6 @@ function setupControls() {
     winBtn.addEventListener('click', handlePaidStart);
     entryGatePayBtn?.addEventListener('click', () => {
         void requestEntryInvoice();
-    });
-    entryGateVerifyBtn?.addEventListener('click', () => {
-        void verifyEntryReceipt();
     });
     // Eventos de la tienda
     document.getElementById('buy-glock-btn').addEventListener('click', buyGlock);
