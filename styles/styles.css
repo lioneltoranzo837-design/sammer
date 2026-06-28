@@ -122,7 +122,7 @@ html, body {
         "brief controls leaderboard"
         "luna controls leaderboard"
         "gate controls leaderboard"
-        "free start nostr"
+        "free nostr nostr"
         "manual manual manual";
     gap: 18px 22px;
     align-items: stretch;
@@ -172,10 +172,6 @@ html, body {
 
 #menu-overlay #free-start-btn {
     grid-area: free;
-}
-
-#menu-overlay #start-btn {
-    grid-area: start;
 }
 
 #menu-overlay #nostr-connect-btn {
@@ -497,14 +493,15 @@ html, body {
 
 .entry-gate-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 10px;
 }
 
 .entry-gate-btn {
     width: 100%;
-    padding: 11px 18px;
-    font-size: 0.95rem;
+    padding: 16px 24px;
+    font-size: 1.15rem;
+    letter-spacing: 0.04em;
 }
 
 .entry-gate-btn-secondary {

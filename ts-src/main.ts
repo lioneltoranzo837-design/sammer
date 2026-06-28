@@ -105,6 +105,7 @@ let pendingVerificationTimer = 0;
 let pendingVerificationDeadline = 0;
 const ENTRY_VERIFICATION_INTERVAL_MS = 2500;
 const ENTRY_VERIFICATION_TIMEOUT_MS = 5 * 60 * 1000;
+let engineReady = false;
 let isMouseDown = false;
 let autoFireTimer = 0;
 let acidProjectiles = [];
@@ -302,6 +303,7 @@ async function initEngine() {
 
     zombieFaceTexture = generateZombieFaceTexture();
     freeStartBtn.disabled = true;
+    engineReady = false;
     const zombieModelReady = new Promise((resolve) => {
         // Carga del modelo de zombie GLB original en segundo plano
         try {
@@ -359,6 +361,8 @@ async function initEngine() {
     window.addEventListener('resize', onWindowResize);
     setupControls();
     freeStartBtn.disabled = false;
+    engineReady = true;
+    updateEntryGateUI();
     // Bucle de renderizado
     animate();
 }
@@ -424,7 +428,6 @@ function setStartMenuElementVisible(element, visible) {
 }
 function applyStartMenuVisibility() {
     setStartMenuElementVisible(entryGatePanel, showStartZapAccess);
-    setStartMenuElementVisible(startBtn, showStartZapAccess);
     setStartMenuElementVisible(startLeaderboardPanel, showStartNostrLeaderboard);
     setStartMenuElementVisible(lunaNegraPanel, showStartLunaNegraSection);
     setStartMenuElementVisible(nostrConnectBtn, showStartNostrControls);
@@ -525,21 +528,31 @@ function setEntryGateStatus(message, tone) {
 }
 function updateEntryGateUI() {
     if (!showStartZapAccess) {
+        if (freeStartBtn && engineReady) {
+            freeStartBtn.textContent = 'JUGAR GRATIS';
+            freeStartBtn.disabled = false;
+        }
         return;
     }
     const payoutReady = isGamePayoutReady();
     const startUnlocked = canStartPaidRun(entryGateState) && payoutReady;
     setJackpotValueDisplay(currentJackpotSats);
-    if (startBtn)
-        startBtn.disabled = !startUnlocked;
+    if (freeStartBtn && engineReady) {
+        const busy = entryGateState.status === 'paying' || entryGateState.status === 'verifying';
+        const paid = canStartPaidRun(entryGateState) && payoutReady;
+        freeStartBtn.disabled = busy;
+        freeStartBtn.textContent = busy
+            ? 'ESPERANDO PAGO...'
+            : (paid ? 'JUGAR POR EL POZO' : 'JUGAR GRATIS');
+    }
     if (entryGatePayBtn) {
         entryGatePayBtn.disabled = !playerNostrPubkey || entryGateState.status === 'paying' || entryGateState.status === 'verifying' || entryGateState.status === 'paid';
         if (entryGateState.status === 'verifying') {
             entryGatePayBtn.textContent = 'ESPERANDO PAGO...';
         } else if (entryGateState.status === 'paid') {
-            entryGatePayBtn.textContent = 'ENTRADA VERIFICADA';
+            entryGatePayBtn.textContent = 'APUESTA CONFIRMADA';
         } else {
-            entryGatePayBtn.textContent = `PAGAR ${entryFeeSats} SATS`;
+            entryGatePayBtn.textContent = `APOSTAR ${entryFeeSats} SATS`;
         }
     }
     if (entryGateInvoiceOutput) {
@@ -4949,7 +4962,6 @@ function setupControls() {
     void loadCurrentJackpot();
     updateEntryGateUI();
     freeStartBtn.addEventListener('click', startGame);
-    startBtn.addEventListener('click', handlePaidStart);
     restartBtn.addEventListener('click', handlePaidStart);
     winBtn.addEventListener('click', handlePaidStart);
     entryGatePayBtn?.addEventListener('click', () => {
