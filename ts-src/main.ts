@@ -6,6 +6,7 @@ import { BoundedPool } from './core/boundedPool.js';
 import { LazyAsset } from './core/lazyAsset.js';
 import { clampSimulationDelta, distanceForDelta, eventOccursForDelta, integrateConstantAcceleration, legacyFrameVelocityToPerSecond } from './core/timing.js';
 import { pickFacilityDecorationType } from './gameplay/facilityDecorations.js';
+import { ENEMY_SCORE_TYPES, createInitialScoreState, recordEnemyKill, recordPlayerDamage, resolveFinalScore } from './gameplay/scoring.js';
 import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
 import { DelegationUnavailableError, buildDelegationTag, isDelegationActive, isSignSchnorrAvailable, requestDelegation } from './nostr/delegation.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
@@ -69,6 +70,7 @@ let builtMapLevel = null;
 let mapChunks = []; // Array para guardar mallas del mapa y su coordenada Z
 let activeMap = MAP;
 let supplyPoints = 0;
+let scoreState = createInitialScoreState(0);
 let unlockedWeapons = { shotgun: true, glock: false, m4: false };
 let playerNostrPubkey = null;
 let playerNostrPrivateKey = null;
@@ -88,6 +90,36 @@ const showStartZapAccess = Boolean(SHOW_START_ZAP_ACCESS);
 const showStartNostrLeaderboard = Boolean(SHOW_START_NOSTR_LEADERBOARD);
 const showStartNostrControls = showStartZapAccess || showStartNostrLeaderboard;
 const showStartLunaNegraSection = Boolean(SHOW_START_LUNA_NEGRA_SECTION);
+function getRunElapsedSeconds() {
+    if (scoreState.startedAtMs <= 0) {
+        return 0;
+    }
+    return Math.max(0, (performance.now() - scoreState.startedAtMs) / 1000);
+}
+function createScorePublishSnapshot() {
+    const elapsedSeconds = getRunElapsedSeconds();
+    return {
+        finalScore: resolveFinalScore({
+            state: scoreState,
+            currentLevel,
+            elapsedSeconds,
+        }),
+        kills: scoreState.kills,
+        damageTaken: scoreState.damageTaken,
+        elapsedSeconds: Math.round(elapsedSeconds),
+    };
+}
+function recordZombieKillScore(zombieType) {
+    if (zombieType === 'RUNNER') {
+        scoreState = recordEnemyKill(scoreState, ENEMY_SCORE_TYPES.ZombieRunner, currentLevel);
+        return;
+    }
+    if (zombieType === 'SPITTER') {
+        scoreState = recordEnemyKill(scoreState, ENEMY_SCORE_TYPES.ZombieSpitter, currentLevel);
+        return;
+    }
+    scoreState = recordEnemyKill(scoreState, ENEMY_SCORE_TYPES.ZombieNormal, currentLevel);
+}
 // Variables para el Minijuego de Cableado
 let wiringFixed = false;
 let draggingWireIdx = -1;
@@ -806,7 +838,7 @@ async function initLunaNegraUI() {
         setLunaNegraStatus('ERROR DE SESIÓN LUNA NEGRA', 'error');
     }
 }
-async function publishLunaNegraScore() {
+async function publishLunaNegraScore(scoreSnapshot) {
     if (!showStartLunaNegraSection || !lunaNegraSession?.token) {
         return;
     }
@@ -817,7 +849,7 @@ async function publishLunaNegraScore() {
                 authorization: `Bearer ${lunaNegraSession.token}`,
                 'content-type': 'application/json'
             },
-            body: JSON.stringify({ score: supplyPoints })
+            body: JSON.stringify({ score: scoreSnapshot.finalScore })
         });
         setLunaNegraStatus('PUNTAJE ENVIADO A LUNA NEGRA', 'success');
         await loadLunaNegraLeaderboard();
@@ -1247,7 +1279,7 @@ function handlePaidStart() {
     }
     startGame();
 }
-async function publishNostrScore() {
+async function publishNostrScore(scoreSnapshot) {
     try {
         if (!playerNostrPubkey) {
             return;
@@ -1261,9 +1293,12 @@ async function publishNostrScore() {
             ['p', NOSTR_GAME_PUBKEY],
             ['p', playerNostrPubkey],
             ['player', playerNostrPubkey],
-            ['score', supplyPoints.toString()],
+            ['score', scoreSnapshot.finalScore.toString()],
             ['level', currentLevel.toString()],
-            ['timestamp', now.toString()]
+            ['timestamp', now.toString()],
+            ['kills', JSON.stringify(scoreSnapshot.kills)],
+            ['damage', scoreSnapshot.damageTaken.toString()],
+            ['seconds', scoreSnapshot.elapsedSeconds.toString()]
         ];
         if (useDelegation) {
             tags.push(buildDelegationTag(activeDelegation));
@@ -1272,9 +1307,12 @@ async function publishNostrScore() {
             kind: 78,
             content: JSON.stringify({
                 game: 'sammer',
-                score: supplyPoints,
+                score: scoreSnapshot.finalScore,
                 level: currentLevel,
-                timestamp: now
+                timestamp: now,
+                kills: scoreSnapshot.kills,
+                damage: scoreSnapshot.damageTaken,
+                seconds: scoreSnapshot.elapsedSeconds
             }),
             created_at: now,
             tags,
@@ -1309,9 +1347,10 @@ async function publishNostrScore() {
     }
 }
 async function publishScore() {
+    const scoreSnapshot = createScorePublishSnapshot();
     await Promise.allSettled([
-        publishNostrScore(),
-        publishLunaNegraScore()
+        publishNostrScore(scoreSnapshot),
+        publishLunaNegraScore(scoreSnapshot)
     ]);
 }
 // --- CONSTRUCTOR DE MAPA ---
@@ -3048,6 +3087,7 @@ class Zombie {
         this.hurtTimer = 0.12;
         AudioSynth.playZombieHurt();
         if (this.health <= 0) {
+            recordZombieKillScore(this.type);
             this.state = 'DYING';
             const backDir = new THREE.Vector3().subVectors(this.group.position, camera.position).normalize();
             this.group.position.addScaledVector(backDir, 0.4);
@@ -3284,6 +3324,7 @@ class CeilingSpider {
         this.hurtTimer = 0.12;
         AudioSynth.playZombieHurt();
         if (this.health <= 0) {
+            scoreState = recordEnemyKill(scoreState, ENEMY_SCORE_TYPES.CeilingSpider, currentLevel);
             this.state = 'DYING';
             this.eyeLight.intensity = 0.15;
         }
@@ -3555,6 +3596,7 @@ class BossEnemy {
         AudioSynth.playBossImpact();
         this.updateHealthBar();
         if (this.health <= 0) {
+            scoreState = recordEnemyKill(scoreState, ENEMY_SCORE_TYPES.Boss, currentLevel);
             this.state = 'DYING';
             AudioSynth.stopBossMusic();
             showFeedback("¡JEFE ELIMINADO! VICTORIA INMINENTE...");
@@ -3979,6 +4021,7 @@ function checkZombieWallCollisions(zX, zZ) {
 function damagePlayer(amount, isAcid = false) {
     if (player.health <= 0 || gameState !== 'PLAYING')
         return;
+    const protectionBeforeDamage = player.health + player.armor;
     if (player.armor > 0) {
         const armorDamage = Math.floor(amount * 0.6);
         player.armor = Math.max(0, player.armor - armorDamage);
@@ -3987,6 +4030,8 @@ function damagePlayer(amount, isAcid = false) {
     else {
         player.health = Math.max(0, player.health - amount);
     }
+    const damageTaken = Math.max(0, protectionBeforeDamage - player.health - player.armor);
+    scoreState = recordPlayerDamage(scoreState, damageTaken);
     if (isAcid) {
         damageFlash.classList.add('acid');
         AudioSynth.playAcidBurn();
@@ -4423,6 +4468,7 @@ async function startGame() {
     // Restablecer variables de progresión y tienda
     currentLevel = 1;
     supplyPoints = 0;
+    scoreState = createInitialScoreState(performance.now());
     unlockedWeapons.glock = false;
     unlockedWeapons.m4 = false;
     wiringFixed = false;
@@ -4576,6 +4622,9 @@ function triggerVictory() {
         if (btnEl)
             btnEl.innerText = "VOLVER A JUGAR";
         AudioSynth.playWinTune();
+        if (playerNostrPubkey) {
+            publishScore().catch(error => console.error('Publish score error:', error));
+        }
         void finalizeBossJackpotVictory(msgEl);
     }
     else {
