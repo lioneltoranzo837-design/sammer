@@ -1,0 +1,4 @@
+# Local-only tooling state created by the CodeGraph/TLDR daemon.
+# Excludes it from `vercel dev`'s file watcher (chokidar fails with
+# "UNKNOWN" when it tries to fs.watch a Unix socket) and from uploads.
+.codegraph
