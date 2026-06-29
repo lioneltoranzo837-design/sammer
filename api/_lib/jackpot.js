@@ -8,6 +8,7 @@ import WebSocket from 'ws';
 useWebSocketImplementation(WebSocket);
 
 const DEFAULT_ENTRY_FEE_SATS = 100;
+const JACKPOT_CONTRIBUTION_BASIS_POINTS = 9000;
 const JACKPOT_LEDGER_KIND = 30078;
 const SCORE_RELAYS = ['wss://relay.damus.io', 'wss://relay.nostr.band', 'wss://nos.lol'];
 
@@ -77,7 +78,7 @@ function getServerSignerPubkey() {
     return getPublicKey(getServerSignerSecretKey());
 }
 
-function getGamePubkey() {
+export function getGamePubkey() {
     return decodePubkey(getRequiredEnv('SAMMER_GAME_PUBKEY'));
 }
 
@@ -93,6 +94,99 @@ function jsonResponse(res, statusCode, payload) {
     res.statusCode = statusCode;
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify(payload));
+}
+
+function tagValue(event, key) {
+    return event.tags?.find((tag) => tag[0] === key)?.[1] || '';
+}
+
+function toFiniteInteger(value) {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return Math.trunc(value);
+    }
+
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+        return null;
+    }
+
+    const parsed = Number.parseInt(normalized, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseScoreContent(value) {
+    if (!value) {
+        return {};
+    }
+
+    try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function isSammerScoreEvent(event) {
+    return (event.tags || []).some((tag) => tag[0] === 'game' && tag[1] === 'sammer')
+        || (event.tags || []).some((tag) => tag[0] === 'd' && typeof tag[1] === 'string' && tag[1].startsWith('sammer-score-'));
+}
+
+function toScoreboardEntry(event) {
+    if (!isSammerScoreEvent(event)) {
+        return null;
+    }
+
+    const parsedContent = parseScoreContent(event.content);
+    const parsedScore = typeof parsedContent.score === 'string' || typeof parsedContent.score === 'number'
+        ? parsedContent.score
+        : undefined;
+    const parsedLevel = typeof parsedContent.level === 'string' || typeof parsedContent.level === 'number'
+        ? parsedContent.level
+        : undefined;
+    const parsedTimestamp = typeof parsedContent.timestamp === 'string' || typeof parsedContent.timestamp === 'number'
+        ? parsedContent.timestamp
+        : undefined;
+    const playerPubkey = tagValue(event, 'player') || event.pubkey || '';
+    const score = toFiniteInteger(tagValue(event, 'score') || parsedScore);
+    const level = toFiniteInteger(tagValue(event, 'level') || parsedLevel);
+    const timestamp = toFiniteInteger(tagValue(event, 'timestamp') || parsedTimestamp) ?? 0;
+    const createdAt = toFiniteInteger(event.created_at) ?? timestamp;
+
+    if (!playerPubkey || score === null || level === null || createdAt === null) {
+        return null;
+    }
+
+    return {
+        createdAt,
+        eventId: event.id || '',
+        level,
+        playerPubkey,
+        score,
+        timestamp,
+    };
+}
+
+function sortScoreboardEntries(entries) {
+    return [...entries].sort((left, right) => {
+        if (right.score !== left.score) {
+            return right.score - left.score;
+        }
+
+        if (right.level !== left.level) {
+            return right.level - left.level;
+        }
+
+        return right.createdAt - left.createdAt;
+    });
+}
+
+export function computeJackpotContributionSats(entryFeeSats) {
+    return Math.floor((entryFeeSats * JACKPOT_CONTRIBUTION_BASIS_POINTS) / 10000);
 }
 
 export async function readJsonBody(req) {
@@ -161,6 +255,16 @@ export function parseLedgerEvent(event) {
         receiptId: event.tags.find((tag) => tag[0] === 'receipt')?.[1] || '',
         type: rawType === 'jackpot-claim' ? 'jackpot-claim' : (rawType === 'claim-lock' ? 'claim-lock' : 'entry-loss'),
     };
+}
+
+export function resolveLightningAddress(value) {
+    const lightningAddress = (value || '').trim().toLowerCase();
+    const [name, domain, extra] = lightningAddress.split('@');
+    if (!name || !domain || extra || /[\s/]/.test(name) || /[\s/]/.test(domain)) {
+        throw new Error('Lightning address is invalid.');
+    }
+
+    return { domain, lightningAddress, name };
 }
 
 export async function fetchGameZapConfig() {
@@ -292,6 +396,25 @@ export async function listLedgerEvents() {
     }
 }
 
+export async function listScoreboardEntries() {
+    const pool = createPool();
+
+    try {
+        const events = await pool.querySync(SCORE_RELAYS, {
+            kinds: [78],
+            '#p': [getGamePubkey()],
+            limit: 500,
+        });
+        return sortScoreboardEntries(
+            (events || [])
+                .map((event) => toScoreboardEntry(event))
+                .filter((entry) => entry !== null)
+        );
+    } finally {
+        pool.close(SCORE_RELAYS);
+    }
+}
+
 export function computePotFromLedger(events) {
     let currentPotSats = 0;
 
@@ -346,11 +469,51 @@ export function verifyBossVictoryProof(victoryProof, playerPubkey, receiptId) {
     return true;
 }
 
+export function verifyLeaderboardTopProof(scoreProof, playerPubkey, receiptId, leaderboardEntries, expectedGamePubkey = '') {
+    if (!scoreProof || typeof scoreProof !== 'object') {
+        throw new Error('Missing leaderboard score proof event.');
+    }
+
+    if (!verifyEvent(scoreProof)) {
+        throw new Error('Leaderboard score proof signature is invalid.');
+    }
+
+    if (scoreProof.kind !== 78) {
+        throw new Error('Leaderboard score proof kind is invalid.');
+    }
+
+    const gameTag = tagValue(scoreProof, 'game');
+    const playerTag = tagValue(scoreProof, 'player');
+    const receiptTag = tagValue(scoreProof, 'receipt');
+    if (gameTag !== 'sammer' || playerTag !== playerPubkey || receiptTag !== receiptId) {
+        throw new Error('Leaderboard score proof tags are invalid.');
+    }
+    if (expectedGamePubkey && !(scoreProof.tags || []).some((tag) => tag[0] === 'p' && tag[1] === expectedGamePubkey)) {
+        throw new Error('Leaderboard score proof is not addressed to the game pubkey.');
+    }
+
+    const proofEntry = toScoreboardEntry(scoreProof);
+    if (!proofEntry) {
+        throw new Error('Leaderboard score proof is missing score data.');
+    }
+
+    const rankedEntries = sortScoreboardEntries([
+        ...leaderboardEntries,
+        proofEntry,
+    ]);
+    const topEntry = rankedEntries[0];
+    if (!topEntry || topEntry.playerPubkey !== playerPubkey || topEntry.score !== proofEntry.score) {
+        throw new Error('Winner is not the current #1 leaderboard score.');
+    }
+
+    return true;
+}
+
 export async function publishLossEvent(receiptId, playerPubkey) {
     const pool = createPool();
 
     try {
-        const signedEvent = buildLedgerEvent('entry-loss', ENTRY_FEE_SATS, playerPubkey, receiptId);
+        const signedEvent = buildLedgerEvent('entry-loss', computeJackpotContributionSats(ENTRY_FEE_SATS), playerPubkey, receiptId);
         await Promise.allSettled(pool.publish(SCORE_RELAYS, signedEvent));
         return signedEvent.id;
     } finally {
@@ -485,8 +648,25 @@ export async function fetchPlayerZapConfig(playerPubkey) {
     }
 }
 
-export async function createWinnerInvoice(playerPubkey, amountSats) {
-    const { callback } = await fetchPlayerZapConfig(playerPubkey);
+export async function fetchLightningAddressZapConfig(lightningAddress) {
+    const resolved = resolveLightningAddress(lightningAddress);
+    const lnurlUrl = new URL(`/.well-known/lnurlp/${resolved.name}`, `https://${resolved.domain}`).toString();
+    const response = await fetch(lnurlUrl);
+    const lnurlData = await response.json();
+    if (!lnurlData?.allowsNostr || !lnurlData?.callback || !lnurlData?.nostrPubkey) {
+        throw new Error('Winner LNURL endpoint does not support Nostr zaps.');
+    }
+
+    return {
+        callback: lnurlData.callback,
+        providerPubkey: lnurlData.nostrPubkey,
+    };
+}
+
+export async function createWinnerInvoice(playerPubkey, amountSats, winnerLightningAddress = '') {
+    const { callback } = winnerLightningAddress
+        ? await fetchLightningAddressZapConfig(winnerLightningAddress)
+        : await fetchPlayerZapConfig(playerPubkey);
     const amountMillisats = amountSats * 1000;
     const now = Math.floor(Date.now() / 1000);
     const unsignedEvent = {

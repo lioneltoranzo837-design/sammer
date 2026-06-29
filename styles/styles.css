@@ -708,9 +708,121 @@ html, body {
 
 .death-message {
     color: #b08888;
-    margin-bottom: 30px;
+    margin-bottom: 18px;
     font-style: italic;
     font-family: 'Special Elite', cursive;
+}
+
+.death-score-panel {
+    display: grid;
+    gap: 4px;
+    margin: 0 auto 22px;
+    padding: 14px 16px;
+    max-width: 360px;
+    border: 1px solid rgba(255, 51, 51, 0.22);
+    background: rgba(0, 0, 0, 0.32);
+    color: #e0e0e0;
+}
+
+.death-score-label {
+    color: #888888;
+    font-size: 0.78rem;
+    letter-spacing: 2px;
+}
+
+#death-score-value {
+    color: #ff3333;
+    font-size: 2rem;
+    line-height: 1;
+    text-shadow: 0 0 10px rgba(255, 51, 51, 0.55);
+}
+
+#death-score-detail {
+    color: #b0b0b0;
+    letter-spacing: 1px;
+}
+
+.death-jackpot-panel {
+    display: grid;
+    gap: 10px;
+    margin: 0 auto 22px;
+    padding: 16px 18px;
+    max-width: 460px;
+    border: 1px solid rgba(0, 255, 65, 0.35);
+    background: rgba(2, 10, 5, 0.82);
+    box-shadow: inset 0 0 18px rgba(0, 255, 65, 0.08);
+    text-align: left;
+}
+
+.death-jackpot-panel[hidden] {
+    display: none;
+}
+
+.death-jackpot-panel h2 {
+    margin: 0;
+    color: #00ff41;
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+    text-align: center;
+}
+
+#death-jackpot-status {
+    margin: 0;
+    color: #b6ffbf;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+#death-jackpot-status[data-tone="error"] {
+    color: #ff8b8b;
+}
+
+#death-jackpot-status[data-tone="loading"] {
+    color: #ffd28a;
+}
+
+.death-ln-label {
+    color: #888888;
+    font-size: 0.76rem;
+    letter-spacing: 2px;
+}
+
+.death-ln-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid rgba(0, 255, 65, 0.28);
+    background: rgba(0, 0, 0, 0.45);
+    color: #e0e0e0;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 1rem;
+}
+
+.death-ln-input:focus {
+    outline: 1px solid #00ff41;
+    box-shadow: 0 0 12px rgba(0, 255, 65, 0.25);
+}
+
+.death-claim-btn {
+    width: 100%;
+    background: linear-gradient(180deg, #0f3f1e, #061f0e);
+    border-color: #00ff41;
+    color: #a3ffa8;
+    font-size: 0.95rem;
+}
+
+.death-claim-btn:hover {
+    background: linear-gradient(180deg, #1b6833, #0a3d1b);
+    box-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+}
+
+.menu-content.death.leaderboard-winner {
+    border-color: #00ff41;
+    box-shadow: 0 0 34px rgba(0, 255, 65, 0.28);
+}
+
+.menu-content.death.leaderboard-winner .death-title {
+    color: #00ff41;
+    text-shadow: 0 0 15px rgba(0, 255, 65, 0.75);
 }
 
 .death-btn {

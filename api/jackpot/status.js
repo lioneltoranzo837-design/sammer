@@ -17,7 +17,7 @@ export default async function handler(_req, res) {
 
         return jsonResponse(res, 200, {
             configured: Boolean(process.env.SAMMER_GAME_NWC_URI && process.env.SAMMER_SERVER_SIGNER_NSEC_HEX && process.env.SAMMER_GAME_PUBKEY),
-            currentPotSats: walletBalanceSats ?? ledgerPotSats,
+            currentPotSats: ledgerPotSats,
             entryFeeSats: ENTRY_FEE_SATS,
             ledgerPotSats,
             lightningAddress,

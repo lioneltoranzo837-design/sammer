@@ -4,6 +4,12 @@ function getElementById<T extends HTMLElement>(id: string): T | null {
 
 export const menuOverlay = getElementById<HTMLDivElement>('menu-overlay');
 export const deathOverlay = getElementById<HTMLDivElement>('death-overlay');
+export const deathClaimBtn = getElementById<HTMLButtonElement>('death-claim-btn');
+export const deathJackpotPanel = getElementById<HTMLElement>('death-jackpot-panel');
+export const deathJackpotStatus = getElementById<HTMLParagraphElement>('death-jackpot-status');
+export const deathLnAddress = getElementById<HTMLInputElement>('death-ln-address');
+export const deathScoreDetail = getElementById<HTMLElement>('death-score-detail');
+export const deathScoreValue = getElementById<HTMLElement>('death-score-value');
 export const victoryOverlay = getElementById<HTMLDivElement>('victory-overlay');
 export const freeStartBtn = getElementById<HTMLButtonElement>('free-start-btn');
 export const startBtn = getElementById<HTMLButtonElement>('start-btn');

@@ -301,6 +301,18 @@
             <p class="subtitle">ESTADO VITAL: FALLECIDO (SECTOR C-14)</p>
             <hr class="menu-divider">
             <p class="death-message">Tu señal biológica se ha extinguido en la oscuridad...</p>
+            <div class="death-score-panel" aria-live="polite">
+                <span class="death-score-label">PUNTAJE ALCANZADO</span>
+                <strong id="death-score-value">0</strong>
+                <small id="death-score-detail">NIVEL 1</small>
+            </div>
+            <section id="death-jackpot-panel" class="death-jackpot-panel" hidden>
+                <h2>POSICIÓN #1 CONFIRMADA</h2>
+                <p id="death-jackpot-status" data-tone="idle">Ingresá tu Lightning Address para cobrar el premio.</p>
+                <label class="death-ln-label" for="death-ln-address">LIGHTNING ADDRESS</label>
+                <input id="death-ln-address" class="death-ln-input" type="email" inputmode="email" autocomplete="email" placeholder="usuario@wallet.com">
+                <button id="death-claim-btn" class="retro-btn death-claim-btn">COBRAR JACKPOT</button>
+            </section>
             <button id="restart-btn" class="retro-btn death-btn">REINTENTAR SIMULACIÓN</button>
         </div>
     </div>
