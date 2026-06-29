@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 
 import { finalizeEvent, getPublicKey } from 'nostr-tools/pure';
 
-import { computePotFromLedger, verifyBossVictoryProof } from '../../api/_lib/jackpot.js';
+import {
+    computeJackpotContributionSats,
+    computePotFromLedger,
+    verifyBossVictoryProof,
+    verifyLeaderboardTopProof,
+} from '../../api/_lib/jackpot.js';
 
 function hexToBytes(hex) {
     return Uint8Array.from(Buffer.from(hex, 'hex'));
@@ -18,6 +23,12 @@ test('computePotFromLedger resets after jackpot claim', () => {
     ]);
 
     assert.equal(pot, 100);
+});
+
+test('computeJackpotContributionSats keeps ten percent in the game wallet', () => {
+    assert.equal(computeJackpotContributionSats(100), 90);
+    assert.equal(computeJackpotContributionSats(101), 90);
+    assert.equal(computeJackpotContributionSats(9), 8);
 });
 
 test('verifyBossVictoryProof accepts a matching signed proof', () => {
@@ -55,4 +66,52 @@ test('verifyBossVictoryProof rejects a proof with the wrong receipt', () => {
     }, secretKey);
 
     assert.throws(() => verifyBossVictoryProof(proof, playerPubkey, 'receipt-123'));
+});
+
+test('verifyLeaderboardTopProof accepts a matching top score proof', () => {
+    const secretKey = hexToBytes('1111111111111111111111111111111111111111111111111111111111111111');
+    const playerPubkey = getPublicKey(secretKey);
+    const receiptId = 'receipt-123';
+    const proof = finalizeEvent({
+        kind: 78,
+        created_at: 1710000000,
+        content: JSON.stringify({ game: 'sammer', score: 500, level: 3, timestamp: 1710000000 }),
+        tags: [
+            ['game', 'sammer'],
+            ['p', 'game-pubkey'],
+            ['player', playerPubkey],
+            ['score', '500'],
+            ['level', '3'],
+            ['receipt', receiptId],
+        ],
+    }, secretKey);
+
+    assert.equal(verifyLeaderboardTopProof(proof, playerPubkey, receiptId, [
+        { playerPubkey: 'other-player', score: 499, level: 4, createdAt: 1710000010 },
+        { playerPubkey, score: 500, level: 3, createdAt: 1710000000 },
+    ]), true);
+});
+
+test('verifyLeaderboardTopProof rejects a score below the current leader', () => {
+    const secretKey = hexToBytes('1111111111111111111111111111111111111111111111111111111111111111');
+    const playerPubkey = getPublicKey(secretKey);
+    const receiptId = 'receipt-123';
+    const proof = finalizeEvent({
+        kind: 78,
+        created_at: 1710000000,
+        content: JSON.stringify({ game: 'sammer', score: 500, level: 3, timestamp: 1710000000 }),
+        tags: [
+            ['game', 'sammer'],
+            ['p', 'game-pubkey'],
+            ['player', playerPubkey],
+            ['score', '500'],
+            ['level', '3'],
+            ['receipt', receiptId],
+        ],
+    }, secretKey);
+
+    assert.throws(() => verifyLeaderboardTopProof(proof, playerPubkey, receiptId, [
+        { playerPubkey: 'other-player', score: 501, level: 1, createdAt: 1710000010 },
+        { playerPubkey, score: 500, level: 3, createdAt: 1710000000 },
+    ]));
 });

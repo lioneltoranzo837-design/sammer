@@ -23,6 +23,7 @@ import {
 import { createAdaptiveResolutionState, getRenderViewport, sampleAdaptiveResolution } from './rendering/adaptiveResolution.js';
 import {
     ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg,
+    deathClaimBtn, deathJackpotPanel, deathJackpotStatus, deathLnAddress, deathScoreDetail, deathScoreValue,
     healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn,
     zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn,
     nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus,
@@ -135,6 +136,7 @@ let pendingEntryZapProviderPubkey = '';
 let pendingEntryZapSessionId = '';
 let pendingVerificationTimer = 0;
 let pendingVerificationDeadline = 0;
+let pendingDeathJackpotClaim = null;
 const ENTRY_VERIFICATION_INTERVAL_MS = 2500;
 const ENTRY_VERIFICATION_TIMEOUT_MS = 5 * 60 * 1000;
 let engineReady = false;
@@ -684,6 +686,108 @@ function renderStartupLeaderboardRows(rows) {
         startLeaderboardList.appendChild(item);
     });
 }
+function getDeathContentElement() {
+    return deathOverlay?.querySelector('.menu-content.death') || null;
+}
+function getDeathTitleElement() {
+    return deathOverlay?.querySelector('.death-title') || null;
+}
+function getDeathMessageElement() {
+    return deathOverlay?.querySelector('.death-message') || null;
+}
+function countScoreKills(kills) {
+    return Object.values(kills).reduce((total, value) => total + Number(value || 0), 0);
+}
+function setDeathJackpotStatus(message, tone) {
+    if (!deathJackpotStatus) {
+        return;
+    }
+    deathJackpotStatus.textContent = message;
+    deathJackpotStatus.dataset.tone = tone;
+}
+function hideDeathJackpotPanel() {
+    pendingDeathJackpotClaim = null;
+    deathJackpotPanel?.setAttribute('hidden', '');
+    deathClaimBtn?.removeAttribute('disabled');
+    if (deathLnAddress) {
+        deathLnAddress.value = '';
+    }
+}
+function renderDeathSummary(scoreSnapshot) {
+    const contentElement = getDeathContentElement();
+    const titleElement = getDeathTitleElement();
+    const messageElement = getDeathMessageElement();
+    contentElement?.classList.remove('leaderboard-winner');
+    if (titleElement) {
+        titleElement.textContent = 'SUJETO ELIMINADO';
+    }
+    if (messageElement) {
+        messageElement.textContent = 'Tu señal biológica se ha extinguido en la oscuridad...';
+    }
+    if (deathScoreValue) {
+        deathScoreValue.textContent = String(scoreSnapshot.finalScore);
+    }
+    if (deathScoreDetail) {
+        deathScoreDetail.textContent = `NIVEL ${currentLevel} | BAJAS ${countScoreKills(scoreSnapshot.kills)} | DAÑO ${scoreSnapshot.damageTaken}`;
+    }
+    hideDeathJackpotPanel();
+}
+function renderDeathJackpotWinner(amountSats, scoreSnapshot, scoreProof, receiptId) {
+    const contentElement = getDeathContentElement();
+    const titleElement = getDeathTitleElement();
+    const messageElement = getDeathMessageElement();
+    pendingDeathJackpotClaim = {
+        amountSats,
+        receiptId,
+        scoreProof,
+    };
+    contentElement?.classList.add('leaderboard-winner');
+    if (titleElement) {
+        titleElement.textContent = 'OPERADOR #1';
+    }
+    if (messageElement) {
+        messageElement.textContent = `Al morir quedaste en la posición #1 con ${scoreSnapshot.finalScore} puntos. El jackpot está listo para enviarse.`;
+    }
+    deathJackpotPanel?.removeAttribute('hidden');
+    setDeathJackpotStatus(`PREMIO DISPONIBLE: ${amountSats} SATS. Ingresá tu Lightning Address para cobrar.`, 'idle');
+    deathLnAddress?.focus();
+}
+function renderDeathLeaderboardTopWithoutPot(scoreSnapshot) {
+    const contentElement = getDeathContentElement();
+    const titleElement = getDeathTitleElement();
+    const messageElement = getDeathMessageElement();
+    contentElement?.classList.add('leaderboard-winner');
+    if (titleElement) {
+        titleElement.textContent = 'OPERADOR #1';
+    }
+    if (messageElement) {
+        messageElement.textContent = `Al morir quedaste en la posición #1 con ${scoreSnapshot.finalScore} puntos, pero no había jackpot acumulado para cobrar.`;
+    }
+}
+async function loadScoreboardEntriesWithLocalScore(localScoreEvent) {
+    const pool = new window.NostrTools.SimplePool();
+    try {
+        const events = await pool.querySync(NOSTR_SCORE_RELAYS, {
+            kinds: [78],
+            '#p': [NOSTR_GAME_PUBKEY],
+            limit: 500
+        });
+        return extractScoreboardEntries([...(events || []), localScoreEvent]);
+    }
+    finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+    }
+}
+async function isLeaderboardTopScore(localScoreEvent) {
+    if (!localScoreEvent) {
+        return false;
+    }
+    const entries = await loadScoreboardEntriesWithLocalScore(localScoreEvent);
+    const topEntry = entries[0];
+    return Boolean(topEntry && topEntry.playerPubkey === playerNostrPubkey && topEntry.eventId === localScoreEvent.id);
+}
 async function loadStartupLeaderboard() {
     if (!showStartNostrLeaderboard || !startLeaderboardPanel) {
         return;
@@ -1193,76 +1297,85 @@ async function attemptVerifyOnce() {
     }
 }
 
-async function createBossVictoryProof() {
-    if (!playerNostrPubkey || !entryGateState.verifiedReceiptId) {
-        throw new Error('Missing verified paid run for boss victory proof.');
+async function claimLeaderboardJackpot() {
+    if (!pendingDeathJackpotClaim || !playerNostrPubkey) {
+        return;
     }
-    return signUnsignedNostrEvent({
-        kind: 39001,
-        created_at: Math.floor(Date.now() / 1000),
-        content: 'Sammer boss victory proof',
-        tags: [
-            ['game', 'sammer'],
-            ['result', 'boss-win'],
-            ['receipt', entryGateState.verifiedReceiptId],
-            ['level', '4'],
-        ],
-        pubkey: playerNostrPubkey,
-    });
+    const winnerLightningAddress = deathLnAddress?.value.trim() || '';
+    if (!winnerLightningAddress || !winnerLightningAddress.includes('@')) {
+        setDeathJackpotStatus('Ingresá una Lightning Address válida para cobrar.', 'error');
+        deathLnAddress?.focus();
+        return;
+    }
+    try {
+        deathClaimBtn?.setAttribute('disabled', 'true');
+        setDeathJackpotStatus('ENVIANDO JACKPOT...', 'loading');
+        const response = await fetch('/api/jackpot/claim', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                receiptId: pendingDeathJackpotClaim.receiptId,
+                scoreProof: pendingDeathJackpotClaim.scoreProof,
+                winnerLightningAddress,
+                winnerPubkey: playerNostrPubkey,
+            }),
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+            throw new Error(payload.error || 'El backend no pudo ejecutar el payout del jackpot.');
+        }
+        setDeathJackpotStatus(`JACKPOT ENVIADO: ${payload.currentPotSats || pendingDeathJackpotClaim.amountSats} SATS.`, 'success');
+        showFeedback(`JACKPOT ENVIADO: ${payload.currentPotSats || pendingDeathJackpotClaim.amountSats} SATS`);
+        pendingDeathJackpotClaim = null;
+        resetEntryGateState();
+        await loadCurrentJackpot();
+    }
+    catch (error) {
+        console.error('Leaderboard jackpot claim error:', error);
+        deathClaimBtn?.removeAttribute('disabled');
+        setDeathJackpotStatus(error.message || 'No se pudo enviar el jackpot.', 'error');
+        showFeedback('NO SE PUDO ENVIAR EL JACKPOT');
+    }
 }
-async function attemptJackpotPayout(amountSats) {
-    if (!playerNostrPubkey) {
-        throw new Error('El ganador debe tener identidad Nostr conectada para cobrar el jackpot.');
-    }
-    if (amountSats <= 0) {
-        return { amountSats: 0, receiptId: '' };
-    }
-    const victoryProof = await createBossVictoryProof();
-    const response = await fetch('/api/jackpot/claim', {
+async function reportPaidRunLoss(receiptId) {
+    const response = await fetch('/api/jackpot/report-loss', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-            winnerPubkey: playerNostrPubkey,
-            receiptId: entryGateState.verifiedReceiptId,
-            victoryProof,
-        }),
+        body: JSON.stringify({ playerPubkey: playerNostrPubkey, receiptId }),
     });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
-        throw new Error(payload.error || 'El backend no pudo ejecutar el payout del jackpot.');
+        throw new Error(payload.error || 'El backend no pudo registrar la derrota.');
     }
     await loadCurrentJackpot();
-    return {
-        amountSats: payload.currentPotSats || amountSats,
-        receiptId: payload.claimEventId || '',
-    };
+}
+async function settlePaidRunAfterDeath(scorePublishResult, receiptId) {
+    try {
+        if (scorePublishResult.nostrScoreEvent && await isLeaderboardTopScore(scorePublishResult.nostrScoreEvent)) {
+            if (currentJackpotSats > 0) {
+                renderDeathJackpotWinner(currentJackpotSats, scorePublishResult.scoreSnapshot, scorePublishResult.nostrScoreEvent, receiptId);
+                return;
+            }
+            renderDeathLeaderboardTopWithoutPot(scorePublishResult.scoreSnapshot);
+            resetEntryGateState();
+            return;
+        }
+        await reportPaidRunLoss(receiptId);
+        resetEntryGateState();
+    }
+    catch (error) {
+        console.error('Paid run settlement error:', error);
+        await reportPaidRunLoss(receiptId).catch(reportError => console.error('Jackpot loss publish error:', reportError));
+        resetEntryGateState();
+    }
 }
 async function finalizeBossJackpotVictory(victoryMessageElement) {
     const baseMessage = 'Has escapado de la instalación biológica, cruzado la selva hostil, sobrevivido al frío extremo de la montaña y purgado la amenaza volcánica.';
-    try {
-        if (entryGateState.isPaid && entryGateState.verifiedReceiptId && currentJackpotSats > 0) {
-            const payoutResult = await attemptJackpotPayout(currentJackpotSats);
-            if (victoryMessageElement) {
-                victoryMessageElement.innerHTML = `${baseMessage}<br><br><strong>ZAP ENVIADO:</strong> ${payoutResult.amountSats} SATS al ganador.<br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
-            }
-            showFeedback(`JACKPOT ENVIADO: ${payoutResult.amountSats} SATS`);
-            return;
-        }
-        if (victoryMessageElement) {
-            victoryMessageElement.innerHTML = `${baseMessage}<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
-        }
+    if (victoryMessageElement) {
+        victoryMessageElement.innerHTML = `${baseMessage}<br><br><strong>FIN DEL CAPÍTULO 1.</strong><br>El jackpot se evalúa al morir por posición #1 del scoreboard.`;
     }
-    catch (error) {
-        console.error('Jackpot payout error:', error);
-        if (victoryMessageElement) {
-            victoryMessageElement.innerHTML = `${baseMessage}<br><br><strong>PAYOUT PENDIENTE:</strong> ${currentJackpotSats} SATS. ${error.message}<br><strong>FIN DEL CAPÍTULO 1.</strong><br>El próximo capítulo comenzará pronto...`;
-        }
-        showFeedback('NO SE PUDO ENVIAR EL JACKPOT');
-    }
-    finally {
-        resetEntryGateState();
-        updateEntryGateUI();
-    }
+    resetEntryGateState();
+    updateEntryGateUI();
 }
 function handlePaidStart() {
     if (!canStartPaidRun(entryGateState)) {
@@ -1282,7 +1395,7 @@ function handlePaidStart() {
 async function publishNostrScore(scoreSnapshot) {
     try {
         if (!playerNostrPubkey) {
-            return;
+            return null;
         }
         const now = Math.floor(Date.now() / 1000);
         const useDelegation = isDelegationActive(activeDelegation);
@@ -1300,6 +1413,9 @@ async function publishNostrScore(scoreSnapshot) {
             ['damage', scoreSnapshot.damageTaken.toString()],
             ['seconds', scoreSnapshot.elapsedSeconds.toString()]
         ];
+        if (entryGateState.isPaid && entryGateState.verifiedReceiptId) {
+            tags.push(['receipt', entryGateState.verifiedReceiptId]);
+        }
         if (useDelegation) {
             tags.push(buildDelegationTag(activeDelegation));
         }
@@ -1340,18 +1456,24 @@ async function publishNostrScore(scoreSnapshot) {
         }
         console.log('Score published:', signedEvent.id, publishResults);
         showFeedback('PUNTAJE PUBLICADO EN NOSTR');
+        return signedEvent;
     }
     catch (error) {
         console.error('Publish score error:', error);
         showFeedback('NO SE PUDO PUBLICAR EL PUNTAJE');
+        return null;
     }
 }
 async function publishScore() {
     const scoreSnapshot = createScorePublishSnapshot();
-    await Promise.allSettled([
+    const [nostrResult] = await Promise.allSettled([
         publishNostrScore(scoreSnapshot),
         publishLunaNegraScore(scoreSnapshot)
     ]);
+    return {
+        nostrScoreEvent: nostrResult.status === 'fulfilled' ? nostrResult.value : null,
+        scoreSnapshot,
+    };
 }
 // --- CONSTRUCTOR DE MAPA ---
 function shouldPlaceLevelOneMazeLamp(x, z) {
@@ -4580,25 +4702,31 @@ function triggerGameOver() {
     deathOverlay.classList.add('active');
     AudioSynth.stopHorrorMusic();
     AudioSynth.playLoseTune();
+    const scoreSnapshot = createScorePublishSnapshot();
+    const paidReceiptId = entryGateState.isPaid && entryGateState.verifiedReceiptId ? entryGateState.verifiedReceiptId : '';
+    renderDeathSummary(scoreSnapshot);
     if (playerNostrPubkey) {
-        publishScore().catch(error => console.error('Publish score error:', error));
+        publishScore()
+            .then(scorePublishResult => {
+                if (paidReceiptId) {
+                    return settlePaidRunAfterDeath(scorePublishResult, paidReceiptId);
+                }
+                return undefined;
+            })
+            .catch(error => console.error('Publish score error:', error));
     }
-    if (entryGateState.isPaid && entryGateState.verifiedReceiptId) {
-        fetch('/api/jackpot/report-loss', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ playerPubkey: playerNostrPubkey, receiptId: entryGateState.verifiedReceiptId }),
-        })
-            .then((response) => response.json().then((payload) => ({ ok: response.ok, payload })))
-            .then(({ ok, payload }) => {
-            if (!ok || !payload.ok) {
-                throw new Error(payload.error || 'El backend no pudo registrar la derrota.');
-            }
-            return loadCurrentJackpot();
-        })
-            .catch(error => console.error('Jackpot loss publish error:', error));
+    else if (paidReceiptId) {
+        reportPaidRunLoss(paidReceiptId)
+            .then(() => resetEntryGateState())
+            .catch(error => {
+                console.error('Jackpot loss publish error:', error);
+                resetEntryGateState();
+            });
+        return;
     }
-    resetEntryGateState();
+    if (!paidReceiptId) {
+        resetEntryGateState();
+    }
 }
 function triggerVictory() {
     isMouseDown = false;
@@ -5019,6 +5147,9 @@ function setupControls() {
     winBtn.addEventListener('click', handlePaidStart);
     entryGatePayBtn?.addEventListener('click', () => {
         void requestEntryInvoice();
+    });
+    deathClaimBtn?.addEventListener('click', () => {
+        void claimLeaderboardJackpot();
     });
     // Eventos de la tienda
     document.getElementById('buy-glock-btn').addEventListener('click', buyGlock);

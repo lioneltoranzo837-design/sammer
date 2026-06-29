@@ -1,18 +1,20 @@
 import {
     computePotFromLedger,
     createWinnerInvoice,
+    getGamePubkey,
     hasClaimLockOrClaim,
     hasLossEventForReceipt,
     jsonResponse,
     listLedgerEvents,
+    listScoreboardEntries,
     publishClaimLockEvent,
     publishClaimEvent,
     readJsonBody,
     sendMethodNotAllowed,
     sendNwcPayInvoice,
     sendServerError,
-    verifyBossVictoryProof,
     verifyEntryReceipt,
+    verifyLeaderboardTopProof,
 } from '../_lib/jackpot.js';
 
 export default async function handler(req, res) {
@@ -22,9 +24,17 @@ export default async function handler(req, res) {
 
     try {
         const body = await readJsonBody(req);
-        const { winnerPubkey = '', receiptId = '', victoryProof = null } = body;
+        const {
+            winnerLightningAddress = '',
+            winnerPubkey = '',
+            receiptId = '',
+            scoreProof = null,
+        } = body;
         if (!winnerPubkey || !receiptId) {
             throw new Error('winnerPubkey and receiptId are required.');
+        }
+        if (!winnerLightningAddress) {
+            throw new Error('winnerLightningAddress is required.');
         }
 
         await verifyEntryReceipt(receiptId, winnerPubkey);
@@ -34,7 +44,7 @@ export default async function handler(req, res) {
         if (await hasClaimLockOrClaim(receiptId)) {
             throw new Error('This paid run already claimed or is currently claiming the jackpot.');
         }
-        verifyBossVictoryProof(victoryProof, winnerPubkey, receiptId);
+        verifyLeaderboardTopProof(scoreProof, winnerPubkey, receiptId, await listScoreboardEntries(), getGamePubkey());
         await publishClaimLockEvent(receiptId, winnerPubkey);
 
         const events = await listLedgerEvents();
@@ -43,7 +53,7 @@ export default async function handler(req, res) {
             return jsonResponse(res, 200, { ok: true, currentPotSats: 0, skipped: true });
         }
 
-        const { invoice, signedEvent } = await createWinnerInvoice(winnerPubkey, currentPotSats);
+        const { invoice, signedEvent } = await createWinnerInvoice(winnerPubkey, currentPotSats, winnerLightningAddress);
         await sendNwcPayInvoice(invoice);
         const claimEventId = await publishClaimEvent(signedEvent.id, winnerPubkey, currentPotSats);
 

@@ -30,6 +30,7 @@ Sammer is a retro industrial horror survival game. The UI should feel like a dam
 - `retro-btn`: full-width CTA with red industrial styling; disabled state must visibly reduce intensity.
 - `start-leaderboard-panel`: green terminal score panel for Nostr only.
 - `entry-gate-panel`: red payment/access panel for zap-gated starts.
+- `death-jackpot-panel`: green terminal claim panel shown only when a paid death reaches leaderboard #1; it asks for a Lightning Address and uses `data-tone="idle|loading|success|error"` status text.
 - `luna-negra-panel`: purple terminal score/session panel for Luna Negra only; it must not reuse the Nostr panel element or IDs.
 - Status text uses `data-tone="idle|loading|success|error"` for color semantics.
 
