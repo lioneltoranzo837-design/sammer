@@ -11,6 +11,7 @@ import { canStartPaidRun, createEntryGateState } from './nostr/paymentGate.js';
 import { DelegationUnavailableError, buildDelegationTag, isDelegationActive, isSignSchnorrAvailable, requestDelegation } from './nostr/delegation.js';
 import { extractScoreboardEntries } from './nostr/scoreboardData.js';
 import { buildStartupLeaderboardRows, shortenPlayerIdentity } from './nostr/startupLeaderboard.js';
+import { fetchProfilesMap, fetchSingleProfile } from './nostr/profiles.js';
 import { buildLunaNegraLeaderboardRows, buildLunaNegraLeaderboardUrl, buildLunaNegraScoresUrl, buildLunaNegraSessionUrl, getLunaNegraTokenFromSearch, normalizeLunaNegraSession, removeLunaNegraTokenFromUrl } from './nostr/lunaNegra.js';
 import {
     addBloodWallMessages, generateCeilingTexture, generateFloorTexture, generateWallTexture, generateZombieFaceTexture,
@@ -24,7 +25,7 @@ import { createAdaptiveResolutionState, getRenderViewport, sampleAdaptiveResolut
 import {
     ammoClipEl, ammoReserveEl, armorBar, armorVal, crosshair, damageFlash, deathOverlay, feedbackMsg,
     healthBar, healthVal, menuOverlay, restartBtn, freeStartBtn, startBtn, victoryOverlay, winBtn,
-    zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrNsecInput, nostrNsecBtn,
+    zombieCountEl, bossHud, bossHealthFill, nostrConnectBtn, nostrConnectAvatar, nostrConnectLabel, nostrNsecInput, nostrNsecBtn,
     nostrManualSection, entryGateInvoiceOutput, entryGatePanel, entryGatePayBtn, entryGateStatus,
     entryGateVerifyBtn, jackpotValue, startLeaderboardList, startLeaderboardPanel, startLeaderboardStatus, lunaNegraPanel, lunaNegraStatus, lunaNegraPlayer, lunaNegraAvatar, lunaNegraLeaderboardList
 } from './ui/dom.js';
@@ -79,7 +80,8 @@ const NOSTR_GAME_PUBKEY = 'fdd8790e8c462fc680cf57f5852392a8a22ba93ff26030253030c
 const NOSTR_SCORE_RELAYS = [
     'wss://relay.damus.io',
     'wss://relay.nostr.band',
-    'wss://nos.lol'
+    'wss://nos.lol',
+    'wss://relay.primal.net'
 ];
 const DEFAULT_ENTRY_FEE_SATS = 100;
 let entryFeeSats = DEFAULT_ENTRY_FEE_SATS;
@@ -538,9 +540,59 @@ function showManualSection() {
     nostrManualSection.style.display = 'block';
 }
 function updateNostrButton() {
-    const short = playerNostrPubkey ? playerNostrPubkey.substring(0, 8) + '...' : 'Not connected';
-    nostrConnectBtn.textContent = short;
+    if (!playerNostrPubkey) {
+        if (nostrConnectLabel) {
+            nostrConnectLabel.textContent = 'Connect Nostr';
+        }
+        if (nostrConnectAvatar) {
+            nostrConnectAvatar.removeAttribute('src');
+            nostrConnectAvatar.hidden = true;
+        }
+        updateEntryGateUI();
+        return;
+    }
+    const short = playerNostrPubkey.substring(0, 8) + '...';
+    if (nostrConnectLabel) {
+        nostrConnectLabel.textContent = short;
+    }
+    if (nostrConnectAvatar) {
+        nostrConnectAvatar.removeAttribute('src');
+        nostrConnectAvatar.hidden = true;
+    }
     updateEntryGateUI();
+    void updateNostrButtonProfile(playerNostrPubkey);
+}
+async function updateNostrButtonProfile(pubkey) {
+    if (typeof window.NostrTools?.SimplePool !== 'function') {
+        return;
+    }
+    const pool = new window.NostrTools.SimplePool();
+    try {
+        const profile = await fetchSingleProfile(pool, NOSTR_SCORE_RELAYS, pubkey);
+        if (!profile || playerNostrPubkey !== pubkey) {
+            return;
+        }
+        const name = profile.displayName || profile.name;
+        if (name && nostrConnectLabel) {
+            nostrConnectLabel.textContent = name;
+        }
+        if (profile.picture && nostrConnectAvatar) {
+            nostrConnectAvatar.src = profile.picture;
+            nostrConnectAvatar.hidden = false;
+            nostrConnectAvatar.onerror = () => {
+                nostrConnectAvatar.hidden = true;
+                nostrConnectAvatar.removeAttribute('src');
+            };
+        }
+    }
+    catch (error) {
+        console.error('Nostr button profile fetch error:', error);
+    }
+    finally {
+        if (typeof pool.close === 'function') {
+            pool.close(NOSTR_SCORE_RELAYS);
+        }
+    }
 }
 function isGamePayoutReady() {
     return jackpotBackendConfigured;
@@ -673,7 +725,19 @@ function renderStartupLeaderboardRows(rows) {
         rank.textContent = row.rank;
         const player = document.createElement('span');
         player.className = 'start-leaderboard-player';
-        player.textContent = row.player;
+        if (row.avatarUrl) {
+            const avatar = document.createElement('img');
+            avatar.className = 'start-leaderboard-avatar';
+            avatar.src = row.avatarUrl;
+            avatar.alt = '';
+            avatar.loading = 'lazy';
+            avatar.onerror = () => avatar.remove();
+            player.appendChild(avatar);
+        }
+        const playerName = document.createElement('span');
+        playerName.className = 'start-leaderboard-player-name';
+        playerName.textContent = row.displayName || row.player;
+        player.appendChild(playerName);
         const score = document.createElement('span');
         score.className = 'start-leaderboard-score';
         score.textContent = row.score;
@@ -702,7 +766,10 @@ async function loadStartupLeaderboard() {
             '#p': [NOSTR_GAME_PUBKEY],
             limit: 200
         });
-        const rows = buildStartupLeaderboardRows(extractScoreboardEntries(events || []), STARTUP_LEADERBOARD_LIMIT, formatStartupLeaderboardIdentity);
+        const entries = extractScoreboardEntries(events || []);
+        const pubkeys = entries.map((entry) => entry.playerPubkey).filter((pk) => /^[a-f0-9]{64}$/i.test(pk));
+        const profiles = await fetchProfilesMap(pool, NOSTR_SCORE_RELAYS, pubkeys);
+        const rows = buildStartupLeaderboardRows(entries, STARTUP_LEADERBOARD_LIMIT, formatStartupLeaderboardIdentity, profiles);
         renderStartupLeaderboardRows(rows);
         if (rows.length === 0) {
             setStartupLeaderboardStatus('SIN SCORES PUBLICADOS AÚN', 'idle');
@@ -780,7 +847,10 @@ function renderLunaNegraLeaderboardRows(rows) {
         rank.textContent = row.rank;
         const player = document.createElement('span');
         player.className = 'start-leaderboard-player';
-        player.textContent = row.player;
+        const playerName = document.createElement('span');
+        playerName.className = 'start-leaderboard-player-name';
+        playerName.textContent = row.player;
+        player.appendChild(playerName);
         const score = document.createElement('span');
         score.className = 'start-leaderboard-score';
         score.textContent = row.score;

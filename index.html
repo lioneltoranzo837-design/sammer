@@ -228,7 +228,10 @@
                 <textarea id="entry-invoice-output" class="entry-invoice-output" hidden readonly placeholder="La factura BOLT11 aparecerá aquí si tu wallet no paga automáticamente."></textarea>
             </section>
             <button id="free-start-btn" class="retro-btn">JUGAR GRATIS</button>
-            <button id="nostr-connect-btn" class="retro-btn" hidden>Connect Nostr</button>
+            <button id="nostr-connect-btn" class="retro-btn nostr-connect-btn" hidden>
+                <img id="nostr-connect-avatar" class="nostr-connect-avatar" alt="" hidden>
+                <span id="nostr-connect-label">Connect Nostr</span>
+            </button>
             <div id="nostr-manual-section" style="display:none">
                 <input type="password" id="nostr-nsec-input" placeholder="nsec1..." />
                 <button id="nostr-nsec-btn" class="retro-btn">Ingresar nsec</button>

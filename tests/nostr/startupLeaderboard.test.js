@@ -21,7 +21,7 @@ test('buildStartupLeaderboardRows limits and ranks high scores first', () => {
     ], 2);
 
     assert.deepEqual(rows, [
-        { rank: '01', player: 'player-b', score: '25', level: 'NIVEL 4' },
-        { rank: '02', player: 'player-a', score: '12', level: 'NIVEL 2' },
+        { rank: '01', player: 'player-b', score: '25', level: 'NIVEL 4', avatarUrl: undefined, displayName: undefined },
+        { rank: '02', player: 'player-a', score: '12', level: 'NIVEL 2', avatarUrl: undefined, displayName: undefined },
     ]);
 });

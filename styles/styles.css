@@ -348,6 +348,24 @@ html, body {
     color: #e3efe5;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.start-leaderboard-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid rgba(0, 255, 65, 0.25);
+}
+
+.start-leaderboard-player-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .start-leaderboard-score {
@@ -444,6 +462,22 @@ html, body {
 
 .luna-negra-leaderboard-list .start-leaderboard-rank {
     color: #b9a7ff;
+}
+
+.nostr-connect-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.nostr-connect-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid rgba(0, 255, 65, 0.4);
 }
 
 .entry-gate-panel {
