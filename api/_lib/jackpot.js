@@ -478,10 +478,6 @@ export function verifyLeaderboardTopProof(scoreProof, playerPubkey, receiptId, l
         throw new Error('Leaderboard score proof signature is invalid.');
     }
 
-    if (scoreProof.pubkey !== playerPubkey) {
-        throw new Error('Leaderboard score proof does not belong to the winner pubkey.');
-    }
-
     if (scoreProof.kind !== 78) {
         throw new Error('Leaderboard score proof kind is invalid.');
     }

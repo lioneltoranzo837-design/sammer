@@ -92,6 +92,31 @@ test('verifyLeaderboardTopProof accepts a matching top score proof', () => {
     ]), true);
 });
 
+test('verifyLeaderboardTopProof accepts a delegated top score proof for the winning player tag', () => {
+    const playerSecretKey = hexToBytes('1111111111111111111111111111111111111111111111111111111111111111');
+    const signerSecretKey = hexToBytes('2222222222222222222222222222222222222222222222222222222222222222');
+    const playerPubkey = getPublicKey(playerSecretKey);
+    const receiptId = 'receipt-123';
+    const proof = finalizeEvent({
+        kind: 78,
+        created_at: 1710000000,
+        content: JSON.stringify({ game: 'sammer', score: 500, level: 3, timestamp: 1710000000 }),
+        tags: [
+            ['game', 'sammer'],
+            ['p', 'game-pubkey'],
+            ['player', playerPubkey],
+            ['score', '500'],
+            ['level', '3'],
+            ['receipt', receiptId],
+        ],
+    }, signerSecretKey);
+
+    assert.equal(verifyLeaderboardTopProof(proof, playerPubkey, receiptId, [
+        { playerPubkey: 'other-player', score: 499, level: 4, createdAt: 1710000010 },
+        { playerPubkey, score: 500, level: 3, createdAt: 1710000000 },
+    ]), true);
+});
+
 test('verifyLeaderboardTopProof rejects a score below the current leader', () => {
     const secretKey = hexToBytes('1111111111111111111111111111111111111111111111111111111111111111');
     const playerPubkey = getPublicKey(secretKey);
